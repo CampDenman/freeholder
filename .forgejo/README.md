@@ -35,7 +35,7 @@ because GitHub still runs all eight.
 |---|---|---|
 | `ci.yml` | `ci.yml` | **Partial.** `application`, `tests` (8 shards, not 32), `dependency-audit`, `checks` fan-in |
 | `security-scheduled.yml` | `security-scheduled.yml` | **Partial.** Dependency audit only |
-| `publish-image.yml` | — | No. Publishes to ghcr.io with the GitHub identity |
+| `publish-image.yml` | `publish-image.yml` | **Different on purpose.** Upstream *promotes* a CI-attested candidate and signs it keylessly with a GitHub OIDC identity. The twin *builds* and signs with our own key, because a private forge attests its own images (C10.31). Dispatch-only, and it refuses a revision with no successful `CI (Forgejo)` run |
 | `publish-packages.yml` | — | No. Publishes with the GitHub identity |
 | `mirror-ci-images.yml` | — | No. Mirrors into the GitHub registry |
 | `release-tarballs.yml` | — | No. Its matrix asks for `ubuntu-24.04` and `ubuntu-24.04-arm`; **no runner on this fleet carries either label**, so it would wait forever rather than fail |
@@ -74,17 +74,52 @@ Measured 2026-11-17; see `site-registry/docs/forgejo-ci-runners.md`.
   reports as FAILURE. The `checks` job asserts every result explicitly rather
   than relying on `needs` alone.
 
-## Open defect: `deploy-production.yml` cannot run
+## Resolved: `deploy-production.yml` could not run
 
-`.forgejo/workflows/deploy-production.yml` declares `runs-on: freeholder-release`.
-**No runner on the fleet carries that label** (checked 2026-11-17 against
-`/api/v1/admin/actions/runners`). A dispatch of it would queue forever rather
-than fail, which is the quiet failure mode the fleet doc warns about.
+It declared `runs-on: freeholder-release`, which **no runner on the fleet
+carried** (checked 2026-11-17 and again 2026-11-18 against
+`/api/v1/admin/actions/runners`: 12 runners, 0 with that label, 11 with
+`ubuntu-latest`). A dispatch would have queued forever rather than failing —
+the quiet failure mode the fleet doc warns about.
 
-This is **not changed here.** Repointing a production deploy at a different
-runner is a decision about which hosts may hold the production SSH key, and
-that is Tony's to make. Either add `freeholder-release` to a chosen runner, or
-change the label — but do not leave it as it is and assume deploys work.
+Repointed to `ubuntu-latest` on 2026-11-18. The label question was really
+"which hosts may hold the production SSH key", and the answer is the same
+ordinary fleet that already holds every other project's deploy key; inventing
+a label reserved nothing, because Forgejo has no label priority.
+
+## Secrets `publish-image.yml` needs
+
+Repository secrets on the forge. None of them are in this repository, and the
+workflow fails closed with a named error if any is missing.
+
+| Secret | What it is |
+|---|---|
+| `FORGE_API_TOKEN` | Reads `/actions/runs` to prove CI passed on the revision |
+| `FORGE_REGISTRY` | e.g. `forge.paradisemodern.com` |
+| `FORGE_REGISTRY_USER` / `FORGE_REGISTRY_TOKEN` | `docker login` for the push |
+| `FORGE_IMAGE_REPOSITORY` | e.g. `forge.paradisemodern.com/tony/freeholder` |
+| `FREEHOLDER_COSIGN_PRIVATE_KEY` / `FREEHOLDER_COSIGN_PASSWORD` | Signs the pushed digest |
+| `FREEHOLDER_COSIGN_PUBLIC_KEY` | Verifies the signature in the same run |
+
+Generate the keypair once, off this machine's shared checkouts:
+
+```sh
+cosign generate-key-pair          # writes cosign.key (private) and cosign.pub
+```
+
+`cosign.key` and its password become the two signing secrets. `cosign.pub`
+becomes `FREEHOLDER_COSIGN_PUBLIC_KEY` **and** is the file every host's
+`scripts/docker-updater.py` names as `publisher.cosign_key`, installed
+root-owned and not group-writable. The private half never leaves the secret
+store.
+
+The workflow verifies its own signature against the public half before
+finishing. That is deliberate: a mismatched keypair then fails in CI rather
+than on a production host at update time, where the symptom is a refused
+update that looks like a corrupted image.
+
+**Publishing does not deploy.** It produces a signed digest. Deploying it is
+`deploy-production.yml`, or offering the digest to a host running the updater.
 
 Note also the file's own header: it lives on the private forge **on purpose**,
 because a public repository's runner would otherwise hold the production SSH

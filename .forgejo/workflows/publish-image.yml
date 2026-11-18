@@ -1,0 +1,225 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+#
+# Build, push and SELF-SIGN the private image (C10.31).
+#
+# Read .forgejo/README.md first. This is the publishing half of the private
+# lane; scripts/docker-updater.py is the verifying half, and the two only work
+# as a pair. The key this signs with must be the private half of the
+# `publisher.cosign_key` that executor is configured with, or every candidate
+# it is offered will be refused.
+#
+# This is NOT the upstream promotion workflow. .github/workflows/publish-image.yml
+# promotes an already-built, CI-attested candidate and signs it keylessly with
+# a GitHub OIDC identity. There is no such identity here by design: a private
+# forge attests its own images, so the trust root is one keypair held by us.
+#
+# Three fleet facts shape this file (/home/tony/CLAUDE.md, site-registry
+# docs/forgejo-ci-runners.md):
+#   - The runner fleet is SHARED by every repo on forge.paradisemodern.com.
+#     An image build is expensive, so this never runs automatically. It is
+#     dispatched deliberately, like deploy-production.yml.
+#   - A runner runs a job only if it carries EVERY label in runs-on, and a
+#     label nothing carries waits forever instead of failing. ubuntu-latest is
+#     carried by 11 of 12 runners; do not add to it.
+#   - Runners build images with plain docker commands. No docker/* actions are
+#     used here, which keeps this workflow at the two actions the twins allow.
+name: Publish image (Forgejo)
+
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: The exact 40-character commit to build. Must be on main and must already have a successful CI (Forgejo) run.
+        required: true
+      confirmation:
+        description: Type PUBLISH IMAGE to confirm.
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: forgejo-publish-image
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build, push and sign an immutable digest
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Require explicit confirmation
+        env:
+          CONFIRMATION: ${{ forgejo.event.inputs.confirmation }}
+        run: test "$CONFIRMATION" = "PUBLISH IMAGE"
+
+      - name: Require an exact immutable revision
+        env:
+          REVISION: ${{ forgejo.event.inputs.revision }}
+        run: |
+          set -euo pipefail
+          # A tag or branch name here would publish whatever it points at today.
+          # The executor requires a 40-character revision label on both the
+          # running and the candidate image, so anything else cannot be
+          # deployed even if it were built.
+          printf '%s' "$REVISION" | grep -Eq '^[a-f0-9]{40}$' \
+            || { echo "revision must be a full 40-character lowercase commit sha" >&2; exit 1; }
+
+      - name: Checkout
+        uses: https://data.forgejo.org/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ forgejo.event.inputs.revision }}
+          persist-credentials: false
+
+      - name: Confirm the checkout is the revision that was asked for
+        env:
+          REVISION: ${{ forgejo.event.inputs.revision }}
+        run: |
+          set -euo pipefail
+          head=$(git rev-parse HEAD)
+          # Checking what we got, not what we asked for: a ref that moved
+          # between dispatch and checkout would otherwise be signed silently.
+          test "$head" = "$REVISION" \
+            || { echo "checkout is $head, not the requested $REVISION" >&2; exit 1; }
+
+      - name: Require a successful CI (Forgejo) run for this exact revision
+        env:
+          REVISION: ${{ forgejo.event.inputs.revision }}
+          FORGE_TOKEN: ${{ secrets.FORGE_API_TOKEN }}
+          REPOSITORY: ${{ forgejo.repository }}
+          SERVER: ${{ forgejo.server_url }}
+        run: |
+          set -euo pipefail
+          # Forgejo's run objects are NOT GitHub's. They carry `commit_sha`,
+          # not `head_sha`, and they put the conclusion in `status` while
+          # leaving `conclusion` null. A GitHub-shaped query matches nothing
+          # here and would look like "CI never passed" rather than a wrong
+          # field name, so the field names below are deliberate.
+          curl -fsSL --max-time 60 \
+            -H "Authorization: token ${FORGE_TOKEN}" \
+            "${SERVER}/api/v1/repos/${REPOSITORY}/actions/runs?limit=100" \
+            -o runs.json
+          python3 - <<'PY'
+          import json, os, sys
+          revision = os.environ["REVISION"]
+          runs = json.load(open("runs.json")).get("workflow_runs") or []
+          passed = [
+              run for run in runs
+              if run.get("workflow_id") == "ci.yml"
+              and run.get("commit_sha") == revision
+              and run.get("status") == "success"
+          ]
+          if not passed:
+              print(
+                  f"No successful CI (Forgejo) run for {revision}.\n"
+                  "CI (Forgejo) runs on push to main. Let it run and pass on this\n"
+                  "commit before publishing an image from it. There is no override:\n"
+                  "an unverified image is the thing this lane exists to prevent.",
+                  file=sys.stderr,
+              )
+              raise SystemExit(1)
+          print(f"CI (Forgejo) run {passed[0].get('id')} passed for {revision}")
+          PY
+
+      - name: Install the pinned cosign
+        env:
+          COSIGN_VERSION: v3.1.4
+          COSIGN_SHA256: 424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa
+        run: |
+          set -euo pipefail
+          # Pinned and checksum-verified rather than taken from an installer
+          # action: this binary decides what a signature means, so it is the
+          # last place to accept a moving version.
+          curl -fsSL --max-time 300 -o cosign \
+            "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64"
+          echo "${COSIGN_SHA256}  cosign" | sha256sum --check --strict -
+          chmod +x cosign
+          sudo mv cosign /usr/local/bin/cosign
+          cosign version
+
+      - name: Sign in to the private registry
+        env:
+          REGISTRY: ${{ secrets.FORGE_REGISTRY }}
+          REGISTRY_USER: ${{ secrets.FORGE_REGISTRY_USER }}
+          REGISTRY_TOKEN: ${{ secrets.FORGE_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${REGISTRY:-}" && test -n "${REGISTRY_USER:-}" && test -n "${REGISTRY_TOKEN:-}" \
+            || { echo "FORGE_REGISTRY, FORGE_REGISTRY_USER and FORGE_REGISTRY_TOKEN are required" >&2; exit 1; }
+          printf '%s' "$REGISTRY_TOKEN" | docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
+
+      - name: Build and push, then resolve the immutable digest
+        env:
+          REVISION: ${{ forgejo.event.inputs.revision }}
+          IMAGE: ${{ secrets.FORGE_IMAGE_REPOSITORY }}
+          SERVER: ${{ forgejo.server_url }}
+          REPOSITORY: ${{ forgejo.repository }}
+        run: |
+          set -euo pipefail
+          test -n "${IMAGE:-}" || { echo "FORGE_IMAGE_REPOSITORY is required" >&2; exit 1; }
+          # The revision label is not decoration. docker-updater.py refuses any
+          # image whose org.opencontainers.image.revision is not 40 hex
+          # characters, on both sides of an update, because that label is what
+          # the forward-only ancestry proof compares.
+          docker build \
+            --label "org.opencontainers.image.revision=${REVISION}" \
+            --label "org.opencontainers.image.source=${SERVER}/${REPOSITORY}" \
+            --tag "${IMAGE}:candidate-${REVISION}" \
+            .
+          docker push "${IMAGE}:candidate-${REVISION}"
+          # Read the digest back from the registry rather than trusting the
+          # local build: the digest is the only identity that is signed.
+          digest=$(docker image inspect "${IMAGE}:candidate-${REVISION}" \
+            --format '{{json .RepoDigests}}' \
+            | python3 -c 'import json,sys;print(next(r.split("@",1)[1] for r in json.load(sys.stdin)))')
+          printf '%s' "$digest" | grep -Eq '^sha256:[a-f0-9]{64}$' \
+            || { echo "registry did not return an immutable digest" >&2; exit 1; }
+          echo "DIGEST=$digest" >> "$GITHUB_ENV"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Confirm the pushed image carries the revision it claims
+        run: |
+          set -euo pipefail
+          labelled=$(docker image inspect "${IMAGE}@${DIGEST}" \
+            --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
+          test "$labelled" = "${{ forgejo.event.inputs.revision }}" \
+            || { echo "pushed image labels $labelled" >&2; exit 1; }
+
+      - name: Sign the digest with our own key
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.FREEHOLDER_COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.FREEHOLDER_COSIGN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "${COSIGN_PRIVATE_KEY:-}" \
+            || { echo "FREEHOLDER_COSIGN_PRIVATE_KEY is required; this lane has no keyless identity" >&2; exit 1; }
+          cosign sign --yes --key env://COSIGN_PRIVATE_KEY "${IMAGE}@${DIGEST}"
+
+      - name: Verify the signature the way the host executor will
+        env:
+          COSIGN_PUBLIC_KEY: ${{ secrets.FREEHOLDER_COSIGN_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          # Signing and assuming is how a lane ships broken. This runs the same
+          # check scripts/docker-updater.py runs, against the public half, so a
+          # mismatched keypair fails here instead of on a production host at
+          # update time.
+          test -n "${COSIGN_PUBLIC_KEY:-}" \
+            || { echo "FREEHOLDER_COSIGN_PUBLIC_KEY is required to prove the signature verifies" >&2; exit 1; }
+          printf '%s' "$COSIGN_PUBLIC_KEY" > cosign.pub
+          cosign verify --key cosign.pub "${IMAGE}@${DIGEST}"
+          rm -f cosign.pub
+
+      - name: Publication summary
+        env:
+          REVISION: ${{ forgejo.event.inputs.revision }}
+        run: |
+          {
+            echo "### Published and self-signed"
+            echo '```'
+            echo "image:    ${IMAGE}@${DIGEST}"
+            echo "revision: ${REVISION}"
+            echo '```'
+            echo "Deploy with .forgejo/workflows/deploy-production.yml, or offer the digest to a host running scripts/docker-updater.py with a matching publisher.cosign_key."
+          } >> "$GITHUB_STEP_SUMMARY"

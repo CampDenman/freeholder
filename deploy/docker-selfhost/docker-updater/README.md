@@ -104,10 +104,17 @@ without an integer `total_commits` is treated as unrecognised, never as zero.
 
 ### What the publishing side must provide
 
-This is the verifying half only. A private installation also needs a workflow
-that builds the image, pushes it to that repository, and signs the pushed
-digest with the private half of `cosign_key`. Until that exists, leave
-`publisher` out and the upstream chain applies unchanged.
+This is the verifying half only. The publishing half is
+`.forgejo/workflows/publish-image.yml`: it builds at an exact 40-character
+revision, refuses one with no successful `CI (Forgejo)` run, pushes to the
+private repository, signs the resulting digest with the private half of
+`cosign_key`, and verifies that signature against the public half before it
+finishes. `.forgejo/README.md` lists the secrets it needs and how to generate
+the keypair.
+
+Until that workflow has published a signed image, leave `publisher` out and the
+upstream chain applies unchanged. Setting it first is not a soft failure: every
+candidate will be correctly refused for having no signature this key made.
 
 Every candidate is signature-checked, restored against a real database backup
 and checked against upstream commit history so a stale channel tag cannot

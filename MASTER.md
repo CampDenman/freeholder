@@ -14333,7 +14333,10 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   `total_commits` with no `status` or `merge_base_commit` and the upstream
   reading would refuse every candidate while looking like a bad signature
   (`validate_publisher`/`verify_forward_on_forge`, 16 added drills in
-  `tests/host/test_docker_updater.py`, 90 passing), a private
+  `tests/host/test_docker_updater.py`, 90 passing); its publishing half is
+  `.forgejo/workflows/publish-image.yml`, which builds at an exact revision,
+  refuses one with no successful forge CI run, signs the pushed digest and
+  verifies that signature against the public half in the same run, a private
   root:operator-group 0660 Unix socket exposing only GET /status and
   POST /apply (`make_handler`/`prepare_socket_path`), restored-backup rehearsal
   into a no-egress scratch DB with the unchanged schema+journal sha256 gate
