@@ -72,15 +72,20 @@ async function initializeRuntime(): Promise<void> {
       const { startJobs } = await import("@/core/jobs");
       await startJobs();
       return;
-    } catch {
+    } catch (error) {
       // A dependency outage must keep liveness green and readiness red. Retry
       // idempotent initialization in-process so database recovery does not
-      // require an operator restart. Never print the caught error: SQL and
-      // provider errors may contain values that do not belong in logs.
+      // require an operator restart. Never print the caught error's MESSAGE or
+      // stack: SQL and provider errors may contain values that do not belong
+      // in logs. A bounded code or class name carries no values, and it is the
+      // difference between a diagnosable failure and a loop whose only output
+      // is "retrying" -- which is exactly how the packaged-image and
+      // native-install journeys failed in CI, with nothing to say why.
       const now = Date.now();
       if (attempt === 0 || now - lastFailureLogAt >= 60_000) {
+        const cause = failureDiscriminator(error);
         console.error(
-          `[freeholder] ${phase} unavailable; readiness is unavailable; retrying`,
+          `[freeholder] ${phase} unavailable${cause ? ` (${cause})` : ""}; readiness is unavailable; retrying`,
         );
         lastFailureLogAt = now;
       }
@@ -89,6 +94,25 @@ async function initializeRuntime(): Promise<void> {
       attempt += 1;
     }
   }
+}
+
+/**
+ * A failure's code or class name, and nothing else.
+ *
+ * Deliberately never the message, the stack, or any nested cause: those carry
+ * SQL fragments, connection strings and provider payloads. A `code` is a fixed
+ * token by convention -- `42703` from PostgreSQL, `ECONNREFUSED` from Node, a
+ * `ServiceError` code from this codebase -- so it is bounded here to a short
+ * identifier charset rather than trusted to be one.
+ */
+function failureDiscriminator(error: unknown): string | null {
+  if (typeof error !== "object" || error === null) return null;
+  const code = (error as { code?: unknown }).code;
+  if (typeof code === "string" && /^[A-Za-z0-9_.-]{1,64}$/.test(code)) return code;
+  if (typeof code === "number" && Number.isInteger(code)) return String(code);
+  const name = (error as { name?: unknown }).name;
+  if (typeof name === "string" && /^[A-Za-z0-9_.-]{1,64}$/.test(name)) return name;
+  return null;
 }
 
 export async function stopNodeRuntime(): Promise<void> {
