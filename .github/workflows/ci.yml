@@ -578,18 +578,23 @@ jobs:
           # still has to hold is the conditional-write probe, and this fixture
           # passes it: measured 2026-11-18, a second create returns 412.
           #
-          # KNOWN GAP, so nobody re-derives it: recipe-matrix still fails here
-          # on `list_root_absent:ListVersionsResult`. adobe/s3mock answers
-          # `?versions` with HTTP 200 and a ListBucketResult, and the
-          # recorded-write inventory demands that listing from every provider
-          # regardless of whether the bucket keeps versions. Fixing that means
-          # making the demand conditional in THREE places that must agree:
-          # original-write-recovery.ts (capture), transfer-inventory.ts
-          # (verifier), and the SQL guards
-          # freeholder_media_original_absence_inventory_complete and
-          # ..._positive_inventory_complete from migration 0082, which hardcode
-          # ARRAY['configuration','objects','versions','sessions']. The last
-          # needs a new forward migration, so it is not a comment-sized change.
+          # The versions listing this fixture cannot serve is no longer demanded
+          # of it. adobe/s3mock answers `?versions` with a ListBucketResult
+          # rather than a ListVersionsResult, and the recorded-write inventory
+          # used to require that listing from every provider whether or not the
+          # bucket kept versions. Migration 0109 makes the requirement
+          # conditional on the configuration page's own versioning answer, in
+          # the three guards that enforce it, matching the capture side in
+          # original-write-recovery.ts and the verifier in
+          # transfer-inventory.ts. All four must agree; if this step ever fails
+          # again on `list_root_absent:ListVersionsResult`, one of them has
+          # drifted from the others.
+          #
+          # This matters well beyond the gate: Doctor's storage.roundTrip uses
+          # putWithReceipt, and so do galleries, social ingest, sealed member
+          # blobs and crawl imports. The recorded-write path is the ordinary
+          # upload path, not a diagnostic -- which is why it must work on an
+          # S3-compatible provider that is not Amazon's.
       - run: bash scripts/recipe-matrix.sh
       - run: bash scripts/public-gates.sh
       - name: Registry login for the previous release

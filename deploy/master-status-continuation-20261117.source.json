@@ -16,13 +16,13 @@
   "artifacts": [
     {
       "path": "MASTER.md",
-      "sha256": "941ff7ff64b5a067a3ed38e95410d53542ffe1770ba5cbc81ca5051953d69665"
+      "sha256": "f41060bf106779d553f986e2a5414b3fe353a3370a9179089cef2ebd90e430ed"
     }
   ],
   "testContinuations": [
     {
       "path": "MASTER.md",
-      "afterSha256": "941ff7ff64b5a067a3ed38e95410d53542ffe1770ba5cbc81ca5051953d69665",
+      "afterSha256": "f41060bf106779d553f986e2a5414b3fe353a3370a9179089cef2ebd90e430ed",
       "beforeSha256": "a52835c139d0495be50650c3a9f067fb1227f2f4c5ad4fb90553168d6ecbefd3",
       "continue": true,
       "edits": [
@@ -59,6 +59,36 @@
         {
           "before": "",
           "after": "  Non-AWS conditional authority2026-11-18 (C1.12/C11.08): an observed physical\n  CREATE or current-key DELETE was trusted only on an `*.amazonaws.com`\n  endpoint, because `if-none-match: *` IS the create-only guarantee and\n  `if-match` the delete one, and a provider that accepts and ignores either\n  answers \"created\" for a write that landed on a live key. That fail-closed\n  rule left every other S3-compatible store unusable for observed writes --\n  including the recipe gate's own fixture, which is why the entries above\n  reached for \"genuine synthetic AWS-to-TCP transport\" rather than a real\n  endpoint, and why the demo seed refused with `conditional_authority` the\n  first time that gate ran on this branch. Such an endpoint is now trusted\n  once BOTH facts are established at setup and carried on the binding:\n  `proveS3ConditionalSemantics` watched this endpoint refuse a second create\n  and a stale `if-match`, and the bucket reports versioning Enabled so a later\n  provider regression writes a new version instead of destroying one. Neither\n  alone suffices; both absent, the endpoint stays fail-closed exactly as\n  before, and the refusal now names which fact is missing. AWS is unchanged and\n  is never probed. The recipe gate enables and reads back bucket versioning in\n  its own setup step, so a store that cannot retain versions fails there rather\n  than inside Freeholder. No provider-account, hosted or C-item acceptance\n  follows: this is the conditional-semantics half the earlier entries recorded\n  as pending, not storage acceptance.\n",
+          "occurrences": 1
+        },
+        {
+          "before": "| Storage | **S3-compatible adapter** | Replit Object Storage / DO Spaces / R2 / MinIO |",
+          "after": "| Storage | **S3-compatible adapter** | Replit Object Storage / DO Spaces / R2 / any S3-compatible endpoint that passes `scripts/s3-provider-probe.mjs` |",
+          "occurrences": 1
+        },
+        {
+          "before": "| Styling | **Tailwind + CSS logical properties** | RTL-ready from day one |\n| i18n | **ICU MessageFormat catalogs** (`/locales/*.json`) + `EntityTranslation` table | Per §4.9 |",
+          "after": "| Styling | **Tailwind + CSS logical properties** | RTL-ready from day one |\n**Storage providers are qualified by behaviour, not by name.** The recorded-write\npath (`putWithReceipt`, used by galleries, social ingest, sealed member blobs,\ncrawl imports and Doctor's `storage.roundTrip`) writes with `if-none-match: *`\nand deletes with `if-match`, and refuses an endpoint that accepts either and\nignores it. Measured 2026-11-18: SeaweedFS answered `204` to a stale `if-match`\nDELETE and destroyed the object, so \"S3-compatible\" cannot be taken on trust.\nAWS is trusted by name; every other endpoint is probed once at setup.\nVersioning is recorded as evidence, not required. MinIO is untested here, not\nrejected -- its image is no longer anonymously pullable, so we could not measure\nit; run the probe against your own instance.\n\n| i18n | **ICU MessageFormat catalogs** (`/locales/*.json`) + `EntityTranslation` table | Per §4.9 |",
+          "occurrences": 1
+        },
+        {
+          "before": "- `npx create-freeholder` (Apache-2.0) scaffolds/forks for Railway, Render, DO App Platform, and bare Docker (`Dockerfile` + `compose.yml` with PG + MinIO for full self-host).",
+          "after": "- `npx create-freeholder` (Apache-2.0) scaffolds/forks for Railway, Render, DO App Platform, and bare Docker (`Dockerfile` + `compose.yml` with PG + an S3-compatible store for full self-host).",
+          "occurrences": 1
+        },
+        {
+          "before": "- CI runs a **recipe validation matrix**: for each Tier 1–2 recipe, boot the app with that recipe's config against ephemeral PG + MinIO, run doctor, run the smoke suite. Recipes that rot get flagged automatically, not discovered by frustrated users.",
+          "after": "- CI runs a **recipe validation matrix**: for each Tier 1–2 recipe, boot the app with that recipe's config against ephemeral PG + S3-compatible storage, run doctor, run the smoke suite. Recipes that rot get flagged automatically, not discovered by frustrated users.",
+          "occurrences": 1
+        },
+        {
+          "before": "  PostgreSQL and MinIO, claims the seeded instance and runs canonical Doctor.",
+          "after": "  PostgreSQL and S3-compatible storage, claims the seeded instance and runs canonical Doctor.",
+          "occurrences": 1
+        },
+        {
+          "before": "  against PostgreSQL/MinIO and runs the authenticated canonical Doctor in CI.",
+          "after": "  against PostgreSQL/S3-compatible storage and runs the authenticated canonical Doctor in CI.",
           "occurrences": 1
         }
       ]

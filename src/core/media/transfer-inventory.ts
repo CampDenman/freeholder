@@ -18,7 +18,33 @@ import { transferRequestsDrained } from "./transfer-requests";
 type Inventory = typeof inventories.$inferSelect;
 export interface ProviderInventoryCapture { planId: string; side: "source" | "target"; purpose: "baseline" | "retirement" | "erasure"; objectId?: string; anchorCallId?: string }
 const expectedKind = (row: Pick<Inventory, "side" | "purpose">) => row.purpose === "baseline" ? row.side === "source" ? "source_inventory" : "target_inventory" : row.purpose === "retirement" ? "source_retirement_inventory" : row.side === "source" ? "source_erasure_inventory" : "target_erasure_inventory";
-function kinds(row: Inventory) { return row.binding.kind === "s3" ? ["objects", "versions", "sessions"] as const : ["objects", "versions", "retained"] as const; }
+/**
+ * Every listing this binding can produce, regardless of bucket settings -- the
+ * ceiling. A page of any other kind is a conflict, and a versions page stays
+ * admissible even where versions are not required, so inventories captured
+ * before migration 0109 (which demanded the listing from every provider) remain
+ * complete rather than turning into conflicts on upgrade.
+ */
+function admissibleKinds(row: Inventory) {
+  return row.binding.kind === "s3" ? ["objects", "versions", "sessions"] as const : ["objects", "versions", "retained"] as const;
+}
+/**
+ * The listings that must have been captured completely -- the floor.
+ *
+ * `versions` only where the bucket says it keeps versions. The capture side
+ * (original-write-recovery.ts) and the SQL guards rewritten by migration 0109
+ * apply the same rule, and all three MUST agree: a listing skipped by the
+ * capture but demanded here reads as "inventory is still truncated".
+ *
+ * Positive evidence only, as in both of those: "Enabled" or "Suspended" means
+ * versions can exist, and a suspended bucket still holds the versions it took
+ * while enabled. "disabled" and a missing answer do not.
+ */
+function kinds(row: Inventory, configuration?: TransferInventoryConfiguration) {
+  const retains = ["Enabled", "Suspended"].includes(configuration?.versioning ?? "");
+  if (row.binding.kind === "s3") return retains ? ["objects", "versions", "sessions"] as const : ["objects", "sessions"] as const;
+  return retains ? ["objects", "versions", "retained"] as const : ["objects", "retained"] as const;
+}
 const wireDigest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 async function lockedInventory(tx: Tx, id: string, actor: Actor) {
   const [identity] = await tx.select({ planId: inventories.planId }).from(inventories).where(eq(inventories.id, id)).limit(1);
@@ -57,7 +83,7 @@ export async function providerInventoryProgress(tx: Tx, id: string, actor: Actor
 export interface ProviderInventoryPageResult { inventoryId: string; callId: string; pass: 0 | 1; kind: "configuration" | "objects" | "versions" | "sessions" | "retained"; cursor: Record<string, string> | null; page?: TransferInventoryPage; configuration?: TransferInventoryConfiguration }
 export async function appendProviderInventoryPage(tx: Tx, input: ProviderInventoryPageResult, actor: Actor) {
   const { inventory, objects } = await lockedInventory(tx, input.inventoryId, actor);
-  if (inventory.state !== "capturing" || input.pass !== 0 && input.pass !== 1 || input.kind !== "configuration" && !kinds(inventory).some(kind=>kind===input.kind)) transferConflict();
+  if (inventory.state !== "capturing" || input.pass !== 0 && input.pass !== 1 || input.kind !== "configuration" && !admissibleKinds(inventory).some(kind=>kind===input.kind)) transferConflict();
   const page = input.page, configuration = input.configuration;
   if (input.kind === "configuration" ? !configuration || page || input.cursor !== null : !page || configuration || page.entries.length > 250) transferConflict();
   const result = input.kind === "configuration" ? { configurationDigest: transferDigest(configuration) } : { inventoryDigest: transferDigest(page), inventoryCount: page!.entries.length };
@@ -80,7 +106,7 @@ export async function readProviderInventoryPass(tx: Tx, inventory: Inventory, pa
   if (config.length !== 1 || !config[0]!.configuration) transferConflict("The original provider policy page is incomplete.");
   const observed = await tx.select().from(entries).where(and(eq(entries.inventoryId, inventory.id), eq(entries.pass, pass))).orderBy(asc(entries.ordinal)).limit(50001);
   if (observed.length > 50000) transferConflict("The complete physical inventory exceeds this bounded proof; no subset can be adopted.");
-  for (const kind of kinds(inventory)) {
+  for (const kind of kinds(inventory, config[0]!.configuration)) {
     const chain = saved.filter(row => row.kind === kind);
     requireCompletePages(chain.map(row => ({ cursor: row.cursor, next: row.nextCursor, page: { entries: observed.filter(entry => entry.pageId === row.id).map(entry => entry.entry), next: row.nextCursor } })));
     for (const row of chain) { const full = { entries: observed.filter(entry => entry.pageId === row.id).map(entry => entry.entry), next: row.nextCursor }; if (row.entryCount !== full.entries.length || row.pageDigest !== transferDigest(full) || row.membershipDigest!==transferDigest(observed.filter(entry=>entry.pageId===row.id).map(entry=>entry.entryDigest)) || observed.filter(entry=>entry.pageId===row.id).some(entry=>entry.redactedAt||entry.entryDigest!==transferDigest(entry.entry))) transferConflict("Restore the intact original physical inventory page."); }

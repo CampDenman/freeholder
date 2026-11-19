@@ -1467,8 +1467,19 @@ The money path (steps 2–3) follows immediately after, ahead of booking, quotes
 | ORM | **Drizzle** | SQL-transparent, light, migrations as code, no codegen daemon |
 | DB | **PostgreSQL 15+** | Replit-provisioned or any managed PG |
 | Queue | **pg-boss** (Postgres-backed) | No Redis dependency; one datastore for v1 |
-| Storage | **S3-compatible adapter** | Replit Object Storage / DO Spaces / R2 / MinIO |
+| Storage | **S3-compatible adapter** | Replit Object Storage / DO Spaces / R2 / any S3-compatible endpoint that passes `scripts/s3-provider-probe.mjs` |
 | Styling | **Tailwind + CSS logical properties** | RTL-ready from day one |
+**Storage providers are qualified by behaviour, not by name.** The recorded-write
+path (`putWithReceipt`, used by galleries, social ingest, sealed member blobs,
+crawl imports and Doctor's `storage.roundTrip`) writes with `if-none-match: *`
+and deletes with `if-match`, and refuses an endpoint that accepts either and
+ignores it. Measured 2026-11-18: SeaweedFS answered `204` to a stale `if-match`
+DELETE and destroyed the object, so "S3-compatible" cannot be taken on trust.
+AWS is trusted by name; every other endpoint is probed once at setup.
+Versioning is recorded as evidence, not required. MinIO is untested here, not
+rejected -- its image is no longer anonymously pullable, so we could not measure
+it; run the probe against your own instance.
+
 | i18n | **ICU MessageFormat catalogs** (`/locales/*.json`) + `EntityTranslation` table | Per §4.9 |
 | Auth | **Lucia-style session auth, hand-rolled thin** | Email+password+OTP (admin), magic link (customers). No auth SaaS |
 | Validation | **Zod** everywhere; schemas shared between API, forms, and MCP tool definitions | One schema, three surfaces |
@@ -1803,7 +1814,7 @@ normal tested extension rather than bespoke UI work.
 ## 14. Replit-First Deploy Story
 
 - `.replit` + `replit.nix` committed; **Run** installs frozen dependencies, checks prepared Replit configuration and starts the dev server; runtime instrumentation migrates before initializing services/jobs. Deploy = Replit Deployments with PostgreSQL + Object Storage provisioned by the owner or their agent. `pnpm launch:prepare` generates private, stable credentials and a private owner claim link, reports missing infrastructure, and does not claim to provision provider accounts.
-- `npx create-freeholder` (Apache-2.0) scaffolds/forks for Railway, Render, DO App Platform, and bare Docker (`Dockerfile` + `compose.yml` with PG + MinIO for full self-host).
+- `npx create-freeholder` (Apache-2.0) scaffolds/forks for Railway, Render, DO App Platform, and bare Docker (`Dockerfile` + `compose.yml` with PG + an S3-compatible store for full self-host).
 - All config via env with a single `env.ts` Zod schema — `doctor` prints exactly what's missing in plain English.
 - **Export is a feature:** one admin button produces a full archive (SQL dump + media + a human-readable JSON of every entity). Ownership isn't a slogan; leaving must be easy — that's what makes staying a choice.
 
@@ -2004,7 +2015,7 @@ tested_on: "2026-07-01"
 - **Migration mandate (Tier 1–2):** a recipe is not approved without a specced migration path. Every Tier 1–2 recipe ships `migrate.md` covering, at minimum, migration **to and from each Tier-1 target** (export archive → provision → import → storage sync → DNS repoint), with expected downtime and a verification checklist. Tier-1 pairs are round-trip tested in CI (see §23); Tier-2 paths are verified by the recipe maintainer per release. No approved platform is ever a dead end — that's the ownership promise expressed as a requirement.
 - **Update mandate (Tier 1–2):** a recipe declares an `update` strategy and a rollback for its target, and CI exercises it in the upgrade gate (§39.9). A platform an instance cannot be kept patched on is not an approved platform — the same argument as the migration mandate, applied to time rather than to place.
 - Every recipe must run the same app code. No target-specific forks of application logic — if a target needs a code change, that change goes behind a capability flag in core (e.g., `jobs: in-process | worker`), available to all targets.
-- CI runs a **recipe validation matrix**: for each Tier 1–2 recipe, boot the app with that recipe's config against ephemeral PG + MinIO, run doctor, run the smoke suite. Recipes that rot get flagged automatically, not discovered by frustrated users.
+- CI runs a **recipe validation matrix**: for each Tier 1–2 recipe, boot the app with that recipe's config against ephemeral PG + S3-compatible storage, run doctor, run the smoke suite. Recipes that rot get flagged automatically, not discovered by frustrated users.
 
 ---
 
@@ -2110,7 +2121,7 @@ the recipe index and `deploy/migration-runbook.md` publish the same matrix.
   every-table fingerprint comparison, ownership export and media-inventory
   generation under all 30 pair labels on every release. The runtime recipe
   matrix separately boots the published image once per target against
-  PostgreSQL and MinIO, claims the seeded instance and runs canonical Doctor.
+  PostgreSQL and S3-compatible storage, claims the seeded instance and runs canonical Doctor.
   `scripts/media-transfer.mjs` copies each manifest object across S3/Replit
   boundaries and reads it back to compare size and SHA-256. For DO↔DO moves
   using the same Spaces bucket, media may be repointed instead of copied.
@@ -8535,7 +8546,7 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   `render.yaml`, and `deploy/docker-selfhost/infra/compose.yml`. Every recipe binds
   PostgreSQL, private S3-compatible storage, health checks and secret inputs;
   `scripts/recipe-matrix.sh` boots the built image for all six target contracts
-  against PostgreSQL/MinIO and runs the authenticated canonical Doctor in CI.
+  against PostgreSQL/S3-compatible storage and runs the authenticated canonical Doctor in CI.
   Parsed/current-IaC coverage in `tests/core/recipes.test.ts`. **F04** `packages/cli` doctor/migrate, not a new admin screen. **F05** N/A — IaC recipes (`replit.nix`, `render.yaml`, compose, DO/Railway); operator CLI is C10.21. **F07** `tests/core/recipes.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/recipes.test.ts` is the composition proof.)
   *(HTTPS follow-up 2026-11-05: `deploy/docker-selfhost/infra/compose.yml`
   serves plain HTTP on port 3000, so owner passkeys could not work on a
