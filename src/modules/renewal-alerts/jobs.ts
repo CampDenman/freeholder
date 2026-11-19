@@ -24,47 +24,14 @@ import { and, eq, lte, sql } from "drizzle-orm";
 import { defineJob } from "@/core/jobs";
 import { contacts } from "@/core/contacts/schema";
 import { sendMail } from "@/core/mail/service";
-import { renewalAlerts, trackedSubscriptions, type RenewalCycle } from "./schema";
+import { renewalAlerts, trackedSubscriptions } from "./schema";
 import { renewalAlertMessage } from "./mail";
+import { DAY_MS, nextRenewalAfter } from "./cycle";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/**
- * The next occurrence of a recurring charge at or after `from`, counted from
- * the date it first happened.
- *
- * Calendar months, not 30-day approximations. Mixing the two —
- * `Math.floor(daysDiff / 30)` to jump, then `setMonth` to step — drifts
- * against every month that is not 30 days long. Anchoring on the first charge
- * and stepping in the unit the cycle is actually expressed in means a charge
- * on the 31st stays on the 31st where the month allows it, and the answer does
- * not depend on how long ago the subscription was added.
- */
-export function nextRenewalAfter(
-  firstChargeAt: Date,
-  cycle: RenewalCycle,
-  customIntervalDays: number | null,
-  from: Date,
-): Date {
-  const next = new Date(firstChargeAt.getTime());
-  if (next > from) return next;
-
-  // Bounded: a daily custom cycle anchored a decade back is ~3,650 steps, and
-  // an unbounded `while` here would be a hang rather than a wrong answer.
-  const LIMIT = 10_000;
-  for (let step = 0; step < LIMIT; step += 1) {
-    if (cycle === "custom") {
-      const days = customIntervalDays && customIntervalDays > 0 ? customIntervalDays : 30;
-      next.setTime(next.getTime() + days * DAY_MS);
-    } else if (cycle === "annual") {
-      next.setUTCFullYear(next.getUTCFullYear() + 1);
-    } else {
-      next.setUTCMonth(next.getUTCMonth() + 1);
-    }
-    if (next > from) return next;
-  }
-  return next;
-}
+// Re-exported because the look-ahead is where this date arithmetic was born
+// and its tests name it here. The write surface needs the same function, so
+// it now lives in `./cycle` with one caller on each side.
+export { nextRenewalAfter };
 
 export interface RenewalPassResult {
   examined: number;

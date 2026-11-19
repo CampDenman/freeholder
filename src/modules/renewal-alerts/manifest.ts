@@ -11,11 +11,11 @@
 // Off by default, like any module nobody asked for: a Freeholder instance
 // that does not want a renewal tracker should never see one.
 //
-// NOT YET BUILT, and named here so the gap is visible rather than discovered:
-// the write services (add, edit, archive a tracked subscription) and the
-// in-tree dashboard and settings screens. Plugin capabilities carry no routes
-// or pages, so those screens are in-tree work. This increment is the register,
-// the look-ahead job and the message.
+// The member's surface is in-tree, because plugin capabilities carry no routes
+// or pages. It is deliberately small: the register is a portal room from the
+// C8.11 section registry rather than a hand-written list page, so the only
+// bespoke screens are the ones the registry has no verb for — adding a charge
+// and correcting one.
 import { defineModule } from "@/core/module";
 
 export default defineModule({

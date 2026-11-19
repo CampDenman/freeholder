@@ -13961,17 +13961,33 @@ whatever is best for the people using the site.
   mail route stops working, which is the failure mode a notification product
   can least afford. Erasure deletes rather than anonymises, because a list of
   what somebody pays for has no aggregate anyone else is entitled to and an
-  anonymised copy is residue rather than data. Source progress 2026-11-18:
-  schema, contact-merge and privacy registration, look-ahead job and message
-  land with `db/migrations/0080_renewal_alerts.sql`,
-  `tests/modules/renewal-alerts.test.ts` (11) and
-  `tests/core/merge-completeness.test.ts` (7) passing and typecheck clean;
-  changeset `renewal-alerts.md`. **Still required to close:** the write
-  services and the in-tree dashboard and settings screens, since plugin
-  capabilities carry no routes or pages; a database-backed test of the pass
-  itself, which has not run yet because the suite skips database-backed tests
-  when no `TEST_DATABASE_URL` is set rather than failing; and one observed
-  real delivery end to end. No alert has been delivered by this code.
+  anonymised copy is residue rather than data. Source progress 2026-11-19:
+  schema, contact-merge and privacy registration, look-ahead job and message,
+  and now the member's own surface. Five services in
+  `src/modules/renewal-alerts/service.ts` — two scoped self-service reads and
+  three writes that resolve the contact from the session and scope their
+  `WHERE` by it, so no input reaches another member's register. The register
+  itself is a portal room registered through the C8.11 section registry
+  (`src/modules/renewal-alerts/portal.ts`), which means the list and record
+  pages are the ones every other room already uses rather than a hand-written
+  twin that could disagree with them; the registry has no create verb, so the
+  only bespoke screens are adding and correcting a charge, under
+  `app/portal/(account)/renewals/`. One optional field was added to
+  `PortalSection` for this — an `add` descriptor the room page renders —
+  because a register the member keeps themselves is the one room that needs a
+  way in, and every other room's records are made by the business. Strings
+  land in all four catalogues. Landing with
+  `db/migrations/0080_renewal_alerts.sql`,
+  `tests/modules/renewal-alerts.test.ts` (28),
+  `tests/core/merge-completeness.test.ts`, `registry-completeness`,
+  `i18n-gate` and `locale-quality` passing, typecheck clean across the
+  repository, `eslint .` clean repository-wide, and the licensing gate
+  OK; changeset `renewal-alerts.md`. **Still required to close:** a
+  database-backed test of the pass itself, which has not run yet because the
+  suite skips database-backed tests when no `TEST_DATABASE_URL` is set rather
+  than failing; a browser or accessibility test over the three new screens;
+  and one observed real delivery end to end. No alert has been delivered by
+  this code.
 
 - [ ] **C12.30** Hash-match known abuse imagery on upload, once member
   attachments (C12.21) exist, through a provider adapter, blocking the upload,
