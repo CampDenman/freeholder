@@ -4,7 +4,7 @@
 // The portable review exercises the same consumer; stopped-executor acceptance
 // needs an independently executed platform witness, never seeded kernel proof.
 import {afterAll,afterEach,beforeAll,beforeEach,describe,expect,it,vi} from "vitest";
-import {eq,sql} from "drizzle-orm";
+import {and,eq,ne,sql} from "drizzle-orm";
 import {db} from "@/core/db";
 import {users} from "@/core/auth/schema";
 import {createContact} from "@/core/contacts/service";
@@ -33,8 +33,22 @@ describe.runIf(hasDatabase)("C1.12/C11.08 original applied-review retirement con
  async function applied(){
   provider.loseNextSourcePutReply();await failure(putWithReceipt({key,body,contentType:"application/octet-stream",role:"original"},OWNER));const[row]=await db().select().from(mediaObjectWrites);if(!row?.namespace||!row.originalReservationId)throw Error("Actual original birth missing");
   await reconcileStorageOperation.call({id:row.id,expectedUpdatedAt:row.updatedAt.toISOString(),originalNamespace:row.namespace,outcome:"applied",providerFinalReference:"fictional-original-revision",providerEvidence:"Actual fictional TCP original nonce, exact full bytes and complete two-pass inventory.",stoppedWriterEvidence:"Actual originating finish is retained. This text is not executor proof.",confirmation:"ORIGINAL STORAGE OUTCOME CONFIRMED"},OWNER);
-  const[receipt]=await db().select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id,row.id)),[caller]=await db().select().from(callers).where(eq(callers.objectReceiptId,row.id));if(!receipt||!caller)throw Error("Actual applied review missing");
-  const originalRequests=await db().select().from(requests).where(eq(requests.callId,caller.id)),originalReviews=await db().select().from(reviews),originalInventories=await db().select().from(inventories);expect(caller).toMatchObject({state:"stopped"});expect(caller.returnedAt).toBeInstanceOf(Date);return{receipt,caller,originalRequests,originalReviews,originalInventories,reservationId:row.originalReservationId};
+  // One applied review closes exactly ONE caller: the original `ordinary_put`
+  // writer. The same receipt also owns the fresh `ordinary_recovery_read` and
+  // every `ordinary_retirement_inventory` page caller, and those MUST stay
+  // `returned` -- 0082_verified_media_transfer.sql (the inventory page and
+  // applied-review guards) and 0093_local_original_media.sql reject a stopped
+  // read/inventory caller outright. So a receipt-only lookup names ten rows
+  // here, nine of them legitimately not `stopped`, and which one an unordered
+  // `select` hands back is the planner's choice: an index scan on
+  // media_storage_calls_receipt_idx yields the writer first (pass) and heap
+  // order yields it last (fail). Name the writer by kind, and assert it is the
+  // only one, so the subject can never be a read caller again.
+  const[receipt]=await db().select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id,row.id)),writers=await db().select().from(callers).where(and(eq(callers.objectReceiptId,row.id),eq(callers.kind,"ordinary_put"))),[caller]=writers;if(!receipt||!caller)throw Error("Actual applied review missing");
+  const fresh=await db().select().from(callers).where(and(eq(callers.objectReceiptId,row.id),ne(callers.kind,"ordinary_put")));
+  const originalRequests=await db().select().from(requests).where(eq(requests.callId,caller.id)),originalReviews=await db().select().from(reviews),originalInventories=await db().select().from(inventories);expect(writers).toHaveLength(1);expect(caller).toMatchObject({state:"stopped"});expect(caller.returnedAt).toBeInstanceOf(Date);
+  expect([...new Set(fresh.map(row=>row.kind))].sort()).toEqual(["ordinary_recovery_read","ordinary_retirement_inventory"]);expect([...new Set(fresh.map(row=>row.state))]).toEqual(["returned"]);
+  return{receipt,caller,originalRequests,originalReviews,originalInventories,reservationId:row.originalReservationId};
  }
  it("retires a genuinely reviewed lost-reply PUT through one exact conditional DELETE without rewriting its original review or return",async()=>{
   const original=await applied();expect(await deleteWithReceipt(key)).toBe(true);
