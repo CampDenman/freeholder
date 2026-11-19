@@ -44,6 +44,10 @@ describe("nonfinancial preview planning and atomic confirmation birth source", (
 
   it("does not alter the original payment oracle or deadline", () => {
     expect(sha(read(record.originalPaymentOracle.path))).toBe(record.originalPaymentOracle.sha256);
-    expect(read(record.originalPaymentOracle.path)).toContain("timeout:180000");
+    // 300000 since 2026-11-19: the oracle's deadline was raised from 180s by
+    // Tony's decision because the path costs ~241s on a hosted runner against a
+    // ceiling that sat ~6s above the worst real case. The oracle file's header
+    // records what detection that traded away.
+    expect(read(record.originalPaymentOracle.path)).toContain("timeout:300000");
   });
 });

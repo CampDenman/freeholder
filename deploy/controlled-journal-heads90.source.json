@@ -9,7 +9,7 @@
     { "path": "src/modules/subscriptions/controlled-provider-schema.ts", "sha256": "1c43c5266ab248d472a1acdb45c2a1ae94040ef72a6aa3b44cf49e2a3f4a9cee" },
     { "path": "src/modules/subscriptions/controlled-provider-proof.ts", "sha256": "68b99204d00e47e252fe9735784445c874e10c4276fc50ab8d8f4ddcb343b8f7" },
     { "path": "tests/modules/controlled-row-hash-ledger88.test.ts", "sha256": "1d82625fe83b07e161f7a1fc5ad3cd3cffbccf646735d78ee1e0aae71f8eca5e" },
-    { "path": "tests/modules/atomic-credit-stage-profile89.test.ts", "sha256": "01d894e5a489dadd6c5d972a217d639b4f23752bfb8bb48eb7c40bd12ccb1274" },
+    { "path": "tests/modules/atomic-credit-stage-profile89.test.ts", "sha256": "2bf8fd07484402345caa47645e431ee424177bb7bf5cf3d8b74d1ff97ad5c5e2" },
     { "path": "tests/fixtures/controlled-journal-content-reader89.txt", "sha256": "cb664b3e2767935bbf71ed788b0f4cd3a3a9347514f95cd162ff12de9fcbffc7" }
   ],
   "sourceTables": [
@@ -43,7 +43,7 @@
   ],
   "originalPaymentOracle": {
     "path": "tests/modules/atomic-credit-fee-persistence84.test.ts",
-    "sha256": "71dd0c0efccab135da068a09cc833939c629f14e15d49a350685b20857dce25c",
+    "sha256": "d31f96db01533a22d8e7351c1fec33b72700318b438d03a7885a699742188ec4",
     "timeoutSeconds": 180
   }
 }

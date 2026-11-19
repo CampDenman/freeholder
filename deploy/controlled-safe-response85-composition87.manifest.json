@@ -12,7 +12,7 @@
   },
   "preservedNewer": [
     { "path": "tests/modules/controlled-cash-origin-batch84.test.ts", "sha256": "2999aa013127e1a9a93df670a2b8e7b87f4ab2b2ec320cc36179ead55d51e4b9" },
-    { "path": "deploy/controlled-cash-origin-batch84.source-preservation.json", "sha256": "ff35cf3871335fee12348b03564997c058f4d744448e091fd82fc0c54880113e" }
+    { "path": "deploy/controlled-cash-origin-batch84.source-preservation.json", "sha256": "e46d1d58704038f95b849a4c54e595c322643e21f94593267d2807e42d675be9" }
   ],
   "composed": [
     {

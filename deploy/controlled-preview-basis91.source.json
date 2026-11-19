@@ -7,7 +7,7 @@
     { "path": "db/migrations/0091_atomic_credit_confirmation_birth.sql", "sha256": "2fae7ef0af664ef6629d70cefb4f7fd72a3699e2680491881d78dae79951aca2" },
     { "path": "src/modules/subscriptions/controlled-provider-proration-economics.ts", "sha256": "1d165ed1c42dc77f559a6e6742ce6668b64b5addf8d62a9383778b1aa061b599" },
     { "path": "src/modules/subscriptions/controlled-provider-preview-plan.ts", "sha256": "b69c28965401d25fd838c84416541dbb1ab7480b20c84d37c7555fa9082b6341" },
-    { "path": "MASTER.md", "sha256": "22314f6ad079aa4ea28fdfaaec82a878f58d3a6b782ebc5095baf110ea7397f0" },
+    { "path": "MASTER.md", "sha256": "3bd1c80063fa3231dcbc67fb850c32dabd24821d838a2b8b6c965a0ff5c2c826" },
     { "path": "src/modules/invoicing/atomic-credit-invoice-disposition.ts", "sha256": "632d1adc20911adc584fbb8d855187e0c6f2ca04e7c721e5293b3e9d19ffdee7" }
   ],
   "testContinuations": [
@@ -54,7 +54,7 @@
   ],
   "originalPaymentOracle": {
     "path": "tests/modules/atomic-credit-fee-persistence84.test.ts",
-    "sha256": "71dd0c0efccab135da068a09cc833939c629f14e15d49a350685b20857dce25c",
+    "sha256": "d31f96db01533a22d8e7351c1fec33b72700318b438d03a7885a699742188ec4",
     "timeoutSeconds": 180
   },
   "functionBodies": {

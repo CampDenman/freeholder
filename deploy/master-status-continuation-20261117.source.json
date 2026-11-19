@@ -16,13 +16,13 @@
   "artifacts": [
     {
       "path": "MASTER.md",
-      "sha256": "22314f6ad079aa4ea28fdfaaec82a878f58d3a6b782ebc5095baf110ea7397f0"
+      "sha256": "3bd1c80063fa3231dcbc67fb850c32dabd24821d838a2b8b6c965a0ff5c2c826"
     }
   ],
   "testContinuations": [
     {
       "path": "MASTER.md",
-      "afterSha256": "22314f6ad079aa4ea28fdfaaec82a878f58d3a6b782ebc5095baf110ea7397f0",
+      "afterSha256": "3bd1c80063fa3231dcbc67fb850c32dabd24821d838a2b8b6c965a0ff5c2c826",
       "beforeSha256": "a52835c139d0495be50650c3a9f067fb1227f2f4c5ad4fb90553168d6ecbefd3",
       "continue": true,
       "edits": [
@@ -99,6 +99,11 @@
         {
           "before": "ignores it. Measured 2026-11-18: SeaweedFS answered `204` to a stale `if-match`\nDELETE and destroyed the object, so \"S3-compatible\" cannot be taken on trust.\nAWS is trusted by name; every other endpoint is probed once at setup.\nVersioning is recorded as evidence, not required for that probe. MinIO is\nuntested here, not rejected -- its image is no longer anonymously pullable, so we\ncould not measure it; run the probe against your own instance.\n\nSeparately, and this is a harder requirement than the probe: proving an erasure\nneeds the provider to ENUMERATE versions, because that listing is how Freeholder\nshows no old bytes remain. A provider's own claim that it keeps no versions is\nnot evidence -- `tests/core/media-original-retirement-lifecycle.test.ts` holds a\nprovider that reports versioning disabled and retains the bytes anyway -- so a\nstore which cannot answer a versions listing cannot be used for erasure-proof\nmedia, and is refused. adobe/s3mock is such a store, which is why the recipe\ngate's S3 target does not yet pass.",
           "after": "ignores it. Measured 2026-11-18 and 2026-11-19 across ten S3-compatible stores\nrun locally: FOUR of them -- SeaweedFS, Zenko CloudServer, Garage and Ceph RADOS\nGateway, which runs real production clusters -- answered `204` to a stale\n`if-match` DELETE and destroyed the object. A conditional DELETE is the scarce\nguarantee, not version enumeration: `if-match` on DeleteObject is a recent S3\naddition, so \"S3-compatible\" cannot be taken on trust and a trust list keyed on\nreputation would have admitted all four. AWS is trusted by name; every other\nendpoint is probed once at setup.\nVersioning is recorded as evidence, not required for that probe. MinIO is\nuntested here, not rejected -- its image is no longer anonymously pullable from\nDocker Hub, quay.io or Chainguard, so we could not measure it; run the probe\nagainst your own instance. Measured conformant: AWS S3 and rustfs. Measured\nnon-conformant, with the question each one failed, in the table in\n`scripts/media-transfer-protocol.mjs`.\n\nSeparately, and this is a harder requirement than the probe: proving an erasure\nneeds the provider to ENUMERATE versions, because that listing is how Freeholder\nshows no old bytes remain. A provider's own claim that it keeps no versions is\nnot evidence -- `tests/core/media-original-retirement-lifecycle.test.ts` holds a\nprovider that reports versioning disabled and retains the bytes anyway -- so a\nstore which cannot answer a versions listing cannot be used for erasure-proof\nmedia, and is refused. Garage and s3proxy answer `501 NotImplemented` and are\nrefused on those grounds. adobe/s3mock is a narrower case that was mis-stated\nonce: it does retain and enumerate versions, with real version ids and delete\nmarkers, but wraps them in a `ListBucketResult` root instead of\n`ListVersionsResult`, which is indistinguishable from \"no versions exist\" --\nmeasured identically on 3.12.0, 4.12.4 and 5.2.3, so a long-standing upstream\ndefect rather than a regression. That defect is why the recipe gate's S3 target\nfailed, and the fix was a conformant fixture rather than a looser product: the\ngate now runs rustfs, asserts all four answers with\n`scripts/s3-provider-probe.mjs` before depending on them, and passes.",
+          "occurrences": 1
+        },
+        {
+          "before": "See `deploy/atomic-auxiliary-six-native-checkpoint-20261114.json`.\n",
+          "after": "See `deploy/atomic-auxiliary-six-native-checkpoint-20261114.json`.\n\nCORRECTION 2026-11-19, so the retained-180s statement above is not read as\nstanding. The per-case 180s limit still holds for every money suite EXCEPT\n`tests/modules/atomic-credit-fee-persistence84.test.ts`, whose deadline Tony\nraised to 300s on that date. Nothing regressed: the six cases above ran at\n135.24-173.87s, and after a measured optimisation this suite's worst case is\n116.9s on a developer box. It fails only on a GitHub-hosted runner, which is\n1.8x slower, putting that case at ~210s against the old ceiling. The cost of\nthe change is detection -- at 300s the suite catches roughly a 2x regression\nwhere 180s caught 4% -- so the per-service cost is instead reported on every\nrun by `atomic-credit-stage-profile89`, whose header carries the attribution.\nRaising it required re-anchoring twelve live pins across ten records, two of\nthem freezes (`atomic-credit-fee-partition84.freeze.json` and the\n`frozen.sha256` in `atomic-credit-fee-root-assembly-20261114.json`), which was\nauthorised rather than incidental. The narrative digest inside\n`controlled-safe-public-boundary88.source.json`'s replay chain is deliberately\nuntouched, because it records what was true then. If the payment path is ever\nbrought under ~100s on a developer box, restore 180s and re-freeze.\n",
           "occurrences": 1
         }
       ]

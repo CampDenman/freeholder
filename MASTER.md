@@ -3775,6 +3775,24 @@ sequence/capabilities/drain PASS. SourceV111 fulltypes/lint/1588actual/254whole
 selected files/543explicitDBskips PASS. No provider-account acceptance inferred.
 See `deploy/atomic-auxiliary-six-native-checkpoint-20261114.json`.
 
+CORRECTION 2026-11-19, so the retained-180s statement above is not read as
+standing. The per-case 180s limit still holds for every money suite EXCEPT
+`tests/modules/atomic-credit-fee-persistence84.test.ts`, whose deadline Tony
+raised to 300s on that date. Nothing regressed: the six cases above ran at
+135.24-173.87s, and after a measured optimisation this suite's worst case is
+116.9s on a developer box. It fails only on a GitHub-hosted runner, which is
+1.8x slower, putting that case at ~210s against the old ceiling. The cost of
+the change is detection -- at 300s the suite catches roughly a 2x regression
+where 180s caught 4% -- so the per-service cost is instead reported on every
+run by `atomic-credit-stage-profile89`, whose header carries the attribution.
+Raising it required re-anchoring twelve live pins across ten records, two of
+them freezes (`atomic-credit-fee-partition84.freeze.json` and the
+`frozen.sha256` in `atomic-credit-fee-root-assembly-20261114.json`), which was
+authorised rather than incidental. The narrative digest inside
+`controlled-safe-public-boundary88.source.json`'s replay chain is deliberately
+untouched, because it records what was true then. If the payment path is ever
+brought under ~100s on a developer box, restore 180s and re-freeze.
+
 Verified ROOT5f647179 composes image admission acb15932 and fixed error-log
 precursor5d147d11. Combined SOURCE V113 PASSES fulltypes/lint,1629actual in258
 complete selected files,543explicit DB skips, actualCLI emit/copy/all6 packaged

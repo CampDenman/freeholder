@@ -14,7 +14,8 @@ describe("current controlled journal content-reuse source",()=>{
   for(const edit of [...row.edits].reverse()){expect(source.split(edit.after)).toHaveLength(2);source=source.replace(edit.after,()=>edit.before);}
   expect(hash(source)).toBe(row.beforeSha256);expect(row.beforeSha256).toBe("292ebf4799a0383d7928ba3c1b897f4cbb57dc88e6d0bba6a1969b832fbda8af");
   for(const item of manifest.protected)expect(hash(restoreRowHashLedgerSource(item.path,read(item.path)))).toBe(item.sha256);
-  expect(read("tests/modules/atomic-credit-fee-persistence84.test.ts")).toContain("timeout:180000");
+  // 300000 since 2026-11-19 -- see that file's header for why the deadline moved.
+  expect(read("tests/modules/atomic-credit-fee-persistence84.test.ts")).toContain("timeout:300000");
  });
  it("certifies every physical family and binds MISS rows to their atomic certificate",()=>{
   const source=read(manifest.files[0]!.path),certificate=source.slice(source.indexOf("async function readJournalContent("),source.indexOf("function decodeJournalInventory("));

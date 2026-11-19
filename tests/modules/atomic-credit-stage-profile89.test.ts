@@ -69,7 +69,18 @@ describe.runIf(hasDatabase)("payment stage timing diagnostic", () => {
   afterEach(() => { report(); vi.useRealTimers(); fixture?.cleanup(); fixture = undefined; vi.restoreAllMocks(); });
   afterAll(async () => { await stopJobs(); await closeDb(); });
 
-  it("reports the real stages", { timeout: 240000 }, async () => {
+  // 240000ms sat 1.6 seconds under this test's measured hosted-runner cost
+  // (241616ms on 2026-11-19), so it failed on the ceiling rather than on
+  // anything it found. 300000ms matches the money deadline raised the same day
+  // in atomic-credit-fee-persistence84, whose header explains the trade.
+  //
+  // Nothing is lost to detection here, because this suite asserts NOTHING: it
+  // executes the real payment path and rethrows, so it fails if a service
+  // throws, and otherwise its value is the PAYMENT_CALL/PAYMENT_STAGE lines it
+  // prints. Run it with --disable-console-intercept to see them; the fixture
+  // header in tests/helpers/actual-atomic-credit-source84.ts carries the
+  // per-service attribution.
+  it("reports the real stages", { timeout: 300000 }, async () => {
     const calls = {
       journal: journal.controlledProviderJournal,
       economics: economics.prepareControlledProrationEconomics,

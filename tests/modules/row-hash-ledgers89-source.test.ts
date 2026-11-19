@@ -9,7 +9,10 @@ const recordSchema = z.object({
   sourceTables: z.array(z.string()).min(1),
   originalPaymentOracle: z.object({
     path: z.literal("tests/modules/atomic-credit-fee-persistence84.test.ts"),
-    sha256: z.literal("71dd0c0efccab135da068a09cc833939c629f14e15d49a350685b20857dce25c"),
+    // Re-anchored 2026-11-19 with the oracle's deadline change from 180s to
+    // 300s; all five records above name the same oracle file, so this literal
+    // moves with it. See that file's header for what the change traded away.
+    sha256: z.literal("d31f96db01533a22d8e7351c1fec33b72700318b438d03a7885a699742188ec4"),
     timeoutSeconds: z.literal(180),
   }).strict(),
 }).passthrough();
@@ -67,7 +70,9 @@ describe("immutable row-hash ledger source composition", () => {
   it("does not alter the original payment fixture or timeout", () => {
     for (const { originalPaymentOracle: oracle } of records) {
       expect(sha(read(oracle.path))).toBe(oracle.sha256);
-      expect(read(oracle.path)).toContain("timeout:180000");
+      // 300000 since 2026-11-19. All five records above name the same oracle
+      // file, so this loop moves with it; see that file's header for the trade.
+      expect(read(oracle.path)).toContain("timeout:300000");
     }
   });
 });

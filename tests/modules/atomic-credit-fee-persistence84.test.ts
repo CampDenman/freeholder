@@ -38,7 +38,32 @@ const footprint=defineService({name:"invoicing.testAtomicCreditPurposeFootprint"
  return{identities:selected.entries.map(row=>`${row.table}:${row.id}`),central:central.entries.map(row=>`${row.table}:${row.id}`),buyer:buyer.exported,merchant:merchant.exported,exact:rows.every(row=>selected.entries.some(actual=>actual.table==="invoice_credit_funding_atomic_fee_partitions"&&actual.id===row.id&&actual.fingerprint===row.fingerprint))};
 }});
 async function canonical(){return{invoices:await db().select().from(invoices).orderBy(invoices.id),cash:await db().select().from(payments).orderBy(payments.id),notes:await db().select().from(creditNotes).orderBy(creditNotes.id),prorations:await db().select().from(subscriptionProrations).orderBy(subscriptionProrations.id),parents:await db().select().from(subscriptions).orderBy(subscriptions.id),grants:await db().select().from(entitlementGrants).orderBy(entitlementGrants.id),funding:await db().select().from(invoiceCreditFunding).orderBy(invoiceCreditFunding.id),reservations:await db().select().from(invoiceCreditReservations).orderBy(invoiceCreditReservations.id),applications:await db().select().from(invoiceCreditApplications).orderBy(invoiceCreditApplications.reservationId),fundingPurposes:await db().select().from(invoiceCreditFundingAtomicFeePartitions).orderBy(invoiceCreditFundingAtomicFeePartitions.fundingId),reservationPurposes:await db().select().from(invoiceCreditReservationAtomicFeePartitions).orderBy(invoiceCreditReservationAtomicFeePartitions.reservationId)};}
-describe.runIf(hasDatabase)("actual B same-transaction original fee-epoch persistence",{timeout:180000},()=>{
+// DEADLINE RAISED 180s -> 300s on 2026-11-19, by Tony's explicit decision, and
+// this file is now the one money suite that departs from the 180s convention
+// the other ten keep. Recorded here because the number alone does not say what
+// was traded.
+//
+// The 180s was never a product promise. MASTER.md records six real cases
+// passing against it at 135.24-173.87s, so it sat about six seconds above the
+// worst real case and worked as a regression tripwire: a 4% slowdown tripped
+// it. What broke was not the payment path but where it runs -- measured
+// 2026-11-19, this file costs ~134s here and ~241s on a GitHub-hosted runner,
+// which is 1.8x slower. Nothing regressed; the ceiling simply sat under the
+// cost on that hardware.
+//
+// 300s keeps ~24% headroom over the measured 241s. The price is detection: at
+// 300s this suite no longer catches anything smaller than a ~2x regression,
+// where it used to catch 4%. The per-service cost is reported on every run by
+// atomic-credit-stage-profile89, whose header carries the attribution, so the
+// cost stays visible even though this ceiling no longer polices it.
+//
+// Raising it meant re-anchoring TWELVE live pins across eight records, two of
+// them freezes (atomic-credit-fee-partition84.freeze.json and the
+// frozen.sha256 in atomic-credit-fee-root-assembly-20261114.json). That file
+// was frozen deliberately; unfreezing it was authorised, not incidental. If
+// the payment path is ever made fast enough to fit 180s at 1.8x -- under about
+// 100s here -- put this back and re-freeze it.
+describe.runIf(hasDatabase)("actual B same-transaction original fee-epoch persistence",{timeout:300000},()=>{
  let f:Awaited<ReturnType<typeof actualControlledPeriod84>>|undefined;
  beforeAll(ready,60000);beforeEach(truncateSpine);afterEach(()=>{vi.useRealTimers();f?.cleanup();f=undefined;vi.restoreAllMocks();});afterAll(async()=>{await stopJobs();await closeDb();});
  it("uses the original400/4199 epoch after an authentic sibling return and fee1, with actual signed purpose parents, safe archives and full-PG central footprints",async()=>{

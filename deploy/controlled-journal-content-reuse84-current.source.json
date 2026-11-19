@@ -56,7 +56,7 @@
   "protected": [
     {
       "path": "tests/modules/atomic-credit-fee-persistence84.test.ts",
-      "sha256": "71dd0c0efccab135da068a09cc833939c629f14e15d49a350685b20857dce25c"
+      "sha256": "d31f96db01533a22d8e7351c1fec33b72700318b438d03a7885a699742188ec4"
     },
     {
       "path": "src/modules/subscriptions/controlled-provider-safe-response-proof.ts",
