@@ -136,29 +136,46 @@ const PROBE_PREFIX="__freeholder_conditional_probe__";
  * probe key rather than removing it, which is why the key is reserved and
  * obviously named instead of looking like media.
  *
- * MEASURED 2026-11-18, three S3-compatible stores run locally and asked
- * directly. This is why the probe exists rather than a trust list:
+ * MEASURED 2026-11-18 and 2026-11-19, ten S3-compatible stores run locally
+ * under rootless podman and asked directly, through this file's own protocol
+ * and signer. This is why the probe exists rather than a trust list:
  *
- *   store            versions   if-none-match:*   stale if-match DELETE
- *   adobe/s3mock     200 with   412 honoured      (untested)
- *   5.2.3            the WRONG
- *                    root
- *   seaweedfs 3.99   correct    200 IGNORED       204, AND THE OBJECT WAS
- *                                                 DESTROYED
- *   localstack 4.9   correct    412 honoured      501, object intact
- *   AWS S3           correct    412 honoured      412
+ *   store                     if-none-match:*  stale if-match DELETE   ?versions
+ *   rustfs 1.0.6              412 honoured     412, object intact      correct
+ *   AWS S3                    412 honoured     412                     correct
+ *   adobe/s3mock 5.2.3        412 honoured     412, object intact      WRONG ROOT
+ *   moto 5.2.6.dev (server)   412 honoured     412, object intact      no EncodingType
+ *   versitygw 1.11.0 (posix)  412 honoured     412, object intact      empty EncodingType
+ *   s3proxy (filesystem)      412 honoured     412, object intact      501 unsupported
+ *   localstack 4.9            412 honoured     501, object intact      correct
+ *   ceph RGW squid 19.2.0     412 honoured     204, OBJECT DESTROYED   correct
+ *   cloudserver 8.2.20 (mem)  200 IGNORED      204, OBJECT DESTROYED   correct
+ *   garage v2.0.0             200 IGNORED      204, OBJECT DESTROYED   501 unsupported
+ *   seaweedfs 3.99            200 IGNORED      204, OBJECT DESTROYED   malformed
  *
- * SeaweedFS is maintained, popular and S3-compatible by reputation, and it
- * deleted an object whose caller had said to delete it only if it still
- * matched a revision it did not match. A trust list keyed on "is it
- * S3-compatible" would have admitted it. That is the whole argument for
- * proving the semantics against the endpoint in front of you, and for the
- * fail-closed default the original author chose.
+ * Four of them -- SeaweedFS, Zenko CloudServer, Ceph RADOS Gateway and Garage,
+ * every one maintained and S3-compatible by reputation, and Ceph a production
+ * implementation that runs real clusters -- deleted an object whose caller had
+ * said to delete it only if it still matched a revision it did not match. A
+ * trust list keyed on "is it S3-compatible" would have admitted all four. That
+ * is the whole argument for proving the semantics against the endpoint in front
+ * of you, and for the fail-closed default the original author chose. Conditional
+ * DELETE is the scarce guarantee here, not version enumeration: `if-match` on
+ * DeleteObject is a recent S3 addition and most implementations accept the
+ * header and ignore it.
  *
- * It also means no common test double satisfies this contract: s3mock cannot
- * list versions, SeaweedFS honours neither precondition, LocalStack cannot do
- * a conditional delete at all. Treat MASTER.md's list of S3-compatible targets
- * as unverified until each one has answered these four questions.
+ * ONE store answers every question: rustfs 1.0.6 (Apache-2.0, actively
+ * developed), which is why the CI recipe gate's fixture is rustfs. It also
+ * enforces the signature -- a wrong secret gets 403, where s3mock accepts any
+ * key -- so the gate exercises signing again as well as storage.
+ *
+ * s3mock's defect is narrower than it looks and was mis-stated once: it DOES
+ * retain and enumerate versions, with real VersionIds, delete markers, IsLatest
+ * and `EncodingType: url`; it wraps them in a `ListBucketResult` root instead of
+ * `ListVersionsResult`. Measured across 3.12.0, 4.12.4 and 5.2.3, so it is a
+ * long-standing upstream defect rather than a regression. Treat MASTER.md's list
+ * of S3-compatible targets as unverified until each one has answered these four
+ * questions.
  */
 export async function proveS3ConditionalSemantics({client,url,probeKey}){
  const key=objectKey(probeKey??`${PROBE_PREFIX}/${createHash("sha256").update(String(Date.now())).digest("hex").slice(0,32)}`);

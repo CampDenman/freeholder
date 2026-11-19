@@ -49,14 +49,20 @@ jobs:
       # Copied by digest, not by tag, and `imagetools create` copies the whole
       # manifest list rather than one architecture. The destination tag names
       # the upstream version so the mirror is auditable from the tag alone.
+      # rustfs rather than adobe/s3mock since 2026-11-19: s3mock answers
+      # `?versions` with a `ListBucketResult` root, so the recipe gate could not
+      # reach the erasure its round trip ends in. rustfs was the only one of ten
+      # stores measured locally that answered every question — see the table in
+      # `scripts/media-transfer-protocol.mjs` — and it enforces the signature as
+      # well, which s3mock did not.
       - name: Mirror the S3-compatible storage used by the recipe gate
         env:
-          SOURCE: docker.io/adobe/s3mock:5.2.3@sha256:ab01a6946750f451ca215a47e91030695b260e4003b8a5a6201d25029b8fca92
+          SOURCE: docker.io/rustfs/rustfs:1.0.6@sha256:ee717072290bec9b11abfc0365f8310b00df1cd9b3639943edae47bdef05044a
           OWNER: ${{ github.repository_owner }}
         run: |
           # Lower-cased because ghcr.io rejects a mixed-case repository name and
           # `github.repository_owner` is spelled the way the account is.
-          target="ghcr.io/$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')/freeholder-ci-s3:5.2.3"
+          target="ghcr.io/$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')/freeholder-ci-s3:1.0.6"
           docker buildx imagetools create --tag "$target" "$SOURCE"
           echo "Mirrored $SOURCE to $target"
           docker buildx imagetools inspect "$target" --format '{{ .Manifest.Digest }}'

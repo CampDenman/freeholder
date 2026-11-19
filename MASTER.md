@@ -1473,12 +1473,20 @@ The money path (steps 2–3) follows immediately after, ahead of booking, quotes
 path (`putWithReceipt`, used by galleries, social ingest, sealed member blobs,
 crawl imports and Doctor's `storage.roundTrip`) writes with `if-none-match: *`
 and deletes with `if-match`, and refuses an endpoint that accepts either and
-ignores it. Measured 2026-11-18: SeaweedFS answered `204` to a stale `if-match`
-DELETE and destroyed the object, so "S3-compatible" cannot be taken on trust.
-AWS is trusted by name; every other endpoint is probed once at setup.
+ignores it. Measured 2026-11-18 and 2026-11-19 across ten S3-compatible stores
+run locally: FOUR of them -- SeaweedFS, Zenko CloudServer, Garage and Ceph RADOS
+Gateway, which runs real production clusters -- answered `204` to a stale
+`if-match` DELETE and destroyed the object. A conditional DELETE is the scarce
+guarantee, not version enumeration: `if-match` on DeleteObject is a recent S3
+addition, so "S3-compatible" cannot be taken on trust and a trust list keyed on
+reputation would have admitted all four. AWS is trusted by name; every other
+endpoint is probed once at setup.
 Versioning is recorded as evidence, not required for that probe. MinIO is
-untested here, not rejected -- its image is no longer anonymously pullable, so we
-could not measure it; run the probe against your own instance.
+untested here, not rejected -- its image is no longer anonymously pullable from
+Docker Hub, quay.io or Chainguard, so we could not measure it; run the probe
+against your own instance. Measured conformant: AWS S3 and rustfs. Measured
+non-conformant, with the question each one failed, in the table in
+`scripts/media-transfer-protocol.mjs`.
 
 Separately, and this is a harder requirement than the probe: proving an erasure
 needs the provider to ENUMERATE versions, because that listing is how Freeholder
@@ -1486,8 +1494,16 @@ shows no old bytes remain. A provider's own claim that it keeps no versions is
 not evidence -- `tests/core/media-original-retirement-lifecycle.test.ts` holds a
 provider that reports versioning disabled and retains the bytes anyway -- so a
 store which cannot answer a versions listing cannot be used for erasure-proof
-media, and is refused. adobe/s3mock is such a store, which is why the recipe
-gate's S3 target does not yet pass.
+media, and is refused. Garage and s3proxy answer `501 NotImplemented` and are
+refused on those grounds. adobe/s3mock is a narrower case that was mis-stated
+once: it does retain and enumerate versions, with real version ids and delete
+markers, but wraps them in a `ListBucketResult` root instead of
+`ListVersionsResult`, which is indistinguishable from "no versions exist" --
+measured identically on 3.12.0, 4.12.4 and 5.2.3, so a long-standing upstream
+defect rather than a regression. That defect is why the recipe gate's S3 target
+failed, and the fix was a conformant fixture rather than a looser product: the
+gate now runs rustfs, asserts all four answers with
+`scripts/s3-provider-probe.mjs` before depending on them, and passes.
 
 | i18n | **ICU MessageFormat catalogs** (`/locales/*.json`) + `EntityTranslation` table | Per §4.9 |
 | Auth | **Lucia-style session auth, hand-rolled thin** | Email+password+OTP (admin), magic link (customers). No auth SaaS |

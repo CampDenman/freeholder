@@ -5,12 +5,13 @@
 //
 // WHY THIS EXISTS
 // ---------------
-// "S3-compatible" is a claim, not a guarantee. Measured 2026-11-18 against
-// three stores run locally: adobe/s3mock answers `?versions` with HTTP 200 and
-// a ListBucketResult, which reads as "no versions exist"; LocalStack refuses a
-// conditional delete with 501; and SeaweedFS 3.99 accepted a DELETE carrying a
-// deliberately wrong if-match, returned 204, and DESTROYED THE OBJECT. All
-// three are maintained and S3-compatible by reputation.
+// "S3-compatible" is a claim, not a guarantee. Ten stores have now been run
+// locally and asked these questions directly; the full table is in
+// `scripts/media-transfer-protocol.mjs` beside the probe it drives. The short
+// version is that FOUR of them -- SeaweedFS, Zenko CloudServer, Ceph RADOS
+// Gateway and Garage, all maintained and S3-compatible by reputation -- took a
+// DELETE carrying a deliberately wrong `if-match`, answered 204, and DESTROYED
+// THE OBJECT. Reputation is not evidence.
 //
 // So before trusting a provider with original media, ask it directly. Run this
 // against a bucket you are willing to have one probe key written to and
@@ -24,6 +25,13 @@
 //
 // It writes one object under __freeholder_conditional_probe__/ and removes it.
 // It never prints a credential, a key or a response body.
+//
+// `PROBE_S3_CREATE_BUCKET=1` creates the bucket first and waits for the
+// endpoint to answer, which is how the CI recipe gate both waits for its
+// fixture and asserts that the fixture still answers every question. A store
+// that enforces signatures -- as a store worth testing against does -- cannot
+// be waited on with an unsigned HTTP probe, because 403 is the correct answer
+// to one.
 import { AwsClient } from "aws4fetch";
 import { createS3TransferProtocol, proveS3ConditionalSemantics } from "./media-transfer-protocol.mjs";
 
@@ -48,6 +56,29 @@ const url = (key) => {
     ? `${origin.replace("://", `://${bucket}.`)}/${path}`
     : `${origin}/${bucket}/${path}`;
 };
+// Optional, and only because some stores have no way to arrive with a bucket
+// already in them. The retry loop is the readiness wait: a store that enforces
+// the signature answers 403 to any unsigned liveness request, so the first
+// request that can distinguish "not listening yet" from "listening" is a signed
+// one. 409 is success -- the bucket is already there, which is what the caller
+// asked for.
+if (process.env.PROBE_S3_CREATE_BUCKET === "1") {
+  const deadline = Date.now() + 60_000;
+  for (let attempt = 1; ; attempt++) {
+    let status = 0;
+    try {
+      status = (await client.fetch(`${origin}/${bucket}`, {
+        method: "PUT", redirect: "error", headers: { "content-length": "0" },
+      })).status;
+    } catch { status = 0; }
+    if (status === 200 || status === 409) break;
+    if (Date.now() > deadline) {
+      console.error(`The endpoint did not accept a bucket creation after ${attempt} attempts (last status ${status}).`);
+      process.exit(2);
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+}
 // Declared proven and versioned so the protocol does not refuse before the
 // provider has been asked; this probe reports what the provider does, it does
 // not grant authority to anything.
