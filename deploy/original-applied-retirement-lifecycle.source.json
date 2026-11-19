@@ -5,14 +5,26 @@
   "status": "Scoped applied-review retirement and guarded evidence-minimization controls qualified locally; independent stopped-executor and hosted/provider acceptance remain open",
   "artifacts": [
     { "path": "MASTER.md", "sha256": "a2739b1c545419908f8a19410c6414c98ceb628ed39a0387402994df7a50fdf2" },
-    { "path": "tests/core/media-original-applied-retirement-lifecycle.test.ts", "sha256": "cba85b7b8eb646d2d3e60caf8de61d2a4417927c1ffb8dc092a6b270dfb30783" }
+    { "path": "tests/core/media-original-applied-retirement-lifecycle.test.ts", "sha256": "fb5a23893f90bf483ff96ea2a3457125703dfd749db015e5f0d33576c85a6b58" }
   ],
   "controls": {
-    "final": { "database": "original_applied_retirement_audit_20261115", "passed": 3, "failed": 0, "durationSeconds": 43.57 },
+    "final": { "database": "original_applied_retirement_audit_20261119", "passed": 3, "failed": 0, "durationSeconds": 17.82 },
     "coverage": ["one exact conditional DELETE after genuine lost-reply review", "idempotent repeat without DELETE replay", "guarded raw-evidence minimization preserving review/return/digests", "later named hold admits no DELETE"],
     "guardsWeakened": false,
     "runtimeChanges": false,
-    "focusedLint": "passed"
+    "focusedLint": "passed",
+    "supersedes": {
+      "final": { "database": "original_applied_retirement_audit_20261115", "passed": 3, "failed": 0, "durationSeconds": 43.57 },
+      "why": "That pass was not reproducible. The suite identified its subject caller by object_receipt_id alone, and an applied review leaves ten callers on one receipt: the ordinary_put writer it closes, plus the ordinary_recovery_read and one ordinary_retirement_inventory per page, which 0082/0093 REQUIRE to stay returned. An unordered select therefore returned whichever row the planner offered -- the writer first under an index scan on media_storage_calls_receipt_idx (pass), last in heap order (fail). The 2026-11-15 qualification was obtained on a favourable plan and measured roughly 50% failure thereafter.",
+      "fixedBy": "The helper now names the writer by kind, asserts it is the only one, and asserts the other nine are exactly ordinary_recovery_read/ordinary_retirement_inventory and all returned -- so a stopped read caller, which the triggers forbid, would now fail the suite. Tests only; no runtime change."
+    },
+    "planIndependence": {
+      "method": "enable_indexscan, enable_bitmapscan and enable_indexonlyscan set to off on the audit database, which pins heap order and makes the old selection deterministic rather than ~50%.",
+      "beforeFix": { "runs": 3, "passed": 0, "failed": 9 },
+      "afterFix": { "runs": 3, "passed": 9, "failed": 0 },
+      "unconstrained": { "runs": 18, "failed": 0, "note": "12 by the agent that diagnosed it, 6 on re-verification; plus CI shard 38/40 green at 227 tests across 25 files." }
+    },
+    "ownerSignature": "UNSIGNED -- re-run and re-anchored 2026-11-19; the status line below is the product owner's to sign."
   },
   "testContinuations": [
     {
