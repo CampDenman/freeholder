@@ -93,7 +93,15 @@ describe.runIf(hasDatabase)("actual original-owner paid-access privacy fence", {
   }
   async function unchangedAccess(fixture: NonNullable<typeof f>) {
     expect(await db().select().from(subscriptionControlledPaidPeriodReceipts).where(eq(subscriptionControlledPaidPeriodReceipts.collectionId, fixture.target.collectionId))).toHaveLength(0);
-    expect(await db().select().from(entitlementGrants).where(eq(entitlementGrants.sourceSubscriptionId, fixture.parent.id))).toEqual(fixture.grants);
+    // Compared by id, not by the order the plan happened to return. Both sides
+    // are unordered selects, so under contention two grants with 131ms between
+    // their createdAt came back swapped and a deep-equality assertion failed on
+    // identical data -- measured 2026-11-19 in a three-way parallel run. The
+    // capture side lives in tests/helpers/actual-controlled-period84.ts, which
+    // is in the controlled-cash-origin-batch84 protected set, so the ordering
+    // is applied here rather than by editing a file declared unchanged.
+    const byGrantId = (rows: typeof fixture.grants) => [...rows].sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+    expect(byGrantId(await db().select().from(entitlementGrants).where(eq(entitlementGrants.sourceSubscriptionId, fixture.parent.id)))).toEqual(byGrantId(fixture.grants));
   }
   it.each(["buyer", "merchant"] as const)("retains real fully paid cash but refuses new access and the original event retry after actual verified %s erasure", async owner => {
     const h = await heldMoney();
