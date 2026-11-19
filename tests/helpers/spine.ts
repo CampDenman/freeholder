@@ -86,6 +86,25 @@ export async function truncateSpine(): Promise<void> {
     await tx.execute(
       sql.raw(`truncate table ${names.join(", ")} restart identity cascade`),
     );
+    // The job queue lives in another schema, so the truncate above never
+    // reaches it and work queued by one test survives into every later one.
+    // Measured 2026-11-18: 45 rows after three money suites, 60 after four,
+    // all `invoicing.reconcileOriginalMerchantFee` and
+    // `reconcileOriginalRefundCurrentState`. Those suites keep the job runtime
+    // running for the whole file, so under load a worker can claim a stale
+    // money job inside a test and write to the tables that test is certifying
+    // -- which is what the re-read guard in
+    // controlled-cash-application-evaluation.ts then correctly refuses.
+    //
+    // DELETE, not TRUNCATE: a live worker polls this table, and ACCESS
+    // EXCLUSIVE against it is what tests/helpers/deployment.ts avoids by doing
+    // its own clear outside this transaction. Guarded by to_regclass because a
+    // suite that never starts the runtime has no pgboss schema at all. Only
+    // work queued BEFORE this test exists here; anything the test itself
+    // queues is created afterwards and is untouched.
+    await tx.execute(sql.raw(
+      `do $$ begin if to_regclass('pgboss.job') is not null then delete from pgboss.job; end if; end $$`,
+    ));
     await seedDefaultRoles(tx);
     await seedCoreGuidanceFlows(tx);
     await seedReviewedBuiltinPlugins(tx, `user:${OWNER.userId}`);
