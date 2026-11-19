@@ -13976,7 +13976,9 @@ whatever is best for the people using the site.
   `PortalSection` for this — an `add` descriptor the room page renders —
   because a register the member keeps themselves is the one room that needs a
   way in, and every other room's records are made by the business. Strings
-  land in all four catalogues. Landing with
+  land in all four catalogues, and `packages/sdk/src/generated.ts` is
+  regenerated, so the five services reach the SDK, OpenAPI and MCP surfaces as
+  a committed artifact rather than a claim. Landing with
   `db/migrations/0080_renewal_alerts.sql`,
   `tests/modules/renewal-alerts.test.ts` (28),
   `tests/core/merge-completeness.test.ts`, `registry-completeness`,
