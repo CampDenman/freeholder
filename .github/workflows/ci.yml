@@ -578,23 +578,29 @@ jobs:
           # still has to hold is the conditional-write probe, and this fixture
           # passes it: measured 2026-11-18, a second create returns 412.
           #
-          # The versions listing this fixture cannot serve is no longer demanded
-          # of it. adobe/s3mock answers `?versions` with a ListBucketResult
-          # rather than a ListVersionsResult, and the recorded-write inventory
-          # used to require that listing from every provider whether or not the
-          # bucket kept versions. Migration 0109 makes the requirement
-          # conditional on the configuration page's own versioning answer, in
-          # the three guards that enforce it, matching the capture side in
-          # original-write-recovery.ts and the verifier in
-          # transfer-inventory.ts. All four must agree; if this step ever fails
-          # again on `list_root_absent:ListVersionsResult`, one of them has
-          # drifted from the others.
+          # KNOWN GAP, recorded so nobody re-derives it. recipe-matrix fails on
+          # this target with `list_root_absent:ListVersionsResult`, and the
+          # cause is the FIXTURE, not Freeholder. adobe/s3mock answers
+          # `?versions` with a ListBucketResult rather than a
+          # ListVersionsResult, so it cannot enumerate versions at all.
           #
-          # This matters well beyond the gate: Doctor's storage.roundTrip uses
-          # putWithReceipt, and so do galleries, social ingest, sealed member
-          # blobs and crawl imports. The recorded-write path is the ordinary
-          # upload path, not a diagnostic -- which is why it must work on an
-          # S3-compatible provider that is not Amazon's.
+          # I spent a stretch making that listing conditional on the bucket's
+          # own versioning answer -- capture, verifier, and three SQL guards via
+          # a migration -- and REVERTED all of it, because
+          # tests/core/media-original-retirement-lifecycle.test.ts proves the
+          # premise false. It constructs an object that is logically 404 while
+          # the provider still retains its version bytes, and requires the
+          # erasure to be refused ("physical versions, retained bytes"). Its
+          # provider reports versioning DISABLED while retaining versions, which
+          # is the point: on this path the versions listing is how absence is
+          # PROVEN, so taking the provider's word for it would let Freeholder
+          # record an erasure while the bytes are still there.
+          #
+          # So a store that cannot enumerate versions cannot prove an erasure,
+          # and refusing it is correct. What this gate needs is a conformant
+          # fixture, not a looser product. The authority rule is a separate
+          # question and is already behaviour-based rather than vendor-based:
+          # see scripts/s3-provider-probe.mjs.
       - run: bash scripts/recipe-matrix.sh
       - run: bash scripts/public-gates.sh
       - name: Registry login for the previous release

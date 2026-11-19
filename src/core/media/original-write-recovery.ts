@@ -71,21 +71,7 @@ async function ensureOriginalInventory(id:string,store:AccountedTransferStore,ac
  let captured=await progress.call({id},actor);if(captured.inventory.state==="complete")return id;if(captured.inventory.state!=="capturing")transferConflict();
  for(const pass of [0,1]as const){
   if(!captured.pages.some(row=>row.pass===pass&&row.kind==="configuration")){const actual=await physicalInventory(id,actor,()=>store.inventoryConfiguration(),value=>({configurationDigest:transferDigest(value)}));await appendPage.call({inventoryId:id,callId:actual.id,pass,kind:"configuration",cursor:null,configuration:actual.value},actor);captured=await progress.call({id},actor);}
-  // Only ask for versions where versions exist. Migration 0109 applies the same
-  // rule to the SQL completeness guards, and transfer-inventory.ts to the
-  // verifier; all three MUST agree, because a listing skipped here but demanded
-  // there reads as "the original provider inventory is still truncated".
-  //
-  // Positive evidence only: the listing is requested because the configuration
-  // page captured just above for THIS pass says the bucket keeps versions,
-  // never because the answer was missing. A suspended bucket still holds the
-  // versions it took while enabled, so it counts.
-  const retains=captured.pages.some(row=>row.pass===pass&&row.kind==="configuration"
-   &&["Enabled","Suspended"].includes(row.configuration?.versioning??""));
-  const kinds=store.binding.kind==="s3"
-   ?(retains?["objects","versions","sessions"]as const:["objects","sessions"]as const)
-   :(retains?["objects","versions","retained"]as const:["objects","retained"]as const);
-  for(const kind of kinds){
+  for(const kind of store.binding.kind==="s3"?["objects","versions","sessions"]as const:["objects","versions","retained"]as const){
    const prior=captured.pages.filter(row=>row.pass===pass&&row.kind===kind),last=prior.at(-1);if(last&&last.nextCursor===null)continue;let cursor=last?.nextCursor??null;
    for(let page=prior.length;;page++){if(page>=200)transferConflict("The complete original inventory exceeds this bounded page proof. No subset can be settled.");const actual=await physicalInventory(id,actor,()=>store.inventoryPage(kind,cursor),value=>({inventoryDigest:transferDigest(value),inventoryCount:value.entries.length}));await appendPage.call({inventoryId:id,callId:actual.id,pass,kind,cursor,page:actual.value},actor);cursor=actual.value.next;if(cursor===null)break;}
    captured=await progress.call({id},actor);

@@ -16,13 +16,13 @@
   "artifacts": [
     {
       "path": "MASTER.md",
-      "sha256": "f41060bf106779d553f986e2a5414b3fe353a3370a9179089cef2ebd90e430ed"
+      "sha256": "217559510c106e90eecaf55c0345302ff86756bf5e85ec516ea1194f251481ad"
     }
   ],
   "testContinuations": [
     {
       "path": "MASTER.md",
-      "afterSha256": "f41060bf106779d553f986e2a5414b3fe353a3370a9179089cef2ebd90e430ed",
+      "afterSha256": "217559510c106e90eecaf55c0345302ff86756bf5e85ec516ea1194f251481ad",
       "beforeSha256": "a52835c139d0495be50650c3a9f067fb1227f2f4c5ad4fb90553168d6ecbefd3",
       "continue": true,
       "edits": [
@@ -89,6 +89,11 @@
         {
           "before": "  against PostgreSQL/MinIO and runs the authenticated canonical Doctor in CI.",
           "after": "  against PostgreSQL/S3-compatible storage and runs the authenticated canonical Doctor in CI.",
+          "occurrences": 1
+        },
+        {
+          "before": "Versioning is recorded as evidence, not required. MinIO is untested here, not\nrejected -- its image is no longer anonymously pullable, so we could not measure\nit; run the probe against your own instance.",
+          "after": "Versioning is recorded as evidence, not required for that probe. MinIO is\nuntested here, not rejected -- its image is no longer anonymously pullable, so we\ncould not measure it; run the probe against your own instance.\n\nSeparately, and this is a harder requirement than the probe: proving an erasure\nneeds the provider to ENUMERATE versions, because that listing is how Freeholder\nshows no old bytes remain. A provider's own claim that it keeps no versions is\nnot evidence -- `tests/core/media-original-retirement-lifecycle.test.ts` holds a\nprovider that reports versioning disabled and retains the bytes anyway -- so a\nstore which cannot answer a versions listing cannot be used for erasure-proof\nmedia, and is refused. adobe/s3mock is such a store, which is why the recipe\ngate's S3 target does not yet pass.",
           "occurrences": 1
         }
       ]

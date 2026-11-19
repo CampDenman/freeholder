@@ -7,7 +7,7 @@
     { "path": "db/migrations/0091_atomic_credit_confirmation_birth.sql", "sha256": "2fae7ef0af664ef6629d70cefb4f7fd72a3699e2680491881d78dae79951aca2" },
     { "path": "src/modules/subscriptions/controlled-provider-proration-economics.ts", "sha256": "1d165ed1c42dc77f559a6e6742ce6668b64b5addf8d62a9383778b1aa061b599" },
     { "path": "src/modules/subscriptions/controlled-provider-preview-plan.ts", "sha256": "b69c28965401d25fd838c84416541dbb1ab7480b20c84d37c7555fa9082b6341" },
-    { "path": "MASTER.md", "sha256": "f41060bf106779d553f986e2a5414b3fe353a3370a9179089cef2ebd90e430ed" },
+    { "path": "MASTER.md", "sha256": "217559510c106e90eecaf55c0345302ff86756bf5e85ec516ea1194f251481ad" },
     { "path": "src/modules/invoicing/atomic-credit-invoice-disposition.ts", "sha256": "632d1adc20911adc584fbb8d855187e0c6f2ca04e7c721e5293b3e9d19ffdee7" }
   ],
   "testContinuations": [

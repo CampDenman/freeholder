@@ -1476,9 +1476,18 @@ and deletes with `if-match`, and refuses an endpoint that accepts either and
 ignores it. Measured 2026-11-18: SeaweedFS answered `204` to a stale `if-match`
 DELETE and destroyed the object, so "S3-compatible" cannot be taken on trust.
 AWS is trusted by name; every other endpoint is probed once at setup.
-Versioning is recorded as evidence, not required. MinIO is untested here, not
-rejected -- its image is no longer anonymously pullable, so we could not measure
-it; run the probe against your own instance.
+Versioning is recorded as evidence, not required for that probe. MinIO is
+untested here, not rejected -- its image is no longer anonymously pullable, so we
+could not measure it; run the probe against your own instance.
+
+Separately, and this is a harder requirement than the probe: proving an erasure
+needs the provider to ENUMERATE versions, because that listing is how Freeholder
+shows no old bytes remain. A provider's own claim that it keeps no versions is
+not evidence -- `tests/core/media-original-retirement-lifecycle.test.ts` holds a
+provider that reports versioning disabled and retains the bytes anyway -- so a
+store which cannot answer a versions listing cannot be used for erasure-proof
+media, and is refused. adobe/s3mock is such a store, which is why the recipe
+gate's S3 target does not yet pass.
 
 | i18n | **ICU MessageFormat catalogs** (`/locales/*.json`) + `EntityTranslation` table | Per §4.9 |
 | Auth | **Lucia-style session auth, hand-rolled thin** | Email+password+OTP (admin), magic link (customers). No auth SaaS |
