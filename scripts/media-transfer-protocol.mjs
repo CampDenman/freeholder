@@ -80,6 +80,41 @@ function s3AwsAuthority(binding,url,key){
  * not a weaker guarantee, it is a broken one, and an endpoint which does that
  * must stay refused however compatible it claims to be.
  */
+/**
+ * Establish once, per endpoint+bucket, whether this endpoint may be trusted
+ * with a recorded write, and hand back a thunk for the protocol to await.
+ *
+ * This lives here, beside the probe and the check, because there are TWO S3
+ * store implementations -- src/adapters/storage/s3.ts for ordinary media and
+ * createS3Store() in media-transfer.mjs for original-request/transfer stores --
+ * and they take DIFFERENT paths to the same protocol. The adapter established
+ * authority and the transfer store did not, so Doctor's round trip put an
+ * object through the authorised path and then refused its own retirement with
+ * `conditional_unproven`. A second copy of the establisher in media-transfer.mjs
+ * would have fixed that and left the next divergence to be discovered the same
+ * way, so both now call this.
+ *
+ * AWS is trusted by name. Everything else is probed exactly once; the result is
+ * memoised because the probe writes and deletes a reserved object, which is not
+ * something to repeat per request. A rejection is not memoised -- a network
+ * fault on the first write would otherwise condemn the endpoint for the life of
+ * the process.
+ */
+const establishedAuthorities = new Map();
+export function establishS3ConditionalAuthority({client, url, endpoint, bucket}) {
+ const key = `${endpoint}\u0000${bucket}`;
+ return () => {
+  let pending = establishedAuthorities.get(key);
+  if (!pending) {
+   pending = (awsS3Host(new URL(endpoint).hostname)
+    ? Promise.resolve({})
+    : proveS3ConditionalSemantics({client, url}).then(proven => ({conditional: proven.conditional})))
+    .catch(error => {establishedAuthorities.delete(key); throw error;});
+   establishedAuthorities.set(key, pending);
+  }
+  return pending;
+ };
+}
 export function requireS3ConditionalAuthority(binding,url,key,versionId,authority={}){
  if(versionId!==undefined)return;
  if(s3AwsAuthority(binding,url,key))return;
@@ -220,11 +255,11 @@ export function createS3TransferProtocol({client,url,binding,observer,authority=
   },
   async get(key){return(await readVersioned(key))?.body;},
   async put(key,body,contentType){objectKey(key);return observed(observer,{kind:"object.put",binding,key,createOnly:true,sha256:digest(body),bytes:body.byteLength},async(notify,identity)=>{
-   requireS3ConditionalAuthority(binding,url,key,undefined,authority);const response=await client.fetch(url(key),{method:"PUT",redirect:"error",body:new Blob([body],{type:contentType}),headers:{"content-length":String(body.byteLength),"if-none-match":"*",...originalRequestHeaders(identity)}});
+   requireS3ConditionalAuthority(binding,url,key,undefined,typeof authority==="function"?await authority():authority);const response=await client.fetch(url(key),{method:"PUT",redirect:"error",body:new Blob([body],{type:contentType}),headers:{"content-length":String(body.byteLength),"if-none-match":"*",...originalRequestHeaders(identity)}});
    await notify({stage:"response",status:response.status});if(!response.ok)failure("write_response");await notify({stage:"accepted",status:response.status});const written=revision(binding,key,response.headers.get("etag"),response.headers.get("x-amz-version-id")??undefined);await notify({stage:"metadata",status:response.status,revision:written});
   });},
   async deleteVersioned(key,input){const rev=exactRevision(input,binding,key),target=new URL(url(key));if(rev.versionId!==undefined)target.searchParams.set("versionId",rev.versionId);
-   return observed(observer,{kind:"object.delete",binding,key,expectedRevision:rev},async notify=>{requireS3ConditionalAuthority(binding,url,key,rev.versionId,authority);const response=await client.fetch(target,{method:"DELETE",redirect:"error",headers:{"if-match":rev.value}});await notify({stage:"response",status:response.status});if(!response.ok)failure("delete_response");await notify({stage:"accepted",status:response.status});});
+   return observed(observer,{kind:"object.delete",binding,key,expectedRevision:rev},async notify=>{requireS3ConditionalAuthority(binding,url,key,rev.versionId,typeof authority==="function"?await authority():authority);const response=await client.fetch(target,{method:"DELETE",redirect:"error",headers:{"if-match":rev.value}});await notify({stage:"response",status:response.status});if(!response.ok)failure("delete_response");await notify({stage:"accepted",status:response.status});});
   },
   async inventoryPage(kind,cursor=null){
    if(!["objects","versions","sessions"].includes(kind))failure("inventory_kind");const target=new URL(bucketUrl);target.searchParams.set("encoding-type","url");

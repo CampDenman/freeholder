@@ -12,8 +12,7 @@
 import { AwsClient } from "aws4fetch";
 import {createS3MultipartProtocol} from "../../../scripts/media-multipart-protocol.mjs";
 import {createS3MultipartPartIssuer} from "../../../scripts/media-part-capability.mjs";
-import {createS3TransferProtocol,proveS3ConditionalSemantics} from "../../../scripts/media-transfer-protocol.mjs";
-import type {S3ConditionalAuthority} from "../../../scripts/media-transfer-protocol.mjs";
+import {createS3TransferProtocol,establishS3ConditionalAuthority} from "../../../scripts/media-transfer-protocol.mjs";
 import type {TransferRequestObserver} from "../../../scripts/media-transfer.mjs";
 import {verifyS3PhysicalAbsence} from "./physical-absence";
 import {storageNamespace} from "@/core/media/storage-quota";
@@ -106,22 +105,6 @@ export function createS3Storage(config: S3Config): StorageAdapter {
    * nothing: a bucket that does not retain versions can never qualify, so
    * probing it would write an object to earn a refusal it already had.
    */
-  let establishing: Promise<S3ConditionalAuthority> | undefined;
-  const conditionalAuthority = (): Promise<S3ConditionalAuthority> => {
-    establishing ??= (async () => {
-      if (/(?:^|\.)s3(?:[.-](?:dualstack\.)?[a-z0-9-]+)?\.amazonaws\.com$/.test(new URL(config.endpoint).hostname)) return {};
-      const namespace = storageNamespace({ id: "s3", endpoint: config.endpoint, bucket: config.bucket });
-      const location = { endpoint: config.endpoint, bucket: config.bucket };
-      const inspect = createS3TransferProtocol({ client, binding: { kind: "s3", namespace, location }, url: objectUrl });
-      const configuration = await inspect.inventoryConfiguration();
-      const proven = await proveS3ConditionalSemantics({ client, url: objectUrl });
-      // Versioning is recorded, not required: a provider that honours the
-      // preconditions is trustworthy without it, and demanding retained
-      // versions excluded providers for no gain the probe does not give.
-      return { conditional: proven.conditional, ...(configuration.versioning === "Enabled" ? { versioning: "enabled" } : {}) };
-    })();
-    return establishing;
-  };
 
   const origin = config.endpoint.replace(/\/+$/, "");
   const storageBase = (() => {
@@ -131,6 +114,10 @@ export function createS3Storage(config: S3Config): StorageAdapter {
     return target.toString().replace(/\/+$/, "");
   })();
   const objectUrl = (key: string) => `${storageBase}/${encodeURI(key)}`;
+  // One establisher, shared with createS3Store() in media-transfer.mjs, which
+  // reaches the same protocol by a different path. This used to be a private
+  // copy here, and the other path had none at all.
+  const conditionalAuthority = establishS3ConditionalAuthority({ client, url: objectUrl, endpoint: config.endpoint, bucket: config.bucket });
 
   const multipartUrl = (key: string, uploadId?: string, partNumber?: number) => {
     const target = new URL(objectUrl(key));

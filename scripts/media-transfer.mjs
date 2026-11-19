@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { AwsClient } from "aws4fetch";
-import {createS3TransferProtocol,createReplitTransferProtocol,readS3ObjectBody,readReplitObjectBody,requireS3ConditionalAuthority} from "./media-transfer-protocol.mjs";
+import {createS3TransferProtocol,createReplitTransferProtocol,readS3ObjectBody,readReplitObjectBody,requireS3ConditionalAuthority,establishS3ConditionalAuthority} from "./media-transfer-protocol.mjs";
 
 function argument(name, fallback) {
   const index = process.argv.indexOf(`--${name}`);
@@ -91,7 +91,12 @@ export function createS3Store(environment, prefix, { allowInsecureHttp = false, 
   const binding = transferBinding("s3", { endpoint, bucket });
   return {
     binding,
-    accounted(observer){return createS3TransferProtocol({client,url,binding,observer});},
+    // Authority is established here too, not only in src/adapters/storage/s3.ts.
+    // This store serves the original-request and transfer paths -- which is how
+    // media retirement reaches the protocol -- and without it every non-AWS
+    // endpoint refused its own recorded delete with `conditional_unproven`
+    // after the write had already been authorised elsewhere.
+    accounted(observer){return createS3TransferProtocol({client,url,binding,observer,authority:establishS3ConditionalAuthority({client,url,endpoint,bucket})});},
     async readVersioned(key) {
       const response = await client.fetch(url(key), { redirect: "error", headers: { "accept-encoding": "identity" } });
       if (response.status === 404) return undefined;
