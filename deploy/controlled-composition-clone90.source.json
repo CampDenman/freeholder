@@ -4,9 +4,9 @@
   "checklist": ["C12.38", "C11.05", "C1.08"],
   "status": "FORWARD SOURCE CONTINUATION; composed readers retain final fresh certificates, cloned journal values preserve validated data, and absent roots retain their exact empty-journal semantics; not payment acceptance",
   "artifacts": [
-    { "path": "src/modules/subscriptions/controlled-provider-proof.ts", "sha256": "5115e1435e79cf7c91a16d9c2252b8966e7d12180e16a516d074a506da46663d" },
+    { "path": "src/modules/subscriptions/controlled-provider-proof.ts", "sha256": "52923f2f470f1a277146db45fd028986a055e2d001a18be9a6d76f8faf667b16" },
     { "path": "src/modules/subscriptions/controlled-provider-cash-origin.ts", "sha256": "00bbfdaf6180fdf7b838179a53605f462070552cef91ba6b2111669e03157c70" },
-    { "path": "src/modules/subscriptions/controlled-provider-coverage.ts", "sha256": "076adc16066a9c74a6ed85c4ab4dbb8bcad4a85ba980179925ca85704e6b4e60" },
+    { "path": "src/modules/subscriptions/controlled-provider-coverage.ts", "sha256": "12d3cb251dabf1590b0e6edd768f89d2a7d0bf04ac7c85f51a888a3fe8eb2875" },
     { "path": "src/modules/subscriptions/controlled-provider-cash-namespace.ts", "sha256": "b231dfdc3f87303aff05e1ea968140150d13f37f4cc937b546b6c851af33c2a1" },
     { "path": "src/modules/subscriptions/controlled-provider-cash-observation-source.ts", "sha256": "bf597f917efa82041bf91294cf880587721d9b80a1fea523debd499d99443248" }
   ],
@@ -24,7 +24,7 @@
   "testContinuations": [
     {
       "path": "src/modules/subscriptions/controlled-provider-proof.ts",
-      "afterSha256": "5115e1435e79cf7c91a16d9c2252b8966e7d12180e16a516d074a506da46663d",
+      "afterSha256": "52923f2f470f1a277146db45fd028986a055e2d001a18be9a6d76f8faf667b16",
       "beforeSha256": "acaf63dfae54869639e3c318b098d89728a4f3691275bc211244bf317c690fe6",
       "continue": true,
       "edits": [
@@ -32,7 +32,8 @@
         { "before": ":await tx.execute(sql`SELECT", "after": ":await tx.execute(sql`WITH actual_resource AS MATERIALIZED(SELECT r.id FROM subscription_controlled_resources r WHERE r.id=${resourceId}::uuid),\n   head AS MATERIALIZED(SELECT h.* FROM subscription_controlled_journal_heads h WHERE h.resource_id=${resourceId}::uuid)\n   SELECT", "occurrences": 1 },
         { "before": "SELECT 'controlled_journal_pg_content.v1'::text AS domain,${resourceId}::text AS \"resourceId\",h.fingerprint,h.counts,\n   h.physical_count AS \"physicalCount\",h.physical_bytes::text AS \"physicalBytes\",", "after": "SELECT 'controlled_journal_pg_content.v1'::text AS domain,${resourceId}::text AS \"resourceId\",\n   coalesce(h.fingerprint,encode(sha256(convert_to('[]','UTF8')),'hex')) AS fingerprint,\n   coalesce(h.counts,jsonb_build_object('resources',0,'operations',0,'calls',0,'facts',0,'finishes',0,'stops',0,'verifications',0,'chargeOrigins',0,'closures',0)) AS counts,\n   coalesce(h.physical_count,0) AS \"physicalCount\",coalesce(h.physical_bytes,0)::text AS \"physicalBytes\",", "occurrences": 2 },
         { "before": ") AS inventory FROM head h", "after": ") AS inventory FROM (VALUES(1)) AS required(_) LEFT JOIN actual_resource r ON TRUE LEFT JOIN head h ON TRUE\n   WHERE (r.id IS NULL)=(h.resource_id IS NULL)", "occurrences": 1 },
-        { "before": "NULL AS inventory\n   FROM subscription_controlled_journal_heads h WHERE h.resource_id=${resourceId}::uuid", "after": "NULL AS inventory\n   FROM (VALUES(1)) AS required(_) LEFT JOIN actual_resource r ON TRUE LEFT JOIN head h ON TRUE\n   WHERE (r.id IS NULL)=(h.resource_id IS NULL)", "occurrences": 1 }
+        { "before": "NULL AS inventory\n   FROM subscription_controlled_journal_heads h WHERE h.resource_id=${resourceId}::uuid", "after": "NULL AS inventory\n   FROM (VALUES(1)) AS required(_) LEFT JOIN actual_resource r ON TRUE LEFT JOIN head h ON TRUE\n   WHERE (r.id IS NULL)=(h.resource_id IS NULL)", "occurrences": 1 },
+        { "before": "function cloneJournalValue(value:unknown):unknown{\n if(value instanceof Date)return new Date(value.getTime());\n if(Array.isArray(value))return value.map(child=>cloneJournalValue(child));\n if(value&&typeof value===\"object\")return Object.fromEntries(Object.entries(value).map(([key,child])=>[key,cloneJournalValue(child)]));\n return value;\n}", "after": "function cloneJournalValue(value:unknown):unknown{\n if(value===null||typeof value!==\"object\")return value;\n if(value instanceof Date)return new Date(value.getTime());\n if(Array.isArray(value)){const length=value.length,clone=new Array<unknown>(length);for(let index=0;index<length;index++)if(index in value)clone[index]=cloneJournalValue(value[index]);return clone;}\n const source=value as Record<string,unknown>,keys=Object.keys(source),clone:Record<string,unknown>={};\n for(let index=0;index<keys.length;index++){const key=keys[index]!;clone[key]=cloneJournalValue(source[key]);}\n return clone;\n}", "occurrences": 1 }
       ]
     },
     {
@@ -72,10 +73,11 @@
     },
     {
       "path": "src/modules/subscriptions/controlled-provider-coverage.ts",
-      "afterSha256": "076adc16066a9c74a6ed85c4ab4dbb8bcad4a85ba980179925ca85704e6b4e60",
+      "afterSha256": "12d3cb251dabf1590b0e6edd768f89d2a7d0bf04ac7c85f51a888a3fe8eb2875",
       "beforeSha256": "d06054002506f6ac3c2ad756081aabcd9e31a9d7630462ceba0199dca03db77e",
       "edits": [
-        { "before": "factId:origin.factId});", "after": "factId:origin.factId},composition);", "occurrences": 1 }
+        { "before": "factId:origin.factId});", "after": "factId:origin.factId},composition);", "occurrences": 1 },
+        { "before": "  for(const operation of history.operations)if(operation.acceptedQuoteDigest!==terms.acceptedQuoteDigest||operation.originalRequest.scopeDigest!==merchantTaxDigest(resource.originalScope))refuse();", "after": "  const scopeDigest=merchantTaxDigest(resource.originalScope);\n  for(const operation of history.operations)if(operation.acceptedQuoteDigest!==terms.acceptedQuoteDigest||operation.originalRequest.scopeDigest!==scopeDigest)refuse();", "occurrences": 1 }
       ]
     },
     {

@@ -26,7 +26,8 @@ export async function controlledProviderCoverage(tx:Tx,input:{subscriptionId:str
   const[terms]=await tx.select().from(subscriptionCommercialTerms).where(eq(subscriptionCommercialTerms.id,resource.termsId)).limit(1);
   if(!terms||terms.subscriptionId!==input.subscriptionId||resource.originalScope.subscriptionId!==resource.subscriptionId||resource.originalScope.termsId!==terms.id||resource.originalScope.generation!==resource.generation)refuse();
   const history=await readComposedControlledProviderJournal(tx,resource.id,composition);count+=history.count;if(count>5000)refuse();
-  for(const operation of history.operations)if(operation.acceptedQuoteDigest!==terms.acceptedQuoteDigest||operation.originalRequest.scopeDigest!==merchantTaxDigest(resource.originalScope))refuse();
+  const scopeDigest=merchantTaxDigest(resource.originalScope);
+  for(const operation of history.operations)if(operation.acceptedQuoteDigest!==terms.acceptedQuoteDigest||operation.originalRequest.scopeDigest!==scopeDigest)refuse();
   for(const closure of history.closures){
    const previous={...history,closures:[],count:history.count-history.closures.length,revision:merchantTaxDigest({operations:history.operations,calls:history.calls,facts:history.facts,finishes:history.finishes,stops:history.stops,verifications:history.verifications,chargeOrigins:history.chargeOrigins,closures:[]})};
    const actual=controlledZeroTransportProof(previous,resource.originalScope.currency,resource.originalScope.providerCustomerRef);

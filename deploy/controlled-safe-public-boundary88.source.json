@@ -253,7 +253,7 @@
     {
       "path": "src/modules/invoicing/controlled-target-raw-policy.ts",
       "beforeSha256": "f2fb7358b08fac4ea28cf28b233dd05d9657c1a2c9a2620a73b8bc4788611dda",
-      "afterSha256": "e6d35e746890f3355617546e571db7f6850be3703dc7807b3b797d3b3e3ee6d0",
+      "afterSha256": "9f642624fae614ee9d72bd8758250c44a7a866e61c5960af65871c5f3e324774",
       "edits": [
         {
           "before": "  &&history.calls.every(call=>{const op=history.operations.find(row=>row.id===call.operationId),finish=history.finishes.find(row=>row.callId===call.id),stop=history.stops.find(row=>row.callId===call.id);\n   return !!op&&!!originalControlledCall(op,call)&&!(finish&&stop)&&(finishedControlledCall(op,call,finish??null)||stoppedControlledCall(op,call,stop??null));})",
@@ -278,6 +278,18 @@
         {
           "before": " for(const target of targets){const proof=proofFor(target),calendar=calendarRead(target);",
           "after": " for(const target of targets){const proof=proofFor(target),calendar=calendarRead(target,authenticated.get(target));"
+        },
+        {
+          "before": "function authentic(resource:State[\"resource\"],history:History){\n return !history.unfinished.length&&history.count<=5000&&history.operations.every(op=>op.resourceId===resource.id&&merchantTaxDigest(op.originalRequest)===op.requestDigest&&op.originalRequest.scopeDigest===merchantTaxDigest(resource.originalScope))",
+          "after": "function authentic(resource:State[\"resource\"],history:History){\n const scopeDigest=merchantTaxDigest(resource.originalScope);\n return !history.unfinished.length&&history.count<=5000&&history.operations.every(op=>op.resourceId===resource.id&&merchantTaxDigest(op.originalRequest)===op.requestDigest&&op.originalRequest.scopeDigest===scopeDigest)"
+        },
+        {
+          "before": "historicalPaidProofs:ControlledHistoricalPaidProof[]){\n const read=calendarRead(target),expected=target.calendarAuthority;if(!read||!expected)return false;",
+          "after": "historicalPaidProofs:ControlledHistoricalPaidProof[],read=calendarRead(target)){\n const expected=target.calendarAuthority;if(!read||!expected)return false;"
+        },
+        {
+          "before": "owned=calendarFact?exactCalendarSnapshot(target,raw,targets,proofFor,preparations.get(target)??null,calendarHistorical):bankResult?.owned??false;",
+          "after": "owned=calendarFact?exactCalendarSnapshot(target,raw,targets,proofFor,preparations.get(target)??null,calendarHistorical,calendar):bankResult?.owned??false;"
         }
       ]
     },

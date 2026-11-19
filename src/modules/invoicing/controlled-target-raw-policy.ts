@@ -38,7 +38,8 @@ export type ControlledRawTarget={resource:State["resource"];history:History;mani
 function cashOwners(target:ControlledRawTarget):readonly(ControlledResolvedCash|RetainedUnappliedControlledCash)[]{return target.prospective?[...target.cash,...target.prospective.receipts]:target.cash;}
 function uniqueInvoiceTarget(targets:readonly ControlledRawTarget[],resourceId:string,invoiceRef:string|null){const owners=targets.filter(candidate=>candidate.resource.id===resourceId&&candidate.binding?.providerInvoiceRef===invoiceRef);return owners.length===1?owners[0]:null;}
 function authentic(resource:State["resource"],history:History){
- return !history.unfinished.length&&history.count<=5000&&history.operations.every(op=>op.resourceId===resource.id&&merchantTaxDigest(op.originalRequest)===op.requestDigest&&op.originalRequest.scopeDigest===merchantTaxDigest(resource.originalScope))
+ const scopeDigest=merchantTaxDigest(resource.originalScope);
+ return !history.unfinished.length&&history.count<=5000&&history.operations.every(op=>op.resourceId===resource.id&&merchantTaxDigest(op.originalRequest)===op.requestDigest&&op.originalRequest.scopeDigest===scopeDigest)
   &&history.calls.every(call=>{const op=history.operations.find(row=>row.id===call.operationId),finish=history.finishes.find(row=>row.callId===call.id),stop=history.stops.find(row=>row.callId===call.id),original=op?originalControlledCall(op,call):null;
    return !!op&&!!original&&!(finish&&stop)&&(finishedControlledCall(op,call,finish??null,original)||stoppedControlledCall(op,call,stop??null,original));})
   &&history.facts.every(fact=>history.calls.some(call=>call.id===fact.callId)&&merchantTaxDigest(fact.actual)===fact.actualDigest)
@@ -449,8 +450,8 @@ function calendarRead(target:ControlledRawTarget,authenticated=authentic(target.
   ||!target.history.facts.some(fact=>fact.callId===verification.callId&&fact.actual.kind==="subscription_read"&&merchantTaxDigest(fact.actual.raw)===merchantTaxDigest(raw.data)))return null;
  return{verification,operation,raw:raw.data};
 }
-function exactCalendarSnapshot(target:ControlledRawTarget,raw:Record<string,unknown>,targets:readonly ControlledRawTarget[],proofFor:(target:ControlledRawTarget)=>ReturnType<typeof currentProof>,preparation:ReturnType<typeof bootstrapZeroProof>,historicalPaidProofs:ControlledHistoricalPaidProof[]){
- const read=calendarRead(target),expected=target.calendarAuthority;if(!read||!expected)return false;
+function exactCalendarSnapshot(target:ControlledRawTarget,raw:Record<string,unknown>,targets:readonly ControlledRawTarget[],proofFor:(target:ControlledRawTarget)=>ReturnType<typeof currentProof>,preparation:ReturnType<typeof bootstrapZeroProof>,historicalPaidProofs:ControlledHistoricalPaidProof[],read=calendarRead(target)){
+ const expected=target.calendarAuthority;if(!read||!expected)return false;
  const metadata=object.safeParse(raw.metadata),bootstrap=target.history.operations.find(op=>op.kind==="bootstrap");if(!metadata.success||!bootstrap)return false;
  const creator=target.history.operations.find(row=>row.id===metadata.data.freeholder_controlled_update_operation_id),payload=creator?object.safeParse(creator.originalRequest.payload):null;
  const destination=payload?.success?object.safeParse(payload.data.target):null,original=payload?.success?records.safeParse(payload.data.originalComponents):null;
@@ -544,7 +545,7 @@ export function classifyControlledTargetRawFacts(targets:readonly ControlledRawT
     }return{owned,listOwners,preparationProofs,historicalPaidProofs,nonpayableSubsetProofs,inventoryCohortProofs};
    }
    const bankResult=!calendarFact&&proof?bankFact(proof,fact,operation):null,listOwners=bankResult?.listOwners??null,calendarHistorical:ControlledHistoricalPaidProof[]=[];
-   owned=calendarFact?exactCalendarSnapshot(target,raw,targets,proofFor,preparations.get(target)??null,calendarHistorical):bankResult?.owned??false;
+   owned=calendarFact?exactCalendarSnapshot(target,raw,targets,proofFor,preparations.get(target)??null,calendarHistorical,calendar):bankResult?.owned??false;
    const bankOwners=listOwners!==null?listOwners.flatMap(candidate=>{const current=proofFor(candidate);return current?[{candidate,current}]:[];}):targets.flatMap(candidate=>{if(candidate.resource.id!==target.resource.id||!candidate.binding)return[];
     const current=proofFor(candidate);return current&&(financial.providerInvoiceRefs.includes(candidate.binding.providerInvoiceRef)||current.inventory.actualIntents.some(intent=>financial.providerIntentRefs.includes(ref(intent.id)??"")))?[{candidate,current}]:[];});
    const positiveKnown=financial.reportedPositiveMoney?bankOwners.some(owner=>owner.current.inventory.paidMinor>0):true;

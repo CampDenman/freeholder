@@ -212,10 +212,12 @@ export function controlledJournalPgCertificate(history:object){const certificate
 const journalRetention={resources:4,rows:10000,bytes:16*1024*1024} as const;
 function freezeJournalSnapshot(value:unknown):void{if(value&&typeof value==="object"){for(const child of Object.values(value))freezeJournalSnapshot(child);Object.freeze(value);}}
 function cloneJournalValue(value:unknown):unknown{
+ if(value===null||typeof value!=="object")return value;
  if(value instanceof Date)return new Date(value.getTime());
- if(Array.isArray(value))return value.map(child=>cloneJournalValue(child));
- if(value&&typeof value==="object")return Object.fromEntries(Object.entries(value).map(([key,child])=>[key,cloneJournalValue(child)]));
- return value;
+ if(Array.isArray(value)){const length=value.length,clone=new Array<unknown>(length);for(let index=0;index<length;index++)if(index in value)clone[index]=cloneJournalValue(value[index]);return clone;}
+ const source=value as Record<string,unknown>,keys=Object.keys(source),clone:Record<string,unknown>={};
+ for(let index=0;index<keys.length;index++){const key=keys[index]!;clone[key]=cloneJournalValue(source[key]);}
+ return clone;
 }
 function retainJournalBase(tx:Tx,content:JournalContent,rows:JournalRows,revision:string){
  const retained=decodedControlledJournals.get(tx)??new Map<string,RetainedJournal>();retained.delete(content.resourceId);
