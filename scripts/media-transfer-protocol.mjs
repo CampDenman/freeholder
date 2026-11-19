@@ -98,6 +98,30 @@ const PROBE_PREFIX="__freeholder_conditional_probe__";
  * On a versioned bucket the cleanup delete leaves a delete marker over the
  * probe key rather than removing it, which is why the key is reserved and
  * obviously named instead of looking like media.
+ *
+ * MEASURED 2026-11-18, three S3-compatible stores run locally and asked
+ * directly. This is why the probe exists rather than a trust list:
+ *
+ *   store            versions   if-none-match:*   stale if-match DELETE
+ *   adobe/s3mock     200 with   412 honoured      (untested)
+ *   5.2.3            the WRONG
+ *                    root
+ *   seaweedfs 3.99   correct    200 IGNORED       204, AND THE OBJECT WAS
+ *                                                 DESTROYED
+ *   localstack 4.9   correct    412 honoured      501, object intact
+ *   AWS S3           correct    412 honoured      412
+ *
+ * SeaweedFS is maintained, popular and S3-compatible by reputation, and it
+ * deleted an object whose caller had said to delete it only if it still
+ * matched a revision it did not match. A trust list keyed on "is it
+ * S3-compatible" would have admitted it. That is the whole argument for
+ * proving the semantics against the endpoint in front of you, and for the
+ * fail-closed default the original author chose.
+ *
+ * It also means no common test double satisfies this contract: s3mock cannot
+ * list versions, SeaweedFS honours neither precondition, LocalStack cannot do
+ * a conditional delete at all. Treat MASTER.md's list of S3-compatible targets
+ * as unverified until each one has answered these four questions.
  */
 export async function proveS3ConditionalSemantics({client,url,probeKey}){
  const key=objectKey(probeKey??`${PROBE_PREFIX}/${createHash("sha256").update(String(Date.now())).digest("hex").slice(0,32)}`);
