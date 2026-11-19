@@ -8,7 +8,7 @@
     { "path": "tests/core/media-original-put-recovery-lifecycle.test.ts", "sha256": "954584c78fafc21c5786c01e2dc5ffda356080bc2240eb920c71f1f5db3521a0" },
     { "path": "src/core/media/original-write-recovery.ts", "sha256": "407ca54f2b6c4f98a895f5e066bea1fcbd00e7239396dff058ef7a5fbfb04995" },
     { "path": "src/core/media/transfer-proof.ts", "sha256": "c7eeab4214aaec9f5ca05cba53eea098ce0617264a9a672ac858fd3296a260cf" },
-    { "path": "scripts/media-transfer-protocol.mjs", "sha256": "9374d5c8a04ea970e55bc3e6f96266990196a04a6a8ed1bb03262e4de94453cd" },
+    { "path": "scripts/media-transfer-protocol.mjs", "sha256": "e448811fe57bde3b9f94537d7e2dc48eb94a81f541eb684e94bc90797114d5bc" },
     { "path": ".changeset/original-put-lost-reply-recovery.md", "sha256": "5a888190bc583bd827994f1cef21d4d3f15dc51a23e7e17f0e97fd33b478c260" }
   ],
   "controls": {

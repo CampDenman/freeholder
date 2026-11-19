@@ -56,8 +56,8 @@ function s3AwsAuthority(binding,url,key){
  * key, which is a worse failure than refusing to write at all -- so AWS, whose
  * semantics are known, was the only endpoint allowed here.
  *
- * Any other S3-compatible endpoint now needs BOTH facts, established once at
- * setup and passed beside the binding -- never inside it. `location` is a
+ * Any other S3-compatible endpoint needs ONE fact, established once at setup
+ * and passed beside the binding -- never inside it. `location` is a
  * deliberately minimal evidence projection: transfer-witness.ts parses it
  * `.strict()` so no credential or extra field can ride along into recorded
  * evidence, and the namespace digest is computed from its endpoint and bucket.
@@ -67,20 +67,22 @@ function s3AwsAuthority(binding,url,key){
  *   conditional: "proven"  -- proveS3ConditionalSemantics() below actually
  *                             watched this endpoint refuse a second create and
  *                             a stale if-match, rather than it being assumed.
- *   versioning:  "enabled" -- so that if the provider later regresses, an
- *                             ignored precondition writes a new version and
- *                             cannot destroy what was there.
  *
- * Neither alone is enough: the probe proves today's behaviour and versioning
- * covers tomorrow's. Both absent, the endpoint stays fail-closed as before.
+ * It briefly also required `versioning: "enabled"`, as defence against a
+ * provider regressing later. That was dropped on the owner's direction: S3 is
+ * one storage provider among many, and requiring retained versions excludes
+ * providers that honour the preconditions perfectly well without them. It
+ * bought no safety the probe does not already give, and versioning is recorded
+ * as evidence rather than demanded.
+ *
+ * What is NOT negotiable is the probe. Measured below: a store can accept
+ * `if-match` on a DELETE, answer 204, and destroy the object anyway. That is
+ * not a weaker guarantee, it is a broken one, and an endpoint which does that
+ * must stay refused however compatible it claims to be.
  */
 export function requireS3ConditionalAuthority(binding,url,key,versionId,authority={}){
  if(versionId!==undefined)return;
  if(s3AwsAuthority(binding,url,key))return;
- // Versioning first: it is read without writing anything, so an endpoint that
- // never qualifies is named for the reason an operator can act on, rather than
- // for a probe that was skipped because it could not have helped.
- if(authority.versioning!=="enabled")failure("conditional_unversioned");
  if(authority.conditional!=="proven")failure("conditional_unproven");
 }
 const PROBE_PREFIX="__freeholder_conditional_probe__";

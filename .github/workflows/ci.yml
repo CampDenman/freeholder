@@ -570,35 +570,26 @@ jobs:
             echo 'the recipe-gate bucket never became readable'
             exit 1
           fi
-          # Versioning, because an observed physical write to a non-AWS
-          # endpoint is only trusted once the bucket retains versions AND the
-          # endpoint has been watched honouring if-none-match/if-match
-          # (scripts/media-transfer-protocol.mjs). Enabled and then read back
-          # here: a store that cannot retain versions must fail at its own
-          # setup step, not later inside Freeholder where it reads as a
-          # Freeholder defect.
-          # Print what the endpoint actually answers. The first version of this
-          # step reported only "did not report versioning", which does not
-          # distinguish a store that has no versioning from a malformed request
-          # of ours -- the same nameless-failure trap this change set spent the
-          # day removing elsewhere.
-          put=$(curl -sS -o /tmp/versioning-put.xml -w '%{http_code}' -X PUT \
-            -H 'Content-Type: application/xml' --data-binary \
-            '<VersioningConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Status>Enabled</Status></VersioningConfiguration>' \
-            'http://127.0.0.1:9000/freeholder-recipe-gate?versioning' || true)
-          get=$(curl -sS -o /tmp/versioning-get.xml -w '%{http_code}' \
-            'http://127.0.0.1:9000/freeholder-recipe-gate?versioning' || true)
-          echo "versioning: PUT $put, GET $get"
-          echo "PUT body: $(head -c 400 /tmp/versioning-put.xml 2>/dev/null)"
-          echo "GET body: $(head -c 400 /tmp/versioning-get.xml 2>/dev/null)"
-          if ! grep -q '<Status>Enabled</Status>' /tmp/versioning-get.xml 2>/dev/null; then
-            docker logs freeholder-s3
-            echo 'the recipe-gate bucket did not report versioning Enabled; an'
-            echo 'observed physical write to a non-AWS endpoint needs retained'
-            echo 'versions as well as proven conditional semantics, so this'
-            echo 'fixture cannot exercise that path until it can keep versions.'
-            exit 1
-          fi
+          # Versioning is deliberately NOT enabled here. It was, while an
+          # observed physical write to a non-AWS endpoint required retained
+          # versions; that requirement is gone, because S3 is one storage
+          # provider among many and demanding versions excluded providers that
+          # honour the write preconditions perfectly well without them. What
+          # still has to hold is the conditional-write probe, and this fixture
+          # passes it: measured 2026-11-18, a second create returns 412.
+          #
+          # KNOWN GAP, so nobody re-derives it: recipe-matrix still fails here
+          # on `list_root_absent:ListVersionsResult`. adobe/s3mock answers
+          # `?versions` with HTTP 200 and a ListBucketResult, and the
+          # recorded-write inventory demands that listing from every provider
+          # regardless of whether the bucket keeps versions. Fixing that means
+          # making the demand conditional in THREE places that must agree:
+          # original-write-recovery.ts (capture), transfer-inventory.ts
+          # (verifier), and the SQL guards
+          # freeholder_media_original_absence_inventory_complete and
+          # ..._positive_inventory_complete from migration 0082, which hardcode
+          # ARRAY['configuration','objects','versions','sessions']. The last
+          # needs a new forward migration, so it is not a comment-sized change.
       - run: bash scripts/recipe-matrix.sh
       - run: bash scripts/public-gates.sh
       - name: Registry login for the previous release

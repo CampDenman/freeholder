@@ -114,9 +114,11 @@ export function createS3Storage(config: S3Config): StorageAdapter {
       const location = { endpoint: config.endpoint, bucket: config.bucket };
       const inspect = createS3TransferProtocol({ client, binding: { kind: "s3", namespace, location }, url: objectUrl });
       const configuration = await inspect.inventoryConfiguration();
-      if (configuration.versioning !== "Enabled") return {};
       const proven = await proveS3ConditionalSemantics({ client, url: objectUrl });
-      return { versioning: "enabled", conditional: proven.conditional };
+      // Versioning is recorded, not required: a provider that honours the
+      // preconditions is trustworthy without it, and demanding retained
+      // versions excluded providers for no gain the probe does not give.
+      return { conditional: proven.conditional, ...(configuration.versioning === "Enabled" ? { versioning: "enabled" } : {}) };
     })();
     return establishing;
   };

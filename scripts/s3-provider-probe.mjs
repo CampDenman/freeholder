@@ -58,23 +58,37 @@ const protocol = createS3TransferProtocol({
 });
 
 const report = [];
-const ask = async (question, run) => {
-  try { report.push([question, "yes", await run()]); }
-  catch (error) { report.push([question, "NO", error?.reason ?? error?.code ?? error?.message?.slice(0, 60) ?? "refused"]); }
+// `required` separates a safety floor from a capability. Only the conditional
+// write semantics are required: a store that accepts `if-none-match: *` or
+// `if-match` and ignores it reports success for a write that landed on a live
+// key, or deletes an object it was told to leave alone. Everything else is
+// reported so an operator knows what evidence this provider can supply.
+const ask = async (question, required, run) => {
+  try { report.push([question, required, "yes", await run()]); }
+  catch (error) { report.push([question, required, "NO", error?.reason ?? error?.code ?? error?.message?.slice(0, 60) ?? "refused"]); }
 };
 
-await ask("bucket versioning enabled", async () => (await protocol.inventoryConfiguration()).versioning);
-for (const kind of ["objects", "versions", "sessions"]) {
-  await ask(`lists ${kind}`, async () => `${(await protocol.inventoryPage(kind)).entries.length} entries`);
+await ask("honours if-none-match and if-match", true, async () => (await proveS3ConditionalSemantics({ client, url })).conditional);
+await ask("lists objects", true, async () => `${(await protocol.inventoryPage("objects")).entries.length} entries`);
+const configuration = await ask("retains versions", false, async () => (await protocol.inventoryConfiguration()).versioning);
+for (const kind of ["versions", "sessions"]) {
+  await ask(`lists ${kind}`, false, async () => `${(await protocol.inventoryPage(kind)).entries.length} entries`);
 }
-await ask("honours if-none-match and if-match", async () => (await proveS3ConditionalSemantics({ client, url })).conditional);
+void configuration;
 
 const width = Math.max(...report.map(([question]) => question.length));
-for (const [question, verdict, detail] of report) {
-  console.log(`${question.padEnd(width)}  ${verdict.padEnd(3)}  ${detail}`);
+for (const [question, required, verdict, detail] of report) {
+  console.log(`${question.padEnd(width)}  ${(required ? "required" : "optional").padEnd(8)}  ${verdict.padEnd(3)}  ${detail}`);
 }
-const failed = report.filter(([, verdict]) => verdict === "NO");
-console.log(failed.length === 0
-  ? "\nThis provider answers every question Freeholder's recorded-write path asks."
-  : `\n${failed.length} unmet: Freeholder will refuse recorded writes here. Versioning and proven conditional semantics are both required on a non-AWS endpoint.`);
+const failed = report.filter(([, required, verdict]) => required && verdict === "NO");
+const missing = report.filter(([, required, verdict]) => !required && verdict === "NO");
+if (failed.length > 0) {
+  console.log(`\n${failed.length} REQUIRED answer missing: Freeholder will refuse recorded writes here, because this`);
+  console.log("store does not actually honour the write preconditions it accepts.");
+} else if (missing.length > 0) {
+  console.log(`\nUsable. ${missing.length} optional capability absent, so the inventory will record less`);
+  console.log("evidence here than on a provider that offers it. Nothing is refused.");
+} else {
+  console.log("\nUsable, and able to supply every piece of evidence the inventory can record.");
+}
 process.exit(failed.length === 0 ? 0 : 1);

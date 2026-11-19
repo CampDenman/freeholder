@@ -160,14 +160,18 @@ describe("non-AWS conditional authority (C1.12/C11.08)", () => {
     throw new Error("The authority check must refuse.");
   };
 
-  it("trusts AWS alone, and any other endpoint only once versioning and the probe both hold", () => {
+  it("trusts AWS, and any other endpoint whose conditional semantics are proven", () => {
     expect(() => authority({}, aws, awsUrl)).not.toThrow();
-    // An unversioned non-AWS bucket is named for the fact an operator can
-    // change, not for the probe that could not have rescued it.
-    expect(refusal(() => authority({}))).toBe("conditional_unversioned");
+    // Nothing proven: refused, naming the one fact that is missing.
+    expect(refusal(() => authority({}))).toBe("conditional_unproven");
     expect(refusal(() => authority({ versioning: "enabled" }))).toBe("conditional_unproven");
-    expect(refusal(() => authority({ conditional: "proven" }))).toBe("conditional_unversioned");
-    expect(() => authority({ versioning: "enabled", conditional: "proven" })).not.toThrow();
+    // Proven is enough. Retained versions used to be required as well, as
+    // defence against a provider regressing later; that excluded providers
+    // which honour the preconditions perfectly well without versioning, and S3
+    // is one storage provider among many. Versioning is recorded as evidence
+    // now, never demanded.
+    expect(() => authority({ conditional: "proven" })).not.toThrow();
+    expect(() => authority({ conditional: "proven", versioning: "enabled" })).not.toThrow();
     // A supplied version id addresses one immutable version, so it never
     // needed the preconditions in the first place.
     expect(() => authority({}, bucket, url, "version-1")).not.toThrow();
