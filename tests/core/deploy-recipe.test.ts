@@ -323,7 +323,8 @@ describe("the playground cannot take production down with it (C1.38 capacity)", 
   it("joins the proxy network only through reset.sh, after readiness", () => {
     expect(compose.services.app!.networks).toEqual(["private"]);
     const reset = readFileSync(join(dir, "reset.sh"), "utf8");
-    const ready = reset.indexOf("until docker exec");
+    expect(reset).toMatch(/app_ready\(\) \{\n\s+timeout \d+ docker exec "\$1" node -e [^\n]+\/api\/health/);
+    const ready = reset.indexOf('until app_ready "$app"');
     const connect = reset.indexOf("docker network connect --alias");
     expect(ready).toBeGreaterThan(0);
     expect(connect).toBeGreaterThan(ready);
