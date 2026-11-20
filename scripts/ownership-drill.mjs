@@ -120,6 +120,7 @@ export async function runOwnershipDrill({
   configPath = path.resolve("freeholder.config.ts"),
   environment = process.env,
   pairs = [["source", "restore"]],
+  requirePopulated = false,
 }) {
   const guarded = guardedDrillUrl(sourceDatabaseUrl);
   // The restore is on the same server, not merely the same hostname. Libpq
@@ -138,9 +139,18 @@ export async function runOwnershipDrill({
   const temporary = await mkdtemp(path.join(tmpdir(), "freeholder-ownership-drill-"));
   const dump = path.join(temporary, "database.dump");
   const admin = postgres(adminUrl, { max: 1, prepare: false });
-  const restoredNames = [];
+  const restoredNames = new Set();
 
   try {
+    let sourceFingerprint;
+    if (requirePopulated) {
+      sourceFingerprint = await databaseFingerprint(guarded.url.toString());
+      const populatedTables = new Set(sourceFingerprint
+        .filter((item) => item.schema === "public" && item.rows > 0)
+        .map((item) => item.table));
+      const missing = ["pages", "assets", "media_objects"].filter((table) => !populatedTables.has(table));
+      if (missing.length) throw new Error(`Ownership drill needs populated application tables: ${missing.join(", ")}.`);
+    }
     await command("pg_dump", [
       "--format=custom",
       "--no-owner",
@@ -149,20 +159,21 @@ export async function runOwnershipDrill({
       dump,
       guarded.url.toString(),
     ]);
-    const sourceFingerprint = await databaseFingerprint(guarded.url.toString());
+    sourceFingerprint ??= await databaseFingerprint(guarded.url.toString());
     const configContents = await readFile(configPath, "utf8");
     let lastExport;
 
     for (const [index, [from, to]] of pairs.entries()) {
       const pairName = `${from}_${to}`.replace(/[^a-zA-Z0-9_]/g, "_");
-      const restoredName = `${safeSourceName}_${pairName}_${index}_${suffix}`.slice(0, 63);
+      const identity = `_${index}_${suffix}`;
+      const label = `${safeSourceName}_${pairName}`.slice(0, 63 - identity.length);
+      const restoredName = `${label}${identity}`;
       if (!/^[a-zA-Z0-9_]+$/.test(restoredName)) {
         throw new Error("The generated restore database name was not a safe identifier.");
       }
-      restoredNames.push(restoredName);
       const restoredUrl = databaseUrl(guarded.url, restoredName);
-      await terminateAndDrop(admin, restoredName);
       await admin.unsafe(`create database "${restoredName}"`);
+      restoredNames.add(restoredName);
       try {
         await command("pg_restore", [
           "--no-owner",
@@ -189,6 +200,7 @@ export async function runOwnershipDrill({
         }
       } finally {
         await terminateAndDrop(admin, restoredName);
+        restoredNames.delete(restoredName);
       }
     }
     return {
@@ -221,6 +233,7 @@ async function main() {
   const result = await runOwnershipDrill({
     sourceDatabaseUrl,
     pairs: allPairs ? tier1Pairs() : undefined,
+    requirePopulated: process.argv.includes("--require-populated"),
   });
   console.log(
     `ownership drill: ${result.pairs} pair(s) matched ${result.tables} tables, ${result.rows} rows, ${result.assets} assets and ${result.objects} media objects after pg_dump/restore and secret-safe export`,

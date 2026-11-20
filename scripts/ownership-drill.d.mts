@@ -9,6 +9,7 @@ export function runOwnershipDrill(options: {
   configPath?: string;
   environment?: NodeJS.ProcessEnv;
   pairs?: string[][];
+  requirePopulated?: boolean;
 }): Promise<{
   pairs: number;
   tables: number;

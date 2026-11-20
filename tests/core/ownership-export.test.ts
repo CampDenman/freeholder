@@ -164,6 +164,15 @@ describe.runIf(hasDatabase)("complete ownership export", () => {
     await closeDb();
   });
 
+  it("refuses restored ownership evidence without populated application tables", async () => {
+    await expect(
+      runOwnershipDrill({
+        sourceDatabaseUrl: process.env.DATABASE_URL,
+        requirePopulated: true,
+      }),
+    ).rejects.toThrow(/needs populated application tables: pages/);
+  });
+
   it(
     "covers every application table, inventories media, and emits no secret value",
     async () => {
