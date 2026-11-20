@@ -64,11 +64,20 @@ export async function verifyMigration(planOrWindows, destinationOrigin) {
   if (!["http:", "https:"].includes(origin.protocol) || origin.username || origin.password) throw new Error("Use an HTTP(S) destination without credentials.");
   const source = new URL(plan.sourceOrigin);
   if (!["http:", "https:"].includes(source.protocol) || source.username || source.password) throw new Error("Use an HTTP(S) source without credentials.");
-  const sourceMap = new Map(plan.checks.map(check => { const url = new URL(check.sourceUrl); return [`${url.pathname.replace(/\/+$/, "") || "/"}${url.search}`, check.destinationPath]; }));
+  const sourceMap = new Map();
+  for (const check of plan.checks) {
+    const url = new URL(check.sourceUrl);
+    const path = `${url.pathname.replace(/\/+$/, "") || "/"}${url.search}`;
+    // A feed alias may share the source URL of an imported homepage. The
+    // imported page supplies the canonical mapping for that URL.
+    const existing = sourceMap.get(path);
+    if (check.redirect && existing && !existing.redirect) continue;
+    sourceMap.set(path, check);
+  }
   const normalize = value => {
     const parsed = new URL(value, origin);
     if (parsed.origin === source.origin) {
-      const mapped = sourceMap.get(`${parsed.pathname.replace(/\/+$/, "") || "/"}${parsed.search}`);
+      const mapped = sourceMap.get(`${parsed.pathname.replace(/\/+$/, "") || "/"}${parsed.search}`)?.destinationPath;
       if (mapped) { const destination = new URL(mapped, origin); parsed.pathname = destination.pathname; parsed.search = destination.search; }
       parsed.host = origin.host; parsed.protocol = origin.protocol;
     }
