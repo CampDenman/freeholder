@@ -4,11 +4,19 @@
 // compare the source crawl and the destination over real HTTP before cutover.
 import { readFile, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
+import { XMLParser, XMLValidator } from "fast-xml-parser";
 import { parse } from "parse5";
 import { z } from "zod";
 
 const reservedFeedWarning = "WordPress /feed is Freeholder's member feed; WordPress feed aliases use /feeds/blog.xml.";
 const feedAliases = ["/?feed=rss2", "/?feed=atom", "/?feed=rss"];
+const atomNamespace = "http://www.w3.org/2005/Atom";
+const maxAtomBytes = 20 * 1024 * 1024;
+const atomTimestamp = z.iso.datetime({ offset: true });
+const atomParser = new XMLParser({
+  preserveOrder: true, ignoreAttributes: false, attributeNamePrefix: "", parseTagValue: false,
+  ignoreDeclaration: true, ignorePiTags: true, processEntities: false, maxNestedTags: 64,
+});
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/);
 const feedDecisionSchema = z.strictObject({
   schema: z.literal("freeholder/wordpress-feed-decision/v1"),
@@ -39,9 +47,79 @@ export function htmlMetadata(html) {
   visit(parse(html)); return result;
 }
 
-async function read(url) {
+function xmlElements(nodes, inherited = new Map()) {
+  return nodes.flatMap(node => {
+    const tag = Object.keys(node).find(key => !key.startsWith("#") && Array.isArray(node[key]));
+    if (!tag) return [];
+    const namespaces = new Map(inherited);
+    for (const [attribute, value] of Object.entries(node[":@"] ?? {})) {
+      if (attribute === "xmlns") namespaces.set("", value);
+      if (attribute.startsWith("xmlns:")) namespaces.set(attribute.slice(6), value);
+    }
+    const parts = tag.split(":");
+    if (parts.length > 2 || parts.some(part => !part)) throw new Error("Invalid XML element name.");
+    const [prefix, local] = parts.length === 2 ? parts : ["", tag];
+    return [{ local, namespace: namespaces.get(prefix), namespaces, children: node[tag] }];
+  });
+}
+
+function xmlText(nodes) {
+  return nodes.map(node => {
+    if (typeof node["#text"] === "string") return node["#text"];
+    return xmlText(Object.values(node).find(Array.isArray) ?? []);
+  }).join("");
+}
+
+function validateAtomMetadata(element) {
+  const fields = xmlElements(element.children, element.namespaces).filter(field => field.namespace === atomNamespace);
+  for (const name of ["id", "title", "updated"]) {
+    const matches = fields.filter(field => field.local === name);
+    if (matches.length !== 1) throw new Error(`Atom ${element.local} requires exactly one ${name} element.`);
+    const field = matches[0];
+    const value = xmlText(field.children).trim();
+    if (!value || (name !== "title" && xmlElements(field.children, field.namespaces).length)) {
+      throw new Error(`Atom ${element.local} has invalid ${name} content.`);
+    }
+    if (name === "id" && !/^[a-z][a-z0-9+.-]*:[^\s]+$/i.test(value)) throw new Error(`Atom ${element.local} has an invalid ID.`);
+    if (name === "updated" && !atomTimestamp.safeParse(value.toUpperCase()).success) {
+      throw new Error(`Atom ${element.local} has an invalid updated timestamp.`);
+    }
+  }
+}
+
+function validateAtomFeed(body) {
+  const malformed = "The final response must contain a well-formed Atom XML feed.";
+  if (/<!DOCTYPE|<!ENTITY/i.test(body) || XMLValidator.validate(body) !== true) throw new Error(malformed);
+  let elements;
+  try { elements = xmlElements(atomParser.parse(body)); }
+  catch { throw new Error(malformed); }
+  const [feed] = elements;
+  if (elements.length !== 1 || feed.local !== "feed" || feed.namespace !== atomNamespace) throw new Error(malformed);
+  validateAtomMetadata(feed);
+  for (const entry of xmlElements(feed.children, feed.namespaces)) {
+    if (entry.local === "entry" && entry.namespace === atomNamespace) validateAtomMetadata(entry);
+  }
+}
+
+async function readAtomBody(response) {
+  if (response.status !== 200) {
+    await response.body?.cancel();
+    return "";
+  }
+  const chunks = [];
+  let length = 0;
+  for await (const chunk of response.body ?? []) {
+    length += chunk.byteLength;
+    if (length > maxAtomBytes) throw new Error("The Atom response exceeds the 20 MiB verification limit.");
+    chunks.push(chunk);
+  }
+  try { return new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)); }
+  catch { throw new Error("The Atom response must contain valid UTF-8."); }
+}
+
+async function read(url, expectsAtom = false) {
   const response = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(15000), headers: { "user-agent": "Freeholder-Migration-Verification/1.0" } });
-  return { status: response.status, location: response.headers.get("location"), type: response.headers.get("content-type") ?? "", body: await response.text() };
+  return { status: response.status, location: response.headers.get("location"), type: response.headers.get("content-type") ?? "", body: expectsAtom ? await readAtomBody(response) : await response.text() };
 }
 
 function assembleVerificationWindows(windows) {
@@ -125,10 +203,11 @@ export async function verifyMigration(planOrWindows, destinationOrigin, { feedDe
     const request = new URL(check.requestPath, origin);
     const wanted = new URL(check.destinationPath, origin);
     if (request.origin !== origin.origin || wanted.origin !== origin.origin) throw new Error("A destination path escaped the configured origin.");
+    const expectsAtom = wanted.pathname === "/feeds/blog.xml";
     const errors = [], warnings = [];
     let response, sourceMeta, destinationMeta;
     try {
-      response = await read(request);
+      response = await read(request, expectsAtom);
       if (check.redirect || response.status !== 200) {
         if (response.status !== 301) {
           throw new Error(`Expected ${check.redirect ? "one 301" : "200 or one 301"}, received ${response.status}.`);
@@ -137,14 +216,15 @@ export async function verifyMigration(planOrWindows, destinationOrigin, { feedDe
         const target = new URL(response.location, request);
         if (target.origin !== origin.origin) throw new Error("Redirect escaped the destination origin.");
         if (normalize(target) !== normalize(wanted)) throw new Error(`Unexpected 301 redirect target: ${target.href}`);
-        response = await read(target);
+        response = await read(target, expectsAtom);
       }
       if (response.status !== 200) throw new Error(`Final response was ${response.status}; required 200 after at most one redirect.`);
-      const expectedType = wanted.pathname === "/feeds/blog.xml" ? "application/atom+xml" : "text/html";
+      const expectedType = expectsAtom ? "application/atom+xml" : "text/html";
       if (response.type.split(";", 1)[0]?.trim().toLowerCase() !== expectedType) {
         throw new Error(`Expected ${expectedType} from the final route, received ${response.type || "no Content-Type"}.`);
       }
-      if (expectedType === "text/html") {
+      if (expectsAtom) validateAtomFeed(response.body);
+      else {
         destinationMeta = htmlMetadata(response.body);
         const expected = check.expected ?? {};
         for (const key of ["title", "description", "ogTitle", "ogDescription"]) if (expected[key] && destinationMeta[key] !== expected[key]) errors.push(`${key} differs from the imported value.`);
