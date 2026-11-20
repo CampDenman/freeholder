@@ -1,0 +1,20 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "rc1_package_version_source_continuation.v1",
+  "status": "Reversible source continuation for the 1.0.0-rc.1 package version.",
+  "testContinuations": [
+    {
+      "path": "package.json",
+      "beforeSha256": "20ee8f0443c632a2d0f10e2d6976463947c3afd686003f629a210e2de2359b36",
+      "afterSha256": "710e9f682f0f0e2e503b286104035d4b581e475134024c68598f05b419854cdb",
+      "continue": true,
+      "edits": [
+        {
+          "before": "\"version\": \"0.2.0-beta.6\"",
+          "after": "\"version\": \"1.0.0-rc.1\"",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}
