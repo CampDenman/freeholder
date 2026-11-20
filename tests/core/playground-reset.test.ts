@@ -43,7 +43,10 @@ if [ "$1" = compose ]; then
     ps) [ -f "$SIM/$project.up" ] && echo "id-$project"; exit 0 ;;
     down)
       if [ "\${STALE_HANDOVER:-}" = 1 ] && [ "$project" = '${B}' ]; then exit 0; fi
-      rm -f "$SIM/$project.up" "$SIM/$project.proxy" "$SIM/$project.probe" "$SIM/$project.image"; exit 0 ;;
+      if [ "\${FAIL_RETIREMENT:-}" = before-stop ] && [ "$project" = '${B}' ]; then exit 1; fi
+      rm -f "$SIM/$project.up" "$SIM/$project.proxy" "$SIM/$project.probe" "$SIM/$project.image"
+      if [ "\${FAIL_RETIREMENT:-}" = after-stop ] && [ "$project" = '${B}' ]; then exit 1; fi
+      exit 0 ;;
     up)
       touch "$SIM/$project.up"
       pin=\${FREEHOLDER_IMAGE:-$(sed -n 's/^FREEHOLDER_IMAGE=//p' .env)}
@@ -67,6 +70,7 @@ if [ "$1" = exec ]; then
     *health/db*) cat "$SIM/$project.probe" 2>/dev/null || echo ok; exit 0 ;;
   esac
   [ -n "\${FAIL_READY:-}" ] && exit 1
+  [ "\${FAIL_READY_PROJECT:-}" = "$project" ] && exit 1
   exit 0
 fi
 if [ "$1" = network ] && [ "$2" = inspect ]; then
@@ -81,6 +85,10 @@ if [ "$1" = network ] && [ "$2" = connect ]; then
   [ -n "\${FAIL_CONNECT:-}" ] && exit 1
   [ "\${STALE_HANDOVER:-}" = 1 ] && exit 0
   printf '%s\\n' "$4" > "$SIM/$(echo "$6" | sed 's/^id-//').proxy"
+fi
+if [ "$1" = network ] && [ "$2" = disconnect ]; then
+  [ "\${FAIL_DISCONNECT:-}" = 1 ] && exit 1
+  rm -f "$SIM/$(echo "$4" | sed 's/^id-//').proxy"
 fi
 exit 0
 `;
@@ -209,6 +217,24 @@ describe("playground reset hand-over", () => {
       expect(run.log).not.toContain(`docker compose ${A} down --timeout 5`);
       expect(run).toMatchObject({ running: [A], serving: [A] });
     });
+
+  it("removes the standby alias if retiring the still-running old project fails", () => {
+    const result = host({ up: [B], proxy: [B] })({ ...ROOM, FAIL_RETIREMENT: "before-stop" });
+    expect(result).toMatchObject({ status: 1, running: [B], serving: [B] });
+    expect(result.log).toContain(`docker network disconnect freeholder-playground-proxy id-${A}`);
+  });
+
+  it("keeps the fresh app serving if the old stack failed cleanup after it stopped", () => {
+    const result = host({ up: [B], proxy: [B] })({ ...ROOM, FAIL_RETIREMENT: "after-stop" });
+    expect(result).toMatchObject({ status: 1, running: [A], serving: [A] });
+    expect(result.log.some((line) => line.startsWith("docker network disconnect"))).toBe(false);
+  });
+
+  it("keeps a ready standby serving if the old app is still attached but no longer ready", () => {
+    const result = host({ up: [B], proxy: [B] })({ ...ROOM, FAIL_RETIREMENT: "before-stop", FAIL_READY_PROJECT: B });
+    expect(result).toMatchObject({ status: 1, running: [A, B], serving: [A] });
+    expect(result.log).toContain(`docker network disconnect freeholder-playground-proxy id-${B}`);
+  });
   }
 });
 
@@ -219,6 +245,30 @@ describe("playground heal check", () => {
     const run = host({ up: [A], proxy: [A] });
     expect(run(ROOM, heal)).toMatchObject(UNCHANGED);
     expect(run(ROOM, heal)).toMatchObject(UNCHANGED);
+  });
+
+  it("reconciles a previous interrupted handover to the healthy managed app with the saved pin", () => {
+    const run = host({ up: [A, B], proxy: [A, B], images: { [A]: targetPin } });
+    const healed = run(ROOM, heal);
+    expect(healed).toMatchObject({ status: 0, running: [B], serving: [B] });
+    expect(healed.log).toContain(`docker network disconnect freeholder-playground-proxy id-${A}`);
+    expect(readFileSync(run.envFile, "utf8")).toContain(`FREEHOLDER_IMAGE=${priorPin}\n`);
+  });
+
+  it("reconciles a known pair on a later heal pass after Docker refuses a disconnect", () => {
+    const run = host({ up: [B], proxy: [B] });
+    const failed = run({ ...ROOM, FAIL_RETIREMENT: "before-stop", FAIL_DISCONNECT: "1" });
+    expect(failed).toMatchObject({ status: 1, serving: [A, B] });
+    expect(failed.log.filter((line) => line.startsWith("docker network disconnect"))).toHaveLength(1);
+    expect(run(ROOM, heal)).toMatchObject({ status: 0, running: [A], serving: [A] });
+  });
+
+  it("refuses automatic selection when neither managed holder is ready on the saved pin", () => {
+    const run = host({ up: [A, B], proxy: [A, B], images: { [A]: targetPin } });
+    const failed = run({ ...ROOM, FAIL_READY_PROJECT: B }, heal);
+    expect(failed).toMatchObject({ status: 1, running: [A, B], serving: [A, B] });
+    expect(failed.stderr).toContain("Neither managed proxy holder is ready on the saved image pin");
+    expect(failed.log.some((line) => line.startsWith("docker network disconnect"))).toBe(false);
   });
 
   it("ignores one failed probe, and a success in between starts the count again", () => {
@@ -282,7 +332,7 @@ describe("promoted playground image handover", () => {
     const run = host({ up: [B], proxy: [B], pin: targetPin });
     const stale = run({ ...ROOM, HTTP_CODE: "200", STALE_HANDOVER: "1" }, update);
     expect(stale).toMatchObject({ status: 1, running: [A, B], serving: [B] });
-    expect(stale.stderr).toContain("proxy alias does not serve the promoted digest");
+    expect(stale.stderr).toContain("handover did not establish the standby as the sole proxy alias holder");
     expect(stale.log.some((line) => line.startsWith("curl "))).toBe(false);
     expect(run.image(B)).toBe(`${priorPin} ${priorId}`);
     expect(run.image(A)).toBe(`${targetPin} ${targetId}`);
@@ -296,12 +346,23 @@ describe("promoted playground image handover", () => {
     expect(readFileSync(run.envFile, "utf8")).toContain(`FREEHOLDER_IMAGE=${priorPin}\n`);
   });
 
-  it("refuses duplicate proxy alias holders before touching either project", () => {
-    const run = host({ up: [A, B], proxy: [A, B], images: { [A]: targetPin } });
-    const ambiguous = run(ROOM, update);
-    expect(ambiguous).toMatchObject({ status: 1, serving: [A, B] });
-    expect(ambiguous.log.some((line) => line.startsWith("docker compose") || line.startsWith("docker pull"))).toBe(false);
-    expect(ambiguous.stderr).toContain("Multiple running containers hold the playground proxy alias");
+  it.each([[A, B, "stray"], [B, "stray"], ["stray"]].map((aliases) => [aliases] as const))(
+    "refuses unknown proxy alias holders %j before touching either managed project",
+    (aliases) => {
+      const run = host({ up: aliases, proxy: aliases, images: { [A]: targetPin } });
+      const ambiguous = run(ROOM, update);
+      expect(ambiguous).toMatchObject({ status: 1, serving: [...aliases].sort() });
+      expect(ambiguous.log.some((line) => /docker (compose|pull|network disconnect)/.test(line))).toBe(false);
+      expect(ambiguous.stderr).toMatch(/proxy alias (belongs to an unexpected container|outside the managed pair)/);
+    },
+  );
+
+  it("keeps the last verified pin and restores the sole old alias after a failed retirement", () => {
+    const run = host({ up: [B], proxy: [B] });
+    const failed = run({ ...ROOM, FAIL_RETIREMENT: "before-stop" }, update);
+    expect(failed).toMatchObject({ status: 1, running: [B], serving: [B] });
+    expect(failed.stderr).toContain("The previous playground is still serving");
+    expect(readFileSync(run.envFile, "utf8")).toContain(`FREEHOLDER_IMAGE=${priorPin}\n`);
   });
 
   it("refuses multiple pin assignments even when the trailing one is empty", () => {

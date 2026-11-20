@@ -55,7 +55,12 @@ proxy_aliases() {
   docker inspect --format "{{if .State.Running}}{{with index .NetworkSettings.Networks \"$PROXY_NETWORK\"}}{{range .Aliases}}{{println .}}{{end}}{{end}}{{end}}" "$1"
 }
 select_projects() {
-  current_app=$(proxy_app) || return 1
+  holders=$(proxy_holders) || return 1
+  case "$holders" in
+    *'
+'*) current_app=$(reconcile_interrupted_handover "$holders") || return 1 ;;
+    *) current_app=$holders ;;
+  esac
   if [ -z "$current_app" ] || [ "$current_app" = "$(app_of "$B")" ]; then
     old=$B new=$A
   elif [ "$current_app" = "$(app_of "$A")" ]; then
@@ -70,6 +75,10 @@ FAILURES=/run/lock/freeholder-playground.heal-failures
 available_mb=$(awk '/^MemAvailable:/ { print int($2 / 1024) }' /proc/meminfo)
 room=0
 [ "$available_mb" -ge "${PLAYGROUND_OVERLAP_MIN_MB:-2200}" ] && room=1
+
+app_ready() {
+  timeout 15 docker exec "$1" node -e 'Promise.all([fetch("http://localhost:3000/api/health"),fetch("http://localhost:3000/playground"),fetch("http://localhost:3000/")]).then(async ([health,entry,home])=>{const b=await health.json();if(!health.ok||!b.ok||!b.jobs?.ready||!entry.ok||!home.ok)process.exit(1)}).catch(()=>process.exit(1))'
+}
 
 # Run in a subshell so explicitly selecting an image for this boot does not
 # change the on-disk pin or the environment of a subsequent rollback.
@@ -86,7 +95,7 @@ handover() (
   attempt=0
   # Ready means migrated, seeded, jobs running and the entry page rendering.
   # Warm the home page too before introducing the new proxy endpoint.
-  until docker exec "$app" node -e 'Promise.all([fetch("http://localhost:3000/api/health"),fetch("http://localhost:3000/playground"),fetch("http://localhost:3000/")]).then(async ([health,entry,home])=>{const b=await health.json();if(!health.ok||!b.ok||!b.jobs?.ready||!entry.ok||!home.ok)process.exit(1)}).catch(()=>process.exit(1))'; do
+  until app_ready "$app"; do
     attempt=$((attempt + 1))
     if [ "$attempt" -ge 60 ]; then
       echo 'Playground reset failed readiness.' >&2
@@ -100,31 +109,105 @@ handover() (
   fi
 
   docker network connect --alias "$ALIAS" "$PROXY_NETWORK" "$app" || exit 1
-  # The fresh playground now serves: from here a failure must not remove it.
+  # Both apps may answer while the old app shuts down. From this point,
+  # remove an alias only after inspecting the real holders.
   trap - EXIT
-  rm -f "$FAILURES" || exit 1
   # Stopping lets the old app close Caddy's keep-alive connections cleanly.
-  if [ -n "$(app_of "$old")" ]; then
-    compose "$old" down --timeout 5 || exit 1
+  retired=1
+  if [ -n "$(app_of "$old")" ] && ! compose "$old" down --timeout 5; then
+    echo 'Could not finish retiring the previous playground.' >&2
+    retired=0
   fi
+  holders=$(proxy_holders) || exit 1
+  if [ "$holders" = "$app" ]; then
+    [ "$retired" = 1 ] || exit 1
+    rm -f "$FAILURES" || exit 1
+    exit 0
+  fi
+
+  echo 'Playground handover did not establish the standby as the sole proxy alias holder.' >&2
+  if is_alias_pair "$holders" "$current_app" "$app"; then
+    if app_ready "$current_app"; then
+      if disconnect_managed_alias "$current_app" "$app"; then
+        compose "$new" down --timeout 5 || echo 'Standby cleanup remains pending.' >&2
+      fi
+    else
+      disconnect_managed_alias "$app" "$current_app" || exit 1
+    fi
+  fi
+  exit 1
 )
 
-# Enumerate the actual proxy network. A missing alias, duplicate holders, or
-# an unreadable network cannot establish which image the public proxy reaches.
-proxy_app() {
+# Enumerate the actual proxy network, including unexpected members.
+proxy_holders() {
   members=$(docker network inspect --format '{{range $id, $_ := .Containers}}{{println $id}}{{end}}' "$PROXY_NETWORK") || return 1
-  holder=
   for member in $members; do
     aliases=$(proxy_aliases "$member") || return 1
     if printf '%s\n' "$aliases" | grep -Fxq "$ALIAS"; then
-      if [ -n "$holder" ]; then
-        echo 'Multiple running containers hold the playground proxy alias.' >&2
-        return 1
-      fi
-      holder=$member
+      printf '%s\n' "$member"
     fi
   done
-  printf '%s' "$holder"
+}
+
+# The freshness check always requires one holder. It cannot repair ambiguity
+# and also use the same observation as proof of a successful deployment.
+proxy_app() {
+  holders=$(proxy_holders) || return 1
+  case "$holders" in
+    *'
+'*) echo 'Multiple running containers hold the playground proxy alias.' >&2; return 1 ;;
+    *) printf '%s' "$holders" ;;
+  esac
+}
+
+is_alias_pair() {
+  [ -n "$2" ] && [ -n "$3" ] && [ "$2" != "$3" ] &&
+    { [ "$1" = "$(printf '%s\n%s' "$2" "$3")" ] || [ "$1" = "$(printf '%s\n%s' "$3" "$2")" ]; }
+}
+
+disconnect_managed_alias() {
+  keeper=$1 discard=$2
+  attached=$(proxy_holders) || return 1
+  if ! is_alias_pair "$attached" "$keeper" "$discard" ||
+     ! is_alias_pair "$attached" "$(app_of "$A")" "$(app_of "$B")"; then
+    echo 'The managed alias pair changed. Refusing to disconnect either app.' >&2
+    return 1
+  fi
+  timeout 15 docker network disconnect "$PROXY_NETWORK" "$discard" >/dev/null ||
+    echo 'Could not confirm the alias disconnect from Docker.' >&2
+  if [ "$(proxy_app)" != "$keeper" ]; then
+    echo 'Could not verify a sole managed proxy holder after disconnect.' >&2
+    return 1
+  fi
+}
+
+reconcile_interrupted_handover() {
+  a_app=$(app_of "$A") b_app=$(app_of "$B")
+  if ! is_alias_pair "$1" "$a_app" "$b_app"; then
+    echo 'Multiple running containers hold the playground proxy alias outside the managed pair.' >&2
+    return 1
+  fi
+
+  saved_pin=$(sed -n 's/^FREEHOLDER_IMAGE=//p' .env) || return 1
+  if ! printf '%s\n' "$saved_pin" | grep -Exq '[a-zA-Z0-9./:_-]+@sha256:[a-f0-9]{64}'; then
+    echo 'Interrupted handover recovery requires a saved immutable image pin.' >&2
+    return 1
+  fi
+  a_image=$(container_image "$a_app") || return 1
+  b_image=$(container_image "$b_app") || return 1
+  if [ "${a_image%% *}" = "$saved_pin" ] && app_ready "$a_app" >/dev/null; then
+    keep_app=$a_app discard_app=$b_app discard_project=$B
+  elif [ "${b_image%% *}" = "$saved_pin" ] && app_ready "$b_app" >/dev/null; then
+    keep_app=$b_app discard_app=$a_app discard_project=$A
+  else
+    echo 'Neither managed proxy holder is ready on the saved image pin.' >&2
+    return 1
+  fi
+
+  disconnect_managed_alias "$keep_app" "$discard_app" || return 1
+  compose "$discard_project" down --timeout 5 >&2 || echo 'Standby cleanup remains pending.' >&2
+  echo 'Reconciled an interrupted playground handover to the saved image.' >&2
+  printf '%s' "$keep_app"
 }
 
 container_image() { docker inspect --format '{{.Config.Image}} {{.Image}}' "$1"; }
