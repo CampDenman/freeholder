@@ -5151,7 +5151,7 @@ export interface ServiceCatalog {
   };
   "imports.wordpressVerificationPlan": {
     input: { id: string; afterOrdinal?: number; limit?: number };
-    output: { sourceOrigin: string; status: string; checks: { sourceUrl: string; requestPath: string; destinationPath: string; redirect: boolean; expected: { [key: string]: unknown } }[]; warnings: string[]; nextOrdinal?: number | null };
+    output: { sourceOrigin: string; status: string; checks: { sourceUrl: string; requestPath: string; destinationPath: string; redirect: boolean; expected: { [key: string]: unknown } }[]; warnings: string[]; window?: { runId: string; generation: string; planDigest: string; afterOrdinal: number }; nextOrdinal?: number | null };
   };
   "invitations.accept": {
     input: { token: string; password: string };

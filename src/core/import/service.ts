@@ -57,7 +57,7 @@ import { advanceGraphLifecycle } from "./graph-lifecycle";
 import { importGraphVersionSchema } from "./graph-version";
 import graphQueryServices from "./graph-query";
 import { reviewGraphConflicts } from "./graph-review";
-import { graphVerificationWindow } from "./graph-verification";
+import { graphVerificationWindow, verificationWindowIdentitySchema } from "./graph-verification";
 import {
   discoverFromPublicOrigin,
   parseSitemap,
@@ -1899,7 +1899,14 @@ export const wordpressVerificationPlan = defineService({
   name: "imports.wordpressVerificationPlan",
   summary: "A read-only URL and metadata acceptance manifest for a committed WordPress migration; unresolved source features remain explicit.",
   kind: "query", permission: "scoped", input: z.object({ id: uuid, afterOrdinal: z.number().int().min(-1).max(9_999).default(-1), limit: z.number().int().min(1).max(50).default(50) }),
-  output: z.object({ sourceOrigin: z.string(), status: z.string(), checks: z.array(z.object({ sourceUrl: z.string(), requestPath: z.string(), destinationPath: z.string(), redirect: z.boolean(), expected: z.record(z.string(), z.unknown()) })), warnings: z.array(z.string()), nextOrdinal: z.number().int().nonnegative().nullable().optional() }),
+  output: z.object({
+    sourceOrigin: z.string(),
+    status: z.string(),
+    checks: z.array(z.object({ sourceUrl: z.string(), requestPath: z.string(), destinationPath: z.string(), redirect: z.boolean(), expected: z.record(z.string(), z.unknown()) })),
+    warnings: z.array(z.string()),
+    window: verificationWindowIdentitySchema.optional(),
+    nextOrdinal: z.number().int().nonnegative().nullable().optional(),
+  }),
   handler: async (input, ctx) => {
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
     if (!run) throw new ServiceError("not_found", "No such import run.");
