@@ -152,7 +152,7 @@ this addendum also includes C10.33 instead of weakening either gate.
 - **F11** — `MASTER.md` §43 annotation this row transcribes + `deploy/spec-reconciliation.md` (§-mapping).
 - **F12** — N/A — planning, legal or CI text, not a composed product journey.
 
-## C0.07 — Require CI and DCO on protected `main`, including administrators
+## C0.07 — Require CI and the merge queue on protected `main`, including administrators
 
 - **F01** — N/A — no schema work in this item — it changes planning text, legal notices, CI or developer tooling, not tables.
 - **F02** — N/A — no service layer in this item — planning, legal or CI text, not a typed service.

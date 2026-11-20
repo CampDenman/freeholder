@@ -13,7 +13,3 @@
 
 - [ ] New Freeholder-authored files carry the Apache-2.0 SPDX header from
       `LICENSING.md`; third-party material keeps its own license and notice.
-
-## DCO
-
-- [ ] All commits are signed off (`git commit -s`).

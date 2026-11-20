@@ -41,9 +41,10 @@ test redesign; never increase the timeout merely to absorb an unexplained tail.
 
 The 2026-11-11 privacy/import additions crossed the previous 28-shard prediction
 by 547 ms (1,500,547 ms against 1,500,000 ms). Capacity increased to 32 isolated
-shards; the 25-minute deadline, seven-times allowance, full coverage and stable
-required `checks`/DCO protections remain unchanged. The topology contract also
-runs in the local fast gates so this bound is checked before a full CI shard.
+shards while retaining the 25-minute deadline, seven-times allowance and full
+coverage. The topology contract runs in the local fast gates so this bound is
+checked before a full CI shard. On 2026-11-20 GitHub reported `checks` as the
+only required context, admin enforcement enabled and an active `MERGE` queue.
 
 The image gate also boots once against an unreachable database and requires
 process liveness to remain `200` while readiness is `503`, then boots normally

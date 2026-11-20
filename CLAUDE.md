@@ -59,8 +59,8 @@ or backlog.
 
 - Name the §43 checklist ID in every product change. Split oversized items in
   `MASTER.md` before coding and check them only with the evidence §43 requires.
-- Commits are signed off (`git commit -s`) — DCO, no CLA.
-- `main` is protected: PR + green checks only.
+- Follow `CONTRIBUTING.md` for Apache-2.0 contributions and ordinary PR review.
+- The protected merge queue requires green `checks` for `main`.
 - Release notes are religion: every user-facing change gets a note.
 - **Before editing a file, check whether a `deploy/*.json` source record pins
   its sha256:** `node scripts/pinned-source-records.mjs <path>`. Those records form reversal ladders

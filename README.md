@@ -117,10 +117,9 @@ Freeholder was created, originally authored, and is owned and maintained by
 software. The repository is hosted under the `CampDenman` GitHub organization;
 that is where the code lives, not a separate author or rights holder.
 
-Contributions are welcome under the DCO — see
-[`CONTRIBUTING.md`](CONTRIBUTING.md). The DCO rather than a CLA is deliberate:
-contributors keep their own copyright and contribute under Apache-2.0 without
-assigning it to the project.
+Contributors retain their own copyright and submit changes under Apache-2.0.
+See the repository's contribution and review process.
+[`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ## Repository layout
 

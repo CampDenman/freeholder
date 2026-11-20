@@ -16,7 +16,7 @@
   "artifacts": [
     {
       "path": "MASTER.md",
-      "sha256": "42ae9b506549fd66483d275bd4fd6ea81b94687b49c31feb1d5b83f847c2fb44"
+      "sha256": "81d16336f6327cc5c1d610bb1a020b07ece2e67e84c7bbe29d2e78dba94a01f0"
     }
   ],
   "testContinuations": [
@@ -114,6 +114,39 @@
         {
           "before": "  `db/migrations/0080_renewal_alerts.sql`,",
           "after": "  `db/migrations/0111_renewal_alerts.sql` (renumbered from 0080 on this\n  integration branch, which already held a different 0080),",
+          "occurrences": 1
+        }
+      ]
+    },
+    {
+      "path": "MASTER.md",
+      "beforeSha256": "42ae9b506549fd66483d275bd4fd6ea81b94687b49c31feb1d5b83f847c2fb44",
+      "afterSha256": "81d16336f6327cc5c1d610bb1a020b07ece2e67e84c7bbe29d2e78dba94a01f0",
+      "continue": true,
+      "edits": [
+        {
+          "before": "├── LICENSING.md · DCO.md · SECURITY.md · CONTRIBUTING.md · CODE_OF_CONDUCT.md\n",
+          "after": "├── LICENSING.md · SECURITY.md · CONTRIBUTING.md · CODE_OF_CONDUCT.md\n",
+          "occurrences": 1
+        },
+        {
+          "before": "- [x] **C0.07** Require CI and DCO on protected `main`, including administrators,\n",
+          "after": "- [x] **C0.07** Require CI and the merge queue on protected `main`, including administrators,\n",
+          "occurrences": 1
+        },
+        {
+          "before": "  API on 2026-08-10: strict `checks` + `DCO`, admin enforcement on. **F04** N/A — GitHub branch protection, not a screen. **F05** N/A — not an agent capability. **F07** N/A — reads or writes no customer data. **F09** `pnpm plan:check` / license / docs gates in CI. **F12** N/A — planning, legal or CI text, not a composed product journey.)*\n",
+          "after": "  API and active ruleset 21998199 on 2026-11-20: required `checks`, `MERGE`\n  queue, admin enforcement enabled, force pushes and deletion disabled. Tony\n  ended routine per-commit sign-off on 2026-11-20. The 2026-08-10 snapshot\n  recorded the earlier strict `checks` and `DCO` policy. **F04** N/A — GitHub branch protection, not a screen. **F05** N/A — not an agent capability. **F07** N/A — reads or writes no customer data. **F09** `pnpm plan:check` / license / docs gates in CI. **F12** N/A — planning, legal or CI text, not a composed product journey.)*\n",
+          "occurrences": 1
+        },
+        {
+          "before": "  acceptance. Required hosted successor CI, actual host acceptance, and the\n  missing original commit-author DCO certification remain OPEN.\n",
+          "after": "  acceptance. Required hosted successor CI and actual host acceptance remain\n  open. The checkpoint lacked original commit-author DCO certification.\n",
+          "occurrences": 1
+        },
+        {
+          "before": "  complete unique coverage and stable required `checks`/DCO gates. The exact\n",
+          "after": "  complete unique coverage and the then-required `checks`/DCO gates. The exact\n",
           "occurrences": 1
         }
       ]

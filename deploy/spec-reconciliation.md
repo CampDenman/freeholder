@@ -85,7 +85,7 @@ Anti-roadmap rows are refusals, not leftovers. Reconciliation updates since
 | 13 | Setup wizard | `/setup` country/locale/currency/timezone, owner, modules, demo. | Built | C1.24–C1.25. |
 | 14 | Replit-first deploy | `.replit`, `replit.nix`, `create-freeholder`, `env.ts`, doctor, ownership export. | Built | Struck MIT on the scaffolder (Apache-2.0, C0.10 / §22). |
 | 15 | Quality gates | typecheck, lint, tests, SEO, i18n, money, service-layer, changelog, a11y, upgrade, schema-compat, autofill, perf harness. | Built | C11.11 closed 2026-09-28: all thirteen §15.1 budgets pass on the reference target with archived evidence (`deploy/perf-reference-run-2026-09-27.log`, summary in `deploy/performance-measurements.md`). Upgrade gate needs published images. |
-| 16 | Agent conventions | CLAUDE.md, one C-item per change, DCO, changesets. | Built | C0.08, C0.12. |
+| 16 | Agent conventions | CLAUDE.md, one C-item per change, contribution and review rules, changesets. | Built | C0.08, C0.12. |
 | 17 | Configuration | `freeholder.config.ts`, env Zod, doctor. | Built | C3.16 recipes. |
 | 18 | Recipe anatomy | Six recipe directories with README / env / infra / verify. | Built | C3.16–C3.17. |
 | 19 | Support tiers | Tier-1 vs community labelled in recipes. | Built | C3.16. |

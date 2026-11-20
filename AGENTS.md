@@ -7,6 +7,9 @@ operations; UI, HTTP and MCP must have the same permissions and audit trail.
 To build on the member features (profiles, posts, messages, calls, market),
 read `deploy/members-vibe-coding.md`.
 
+Follow `CONTRIBUTING.md` for Apache-2.0 contributions, ordinary pull-request
+review and required CI on the protected merge queue.
+
 ## Launching a new site
 
 The owner keeps their hosting account, approves every purchase, and runs every
