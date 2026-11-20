@@ -15,6 +15,7 @@ import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { portalAreas } from "@/core/settings/service";
 import { portalNavLinks } from "@/core/portal/nav";
+import { portalSection } from "@/core/portal/sections";
 import { myRecords } from "@/core/portal/service";
 import { getLocale, getT } from "../../i18n";
 import { localizeCustomerHref } from "@/core/i18n/customer";
@@ -60,7 +61,15 @@ export default async function PortalLayout({
 
   // C3.39: the member network and shop pages only where the business uses them.
   const areas = await portalAreas.call({}, { kind: "anonymous" }).catch(() => ({ members: true, shop: true }));
-  const links = portalNavLinks(rooms, areas).map((link) => ({ path: link.path, label: t(link.labelKey) }));
+  // A room the member can add to is listed even when it is empty — see
+  // portalNavLinks. The registry is already populated, because the rooms above
+  // were just loaded through it.
+  const navRooms = rooms.map((room) => ({
+    key: room.key,
+    count: room.count,
+    addable: Boolean(portalSection(room.key)?.add),
+  }));
+  const links = portalNavLinks(navRooms, areas).map((link) => ({ path: link.path, label: t(link.labelKey) }));
 
   return (
     <div className="min-h-screen bg-canvas text-ink">
