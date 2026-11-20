@@ -1519,7 +1519,7 @@ freeholder/                          # Apache-2.0
 ├── README.md                        # excerpt of §1
 ├── MASTER.md                        # this document — ground truth
 ├── CLAUDE.md                        # agent ground rules
-├── LICENSING.md · DCO.md · SECURITY.md · CONTRIBUTING.md · CODE_OF_CONDUCT.md
+├── LICENSING.md · SECURITY.md · CONTRIBUTING.md · CODE_OF_CONDUCT.md
 │
 ├── app/                             # Next.js App Router
 │   ├── (public)/                    # server-rendered public surface — THE SEO SURFACE
@@ -6050,9 +6050,12 @@ one with unchecked dependency items.
   *(`MASTER.md` §43.1 Repository host. **F04** N/A — repository-host wording, not a screen. **F05** N/A — not an agent capability. **F07** N/A — reads or writes no customer data. **F09** `pnpm plan:check` / license / docs gates in CI. **F12** N/A — planning, legal or CI text, not a composed product journey.)*
 - [x] **C0.06** Merge the translation-admin branch to `main` and reconcile its
   checked status here. *(PR #57, `bb16555`, 2026-08-10. **F04** N/A — a historical merge, not a screen. **F05** N/A — not an agent capability. **F07** N/A — reads or writes no customer data. **F09** `pnpm plan:check` / license / docs gates in CI. **F12** N/A — planning, legal or CI text, not a composed product journey.)*
-- [x] **C0.07** Require CI and DCO on protected `main`, including administrators,
+- [x] **C0.07** Require CI and the merge queue on protected `main`, including administrators,
   and prevent force pushes/deletion. *(Verified through the GitHub protection
-  API on 2026-08-10: strict `checks` + `DCO`, admin enforcement on. **F04** N/A — GitHub branch protection, not a screen. **F05** N/A — not an agent capability. **F07** N/A — reads or writes no customer data. **F09** `pnpm plan:check` / license / docs gates in CI. **F12** N/A — planning, legal or CI text, not a composed product journey.)*
+  API and active ruleset 21998199 on 2026-11-20: required `checks`, `MERGE`
+  queue, admin enforcement enabled, force pushes and deletion disabled. Tony
+  ended routine per-commit sign-off on 2026-11-20. The 2026-08-10 snapshot
+  recorded the earlier strict `checks` and `DCO` policy. **F04** N/A — GitHub branch protection, not a screen. **F05** N/A — not an agent capability. **F07** N/A — reads or writes no customer data. **F09** `pnpm plan:check` / license / docs gates in CI. **F12** N/A — planning, legal or CI text, not a composed product journey.)*
 - [x] **C0.08** Add a plan-consistency gate that rejects references to retired
   planning files and validates unique checklist IDs. *(`scripts/plan-gate.mjs`,
   plan-gate tests, and the `product-completion-plan.md` changeset. **F04** `scripts/plan-gate.mjs` / `pnpm plan:check` names the item and what it owes. **F05** N/A — not an agent capability. **F07** N/A — reads or writes no customer data. **F09** `pnpm plan:check` / license / docs gates in CI. **F12** N/A — planning, legal or CI text, not a composed product journey.)*
@@ -14128,8 +14131,8 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   slots. Separately, a pinned LiveKit download returned HTTP504 before one
   browser shard started; bounded download retry retains its URL and checksum.
   These are source/CI qualifications, not call, storage or deployed cutover
-  acceptance. Required hosted successor CI, actual host acceptance, and the
-  missing original commit-author DCO certification remain OPEN.
+  acceptance. Required hosted successor CI and actual host acceptance remain
+  open. The checkpoint lacked original commit-author DCO certification.
   Existing C12.07/C12.24 member permissions, peer-to-peer/encrypted media and
   consent rules stay in their canonical shared services; this adds no member
   identity, media-recording, provider or grant path.
@@ -15805,7 +15808,7 @@ schema they inherit reads as a designed thing rather than an excavation.
   *(CI capacity qualification 2026-11-11: the expanded privacy/import tests
   crossed the 28-shard prediction by 547 ms. Thirty-two isolated databases now
   retain the same 25-minute deadline, seven-times degraded-runner allowance,
-  complete unique coverage and stable required `checks`/DCO gates. The exact
+  complete unique coverage and the then-required `checks`/DCO gates. The exact
   topology contract is included in local fast gates; evidence and unchanged
   constraints are recorded in `deploy/ci-release-gate.md`.)*
   *(Cheap audit-label follow-up: CI on the card-setup increment caught missing

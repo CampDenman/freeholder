@@ -24,11 +24,10 @@ create a parallel roadmap or backlog in another document.
    [`SECURITY.md`](SECURITY.md).
 2. **Fork and branch** from `main`. Branch names: `feat/...`, `fix/...`,
    `docs/...`.
-3. **Sign off every commit** (`git commit -s`). This certifies the
-   [Developer Certificate of Origin](DCO.md). PRs with unsigned commits fail
-   CI. There is no CLA.
-4. **Open a PR** against `main`. `main` is protected: PRs only, status checks
-   required, no force pushes.
+3. **Submit only work you have the right to contribute.** Contributions use
+   [Apache-2.0](LICENSE). Keep applicable third-party license notices.
+4. **Open a PR** against `main` for ordinary review. GitHub requires the
+   aggregate `checks` result and uses the protected merge queue.
 
 ## Running it locally
 
@@ -105,10 +104,8 @@ Agent-written pull requests are welcome. Point Claude Code, Codex, Cursor or
 any other agent at the repository and let it do the work. The same rules
 apply as for any other change:
 
-- **A human contributor reviews and signs off every commit.** The DCO
-  sign-off (`git commit -s`) is your statement, under your own name, that you
-  have the right to submit the change. An agent can write the commit, but you
-  are the one certifying it, so read it first.
+- Agent-authored changes follow the same pull-request review and CI as other
+  contributions.
 - **The agent follows [`CLAUDE.md`](CLAUDE.md) and [`AGENTS.md`](AGENTS.md).**
   They hold the house rules: `MASTER.md` §43 is the plan, money and contacts
   go through the shared services, colours come from design tokens, and every

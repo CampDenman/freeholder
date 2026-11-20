@@ -41,7 +41,6 @@ because GitHub still runs all eight.
 | `release-tarballs.yml` | — | No. Its matrix asks for `ubuntu-24.04` and `ubuntu-24.04-arm`; **no runner on this fleet carries either label**, so it would wait forever rather than fail |
 | `screenshots.yml` | — | Not yet. Needs browser dependencies unverified on the fleet image |
 | `eas.yml` | — | No. Expo EAS credentials, dispatch-only, and a PR must not spend EAS quota |
-| `dco.yml` | — | No, and deliberately. DCO is a GitHub pull-request gate; the forge is not the merge path (§4.8). Nothing here opens a PR that needs it |
 
 ### `ci.yml` jobs deliberately absent from the twin
 

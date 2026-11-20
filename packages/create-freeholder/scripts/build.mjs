@@ -22,7 +22,6 @@ const rootFiles = [
   "CLAUDE.md",
   "CODE_OF_CONDUCT.md",
   "CONTRIBUTING.md",
-  "DCO.md",
   "Dockerfile",
   "LICENSING.md",
   "LICENSE",

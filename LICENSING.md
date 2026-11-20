@@ -50,10 +50,9 @@ Apache-2.0 does not replace or remove those notices.
 
 ## Contributions
 
-Contributions are accepted under Apache-2.0 (inbound = outbound), certified
-via the [Developer Certificate of Origin](DCO.md) with a `Signed-off-by` line.
-There is no CLA or copyright assignment; contributors retain copyright in
-their contributions.
+Contributions are accepted under Apache-2.0 (inbound = outbound).
+Submit work you have the right to contribute and retain applicable third-party
+notices. Contributors retain copyright in their contributions.
 
 ## Questions
 
