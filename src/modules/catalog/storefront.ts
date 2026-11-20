@@ -52,6 +52,7 @@ import { requireCartAccess } from "./cart-access";
 import { getCart } from "./cart";
 import { availability } from "./inventory";
 import { checkoutCart } from "./orders";
+import { quoteMerchantCheckoutForBuyer } from "./merchant-checkout-quote";
 import { resolvePrice } from "./pricing";
 import { ORDER_STATUSES } from "./contract";
 import {
@@ -323,6 +324,12 @@ export const shopperCheckout = defineService({
     email: z.string().trim().email().toLowerCase().max(320),
     name: z.string().trim().min(1).max(200).optional(),
     shippingAddress: checkoutAddress.optional(),
+    taxDestination: z.object({
+      country: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/),
+      region: z.string().trim().toUpperCase().max(100).optional(),
+      postalCode: z.string().trim().toUpperCase().max(30).optional(),
+      city: z.string().trim().max(200).optional(),
+    }).optional(),
     shippingMethodId: id.optional(),
     couponCode: z
       .string()
@@ -333,6 +340,8 @@ export const shopperCheckout = defineService({
     acceptedTerms: z.literal(true),
     termsVersion: z.string().trim().min(1).max(100).optional(),
     termsHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    taxQuoteDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    commercialQuoteDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     idempotencyKey: z.string().trim().min(8).max(240),
     locale: z.string().trim().min(2).max(35).optional(),
   }),
@@ -370,7 +379,6 @@ export const shopperCheckout = defineService({
     if (basket.lines.length === 0) {
       throw new ServiceError("validation", "The cart is empty.");
     }
-
     // Proof of the email: the signed-in visitor's linked contact carries it,
     // or an authorized staff caller already holds contact authority. Everyone
     // else gets the platform's existing proof — a customer magic link — and
@@ -392,6 +400,15 @@ export const shopperCheckout = defineService({
         contactId = resolved.contact.id;
       }
     }
+
+    // Cart authority is already proved. Carry only the parent's actual
+    // verified buyer, never the anonymous cart's remembered contact/email.
+    const commercial = await ctx.callAsSystem(quoteMerchantCheckoutForBuyer, {
+      cartId: input.cartId, cartToken: input.cartToken, contactId,
+      shippingAddress: input.shippingAddress, taxDestination: input.taxDestination,
+      shippingMethodId: input.shippingMethodId, couponCode: input.couponCode,
+    });
+    if (commercial && (input.taxQuoteDigest !== commercial.taxQuoteDigest || input.commercialQuoteDigest !== commercial.commercialQuoteDigest)) throw new ServiceError("conflict", "Review and accept the actual original merchants, complete tax and commercial quote before checkout.");
 
     // C1.38: the public playground sends no mail, so the usual proof (a
     // magic link) can never arrive. A reserved, undeliverable address is
@@ -437,6 +454,9 @@ export const shopperCheckout = defineService({
       ...(input.termsVersion ? { termsVersion: input.termsVersion } : {}),
       ...(input.termsHash ? { termsHash: input.termsHash } : {}),
       ...(input.shippingAddress ? { shippingAddress: input.shippingAddress } : {}),
+      ...(input.taxDestination ? { taxDestination: input.taxDestination } : {}),
+      ...(input.taxQuoteDigest ? { taxQuoteDigest: input.taxQuoteDigest } : {}),
+      ...(input.commercialQuoteDigest ? { commercialQuoteDigest: input.commercialQuoteDigest } : {}),
       ...(input.shippingMethodId ? { shippingMethodId: input.shippingMethodId } : {}),
       ...(input.couponCode ? { couponCode: input.couponCode } : {}),
     });

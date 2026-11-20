@@ -1,0 +1,49 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "controlled_journal_heads90.v1",
+  "checklist": ["C12.38", "C11.05", "C1.08"],
+  "status": "FORWARD SOURCE CONTINUATION; real fresh-database head integrity/refusal control passes; positive payment acceptance is running separately",
+  "previousSourceRecord": "deploy/controlled-row-hash-ledger88.source.json",
+  "artifacts": [
+    { "path": "db/migrations/0090_controlled_journal_heads.sql", "sha256": "c6cb30406300318538cab2e9d2dcd061384a7833fd81888d31cd583944667e9f" },
+    { "path": "src/modules/subscriptions/controlled-provider-schema.ts", "sha256": "1c43c5266ab248d472a1acdb45c2a1ae94040ef72a6aa3b44cf49e2a3f4a9cee" },
+    { "path": "src/modules/subscriptions/controlled-provider-proof.ts", "sha256": "68b99204d00e47e252fe9735784445c874e10c4276fc50ab8d8f4ddcb343b8f7" },
+    { "path": "tests/modules/controlled-row-hash-ledger88.test.ts", "sha256": "1d82625fe83b07e161f7a1fc5ad3cd3cffbccf646735d78ee1e0aae71f8eca5e" },
+    { "path": "tests/modules/atomic-credit-stage-profile89.test.ts", "sha256": "2bf8fd07484402345caa47645e431ee424177bb7bf5cf3d8b74d1ff97ad5c5e2" },
+    { "path": "tests/fixtures/controlled-journal-content-reader89.txt", "sha256": "cb664b3e2767935bbf71ed788b0f4cd3a3a9347514f95cd162ff12de9fcbffc7" }
+  ],
+  "sourceTables": [
+    "subscription_controlled_resources",
+    "subscription_controlled_operations",
+    "subscription_controlled_calls",
+    "subscription_controlled_facts",
+    "subscription_controlled_finishes",
+    "subscription_controlled_stops",
+    "subscription_controlled_verifications",
+    "subscription_controlled_charge_origins",
+    "subscription_controlled_closures"
+  ],
+  "readerContinuation": {
+    "path": "src/modules/subscriptions/controlled-provider-proof.ts",
+    "afterSha256": "68b99204d00e47e252fe9735784445c874e10c4276fc50ab8d8f4ddcb343b8f7",
+    "beforeSha256": "4c5862f5e66a308afb4776c84ecf379d8dae36d8c19c587c82aba34b87a81df5",
+    "beforeFragmentPath": "tests/fixtures/controlled-journal-content-reader89.txt",
+    "beforeFragmentSha256": "661b637878516585aa154c539aa5660579c2c2c07117addae880710a4a9fff96"
+  },
+  "testContinuations": [
+    {
+      "path": "src/modules/subscriptions/controlled-provider-schema.ts",
+      "afterSha256": "1c43c5266ab248d472a1acdb45c2a1ae94040ef72a6aa3b44cf49e2a3f4a9cee",
+      "beforeSha256": "66d26c8ac7710436917d8f4a03e396da044e01a73907cd627243c2133527a312",
+      "continue": true,
+      "edits": [
+        { "before": "rowId:uuid(\"row_id\").notNull(),resourceId:uuid(\"resource_id\").notNull().references", "after": "rowId:uuid(\"row_id\").notNull(),resourceId:uuid(\"resource_id\").references", "occurrences": 1 }
+      ]
+    }
+  ],
+  "originalPaymentOracle": {
+    "path": "tests/modules/atomic-credit-fee-persistence84.test.ts",
+    "sha256": "d31f96db01533a22d8e7351c1fec33b72700318b438d03a7885a699742188ec4",
+    "timeoutSeconds": 180
+  }
+}

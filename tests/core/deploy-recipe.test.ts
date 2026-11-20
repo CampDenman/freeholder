@@ -12,7 +12,7 @@ const DEPLOY = "deploy";
 
 function recipes(): string[] {
   return readdirSync(DEPLOY, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
+    .filter((entry) => entry.isDirectory() && entry.name !== "sql")
     .map((entry) => entry.name);
 }
 

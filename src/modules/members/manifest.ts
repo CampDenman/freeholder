@@ -40,6 +40,8 @@ export default defineModule({
     listens: {
       "catalog.orderPaid": "onOrderPaid",
       "refund.succeeded": "onRefundSucceeded",
+      "refund.bankStateChanged": "onBankRefundStateChanged",
+      "catalog.returnRefunded": "onBankRefundStateChanged",
       "invoice.paid": "onInvoicePaid",
       "member.posted": "onMemberPosted",
       "member.postDeleted": "onMemberPostDeleted",

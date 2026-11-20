@@ -1,0 +1,451 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "SOURCE_ONLY_UNQUALIFIED_ALL_EXECUTION_UNRUN",
+  "base": "61fa2340e5d3d13e51beff615a1f934369df5c76",
+  "models": 0,
+  "sqlHeaders": 0,
+  "services": 0,
+  "newProductFiles": 0,
+  "existing": [
+    {
+      "path": "src/modules/subscriptions/controlled-provider-cash-origin.ts",
+      "beforeSha256": "4b15fc2dba6392970eaf6b67e5699ab750ff138fbc492639ecf11030023bb72a",
+      "afterSha256": "96106c1eaf361460df5c1781d19c9cde40b04f54005f6d2c0d6d2582a5b9548d",
+      "wholeBefore": "// Copyright (C) 2026 Tony Aly\n// SPDX-License-Identifier: Apache-2.0\n// C12.38: one canonical receipt, exact original controlled call/fact ancestry.\nimport { eq,sql } from \"drizzle-orm\";\nimport { z } from \"zod\";\nimport { ServiceError,type ServiceContext,type Tx } from \"@/core/service\";\nimport { merchantTaxDigest } from \"@/modules/invoicing/merchant-tax-store\";\nimport { merchantIntentEvidence } from \"@/adapters/payments/stripe-merchant-scope\";\nimport { subscriptionMerchantScope } from \"./merchant-scope-contract\";\nimport { subscriptionMerchantScopes,subscriptionProviderChargeReceipts,subscriptions } from \"./schema\";\nimport { subscriptionControlledResources,subscriptionControlledOperations,subscriptionControlledCalls,subscriptionControlledFacts,subscriptionControlledChargeOrigins } from \"./controlled-provider-schema\";\nimport { originalControlledCall,controlledProviderJournal } from \"./controlled-provider-proof\";\nconst account=z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200),reference=z.string().min(1).max(200);\nexport const controlledCashOrigin=z.object({resourceId:z.uuid(),callId:z.uuid(),factId:z.uuid()}).strict();\nexport const controlledCashEvidence=z.object({provider:z.literal(\"stripe\"),subscriptionId:z.uuid(),providerSubscriptionRef:reference,providerPlatformAccountId:account,providerAccountId:account.optional(),\n providerInvoiceRef:reference,providerPaymentIntentRef:reference,providerChargeRef:reference.optional(),providerCustomerRef:reference,\n amountMinor:z.number().int().positive().max(Number.MAX_SAFE_INTEGER),currency:z.string().regex(/^[A-Z]{3}$/),\n destinationAccountId:account.optional(),settlementMerchantAccountId:account.optional(),customerChargeVerified:z.boolean(),merchantRouteVerified:z.boolean()}).strip();\nexport type ControlledCashEvidence=z.infer<typeof controlledCashEvidence>;\nexport type ControlledCashOrigin=z.infer<typeof controlledCashOrigin>;\nconst record=z.record(z.string(),z.unknown());\nconst ref=(value:unknown)=>typeof value===\"string\"?value:value&&typeof value===\"object\"&&\"id\"in value&&typeof value.id===\"string\"?value.id:undefined;\nfunction mismatch():never{throw new ServiceError(\"conflict\",\"Retain the exact actual controlled bank occurrence and immutable original resource before adopting any canonical receipt; equal amounts or a current account cannot choose an owner.\");}\nfunction metadata(invoice:Record<string,unknown>){\n const parent=record.safeParse(invoice.parent),details=record.safeParse(parent.success?parent.data.subscription_details:invoice.subscription_details);\n return details.success?record.parse(details.data.metadata):{};\n}\nexport async function readOriginalControlledChargeAuthority(tx:Tx,input:ControlledCashEvidence,origin:ControlledCashOrigin){\n const[resource]=await tx.select().from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,origin.resourceId)).limit(1);\n const[call]=await tx.select().from(subscriptionControlledCalls).where(eq(subscriptionControlledCalls.id,origin.callId)).limit(1);\n const[operation]=call?await tx.select().from(subscriptionControlledOperations).where(eq(subscriptionControlledOperations.id,call.operationId)).limit(1):[];\n const[fact]=await tx.select().from(subscriptionControlledFacts).where(eq(subscriptionControlledFacts.id,origin.factId)).limit(1);\n const[original]=resource?await tx.select({subscription:subscriptions,scope:subscriptionMerchantScopes}).from(subscriptions).innerJoin(subscriptionMerchantScopes,eq(subscriptionMerchantScopes.subscriptionId,subscriptions.id)).where(eq(subscriptions.id,resource.subscriptionId)).limit(1):[];\n if(!resource||!call||!operation||!fact||!original||operation.resourceId!==resource.id||fact.callId!==call.id||fact.actual.kind!==\"cash_observed\"\n  ||!originalControlledCall(operation,call)||fact.actualDigest!==merchantTaxDigest(fact.actual)||input.subscriptionId!==resource.subscriptionId\n  ||resource.originalScope.providerPlatformAccountId!==input.providerPlatformAccountId||(resource.originalScope.providerAccountId??null)!==(input.providerAccountId??null)\n  ||resource.originalScope.providerCustomerRef!==input.providerCustomerRef||resource.originalScope.currency!==input.currency)mismatch();\n const expected=controlledCashEvidence.parse(JSON.parse(JSON.stringify(fact.actual.raw.cash)));\n if(merchantTaxDigest(expected)!==merchantTaxDigest(controlledCashEvidence.parse(JSON.parse(JSON.stringify(input)))))mismatch();\n const invoice=record.parse(fact.actual.raw.invoice),intent=record.parse(fact.actual.raw.intent),tag=metadata(invoice);\n const parent=record.safeParse(invoice.parent),details=record.safeParse(parent.success?parent.data.subscription_details:undefined),actualSub=ref(invoice.subscription)??(details.success?ref(details.data.subscription):undefined);\n if(ref(invoice.id)!==input.providerInvoiceRef||actualSub!==input.providerSubscriptionRef||ref(invoice.customer)!==input.providerCustomerRef||ref(intent.id)!==input.providerPaymentIntentRef\n  ||ref(intent.customer)!==input.providerCustomerRef||intent.amount_received!==input.amountMinor||typeof intent.currency!==\"string\"||intent.currency.toUpperCase()!==input.currency\n  ||input.providerChargeRef!==undefined&&ref(intent.latest_charge)!==input.providerChargeRef||tag.freeholder_controlled_subscription_version!==\"1\"\n  ||tag.freeholder_subscription_id!==resource.subscriptionId||tag.freeholder_subscription_terms_id!==resource.termsId||tag.freeholder_controlled_generation!==String(resource.generation)\n  ||tag.freeholder_platform_account_id!==input.providerPlatformAccountId)mismatch();\n const route=merchantIntentEvidence(resource.originalScope,intent);\n if(input.customerChargeVerified!==(intent.status===\"succeeded\"&&ref(intent.customer)===input.providerCustomerRef&&ref(invoice.customer)===input.providerCustomerRef)\n  ||input.merchantRouteVerified!==route.merchantRouteVerified||input.destinationAccountId!==route.destinationAccountId||input.settlementMerchantAccountId!==route.settlementMerchantAccountId)mismatch();\n const journal=await controlledProviderJournal(tx,resource.id);\n const bootstrap=journal.operations.find(row=>row.kind===\"bootstrap\"&&row.id===tag.freeholder_bootstrap_operation_id);\n if(!bootstrap||bootstrap.requestDigest!==tag.freeholder_bootstrap_request_digest||!journal.facts.some(row=>{\n  const creator=journal.calls.find(value=>value.id===row.callId),creatorOperation=creator?journal.operations.find(value=>value.id===creator.operationId):null;\n  if(creator?.operationId===bootstrap.id&&row.actual.kind===\"bootstrap_subscription\"&&ref(row.actual.raw.id)===input.providerSubscriptionRef)return true;\n  if(creatorOperation?.kind!==\"discover_bootstrap\"||row.actual.kind!==\"subscription_list_read\"||!Array.isArray(row.actual.raw.data))return false;\n  return row.actual.raw.data.some(value=>{const actual=record.safeParse(value),actualTag=actual.success?record.safeParse(actual.data.metadata):null;\n   return actual.success&&actualTag?.success&&ref(actual.data.id)===input.providerSubscriptionRef&&ref(actual.data.customer)===resource.originalScope.providerCustomerRef\n    &&actualTag.data.freeholder_bootstrap_operation_id===bootstrap.id&&actualTag.data.freeholder_bootstrap_request_digest===bootstrap.requestDigest\n    &&actualTag.data.freeholder_subscription_id===resource.subscriptionId&&actualTag.data.freeholder_subscription_terms_id===resource.termsId;});\n }))mismatch();\n const scope=subscriptionMerchantScope.parse(original.scope);\n if(scope.providerPlatformAccountId!==input.providerPlatformAccountId||scope.chargeAccountId!==(input.providerAccountId??null)||scope.providerScheduleApiVersion!==resource.originalScope.providerApiVersion)mismatch();\n return{...original,operation:null,controlledCash:expected,controlledOrigin:{...origin,operationId:operation.id,originalEvidenceDigest:merchantTaxDigest({resource,operation,call,fact,cash:expected})}};\n}\nexport async function originalControlledChargeAuthority(ctx:ServiceContext,input:ControlledCashEvidence,origin:ControlledCashOrigin){\n await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`controlled-provider:${origin.resourceId}`}))`);\n await ctx.tx.select({id:subscriptionControlledResources.id}).from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,origin.resourceId)).limit(1).for(\"update\");\n return readOriginalControlledChargeAuthority(ctx.tx,input,origin);\n}\nexport async function retainControlledChargeOrigin(ctx:ServiceContext,receiptId:string,authority:Awaited<ReturnType<typeof originalControlledChargeAuthority>>){\n const binding=authority.controlledOrigin;\n const[receipt]=await ctx.tx.select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.id,receiptId)).limit(1);\n const cash=authority.controlledCash;\n if(!receipt||receipt.subscriptionId!==authority.subscription.id||receipt.providerPlatformAccountId!==cash.providerPlatformAccountId||receipt.chargeAccountId!==(cash.providerAccountId??null)\n  ||receipt.providerSubscriptionRef!==cash.providerSubscriptionRef||receipt.providerInvoiceRef!==cash.providerInvoiceRef||receipt.providerPaymentIntentRef!==cash.providerPaymentIntentRef\n  ||receipt.amountMinor!==cash.amountMinor||receipt.currency!==cash.currency||receipt.providerChargeRef!==null&&cash.providerChargeRef!==undefined&&receipt.providerChargeRef!==cash.providerChargeRef)mismatch();\n const[prior]=await ctx.tx.select().from(subscriptionControlledChargeOrigins).where(eq(subscriptionControlledChargeOrigins.receiptId,receiptId)).limit(1);\n if(prior){if(prior.resourceId!==binding.resourceId)mismatch();return;}\n // The deferred causal guard additionally refuses adoption of any older\n // phase/generation-owned receipt, including the same amount/account.\n await ctx.tx.execute(sql`select set_config('freeholder.controlled_provider_v1','1',true)`);\n await ctx.tx.insert(subscriptionControlledChargeOrigins).values({receiptId,...binding});\n}\n",
+      "wholeAfter": "// Copyright (C) 2026 Tony Aly\n// SPDX-License-Identifier: Apache-2.0\n// C12.38: one canonical receipt, exact original controlled call/fact ancestry.\nimport { eq,sql } from \"drizzle-orm\";\nimport { z } from \"zod\";\nimport { ServiceError,type ServiceContext,type Tx } from \"@/core/service\";\nimport { merchantTaxDigest } from \"@/modules/invoicing/merchant-tax-store\";\nimport { merchantIntentEvidence } from \"@/adapters/payments/stripe-merchant-scope\";\nimport { subscriptionMerchantScope } from \"./merchant-scope-contract\";\nimport { subscriptionMerchantScopes,subscriptionProviderChargeReceipts,subscriptions } from \"./schema\";\nimport { subscriptionControlledResources,subscriptionControlledOperations,subscriptionControlledCalls,subscriptionControlledFacts,subscriptionControlledChargeOrigins } from \"./controlled-provider-schema\";\nimport { originalControlledCall,controlledProviderJournal } from \"./controlled-provider-proof\";\nconst account=z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200),reference=z.string().min(1).max(200);\nexport const controlledCashOrigin=z.object({resourceId:z.uuid(),callId:z.uuid(),factId:z.uuid()}).strict();\nexport const controlledCashEvidence=z.object({provider:z.literal(\"stripe\"),subscriptionId:z.uuid(),providerSubscriptionRef:reference,providerPlatformAccountId:account,providerAccountId:account.optional(),\n providerInvoiceRef:reference,providerPaymentIntentRef:reference,providerChargeRef:reference.optional(),providerCustomerRef:reference,\n amountMinor:z.number().int().positive().max(Number.MAX_SAFE_INTEGER),currency:z.string().regex(/^[A-Z]{3}$/),\n destinationAccountId:account.optional(),settlementMerchantAccountId:account.optional(),customerChargeVerified:z.boolean(),merchantRouteVerified:z.boolean()}).strip();\nexport type ControlledCashEvidence=z.infer<typeof controlledCashEvidence>;\nexport type ControlledCashOrigin=z.infer<typeof controlledCashOrigin>;\nconst record=z.record(z.string(),z.unknown());\nconst ref=(value:unknown)=>typeof value===\"string\"?value:value&&typeof value===\"object\"&&\"id\"in value&&typeof value.id===\"string\"?value.id:undefined;\nfunction mismatch():never{throw new ServiceError(\"conflict\",\"Retain the exact actual controlled bank occurrence and immutable original resource before adopting any canonical receipt; equal amounts or a current account cannot choose an owner.\");}\nfunction metadata(invoice:Record<string,unknown>){\n const parent=record.safeParse(invoice.parent),details=record.safeParse(parent.success?parent.data.subscription_details:invoice.subscription_details);\n return details.success?record.parse(details.data.metadata):{};\n}\ntype ControlledChargeJournal=Awaited<ReturnType<typeof controlledProviderJournal>>;\ntype ControlledChargeRows={resource:typeof subscriptionControlledResources.$inferSelect|undefined;call:typeof subscriptionControlledCalls.$inferSelect|undefined;operation:typeof subscriptionControlledOperations.$inferSelect|undefined;fact:typeof subscriptionControlledFacts.$inferSelect|undefined;\n original:{subscription:typeof subscriptions.$inferSelect;scope:typeof subscriptionMerchantScopes.$inferSelect}|undefined};\n/** Two pure stages preserve the scalar's exact pre-journal refusal ordering.\n * The closure is used immediately within this call, never persisted/cached. */\nfunction validateOriginalControlledCharge(rows:ControlledChargeRows,input:ControlledCashEvidence,origin:ControlledCashOrigin){\n const{resource,call,operation,fact,original}=rows;\n if(!resource||!call||!operation||!fact||!original||operation.resourceId!==resource.id||fact.callId!==call.id||fact.actual.kind!==\"cash_observed\"\n  ||!originalControlledCall(operation,call)||fact.actualDigest!==merchantTaxDigest(fact.actual)||input.subscriptionId!==resource.subscriptionId\n  ||resource.originalScope.providerPlatformAccountId!==input.providerPlatformAccountId||(resource.originalScope.providerAccountId??null)!==(input.providerAccountId??null)\n  ||resource.originalScope.providerCustomerRef!==input.providerCustomerRef||resource.originalScope.currency!==input.currency)mismatch();\n const expected=controlledCashEvidence.parse(JSON.parse(JSON.stringify(fact.actual.raw.cash)));\n if(merchantTaxDigest(expected)!==merchantTaxDigest(controlledCashEvidence.parse(JSON.parse(JSON.stringify(input)))))mismatch();\n const invoice=record.parse(fact.actual.raw.invoice),intent=record.parse(fact.actual.raw.intent),tag=metadata(invoice);\n const parent=record.safeParse(invoice.parent),details=record.safeParse(parent.success?parent.data.subscription_details:undefined),actualSub=ref(invoice.subscription)??(details.success?ref(details.data.subscription):undefined);\n if(ref(invoice.id)!==input.providerInvoiceRef||actualSub!==input.providerSubscriptionRef||ref(invoice.customer)!==input.providerCustomerRef||ref(intent.id)!==input.providerPaymentIntentRef\n  ||ref(intent.customer)!==input.providerCustomerRef||intent.amount_received!==input.amountMinor||typeof intent.currency!==\"string\"||intent.currency.toUpperCase()!==input.currency\n  ||input.providerChargeRef!==undefined&&ref(intent.latest_charge)!==input.providerChargeRef||tag.freeholder_controlled_subscription_version!==\"1\"\n  ||tag.freeholder_subscription_id!==resource.subscriptionId||tag.freeholder_subscription_terms_id!==resource.termsId||tag.freeholder_controlled_generation!==String(resource.generation)\n  ||tag.freeholder_platform_account_id!==input.providerPlatformAccountId)mismatch();\n const route=merchantIntentEvidence(resource.originalScope,intent);\n if(input.customerChargeVerified!==(intent.status===\"succeeded\"&&ref(intent.customer)===input.providerCustomerRef&&ref(invoice.customer)===input.providerCustomerRef)\n  ||input.merchantRouteVerified!==route.merchantRouteVerified||input.destinationAccountId!==route.destinationAccountId||input.settlementMerchantAccountId!==route.settlementMerchantAccountId)mismatch();\n return(journal:ControlledChargeJournal)=>{\n const bootstrap=journal.operations.find(row=>row.kind===\"bootstrap\"&&row.id===tag.freeholder_bootstrap_operation_id);\n if(!bootstrap||bootstrap.requestDigest!==tag.freeholder_bootstrap_request_digest||!journal.facts.some(row=>{\n  const creator=journal.calls.find(value=>value.id===row.callId),creatorOperation=creator?journal.operations.find(value=>value.id===creator.operationId):null;\n  if(creator?.operationId===bootstrap.id&&row.actual.kind===\"bootstrap_subscription\"&&ref(row.actual.raw.id)===input.providerSubscriptionRef)return true;\n  if(creatorOperation?.kind!==\"discover_bootstrap\"||row.actual.kind!==\"subscription_list_read\"||!Array.isArray(row.actual.raw.data))return false;\n  return row.actual.raw.data.some(value=>{const actual=record.safeParse(value),actualTag=actual.success?record.safeParse(actual.data.metadata):null;\n   return actual.success&&actualTag?.success&&ref(actual.data.id)===input.providerSubscriptionRef&&ref(actual.data.customer)===resource.originalScope.providerCustomerRef\n    &&actualTag.data.freeholder_bootstrap_operation_id===bootstrap.id&&actualTag.data.freeholder_bootstrap_request_digest===bootstrap.requestDigest\n    &&actualTag.data.freeholder_subscription_id===resource.subscriptionId&&actualTag.data.freeholder_subscription_terms_id===resource.termsId;});\n }))mismatch();\n const scope=subscriptionMerchantScope.parse(original.scope);\n if(scope.providerPlatformAccountId!==input.providerPlatformAccountId||scope.chargeAccountId!==(input.providerAccountId??null)||scope.providerScheduleApiVersion!==resource.originalScope.providerApiVersion)mismatch();\n return{...original,operation:null,controlledCash:expected,controlledOrigin:{...origin,operationId:operation.id,originalEvidenceDigest:merchantTaxDigest({resource,operation,call,fact,cash:expected})}};\n };\n}\nexport async function readOriginalControlledChargeAuthority(tx:Tx,input:ControlledCashEvidence,origin:ControlledCashOrigin){\n const[resource]=await tx.select().from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,origin.resourceId)).limit(1);\n const[call]=await tx.select().from(subscriptionControlledCalls).where(eq(subscriptionControlledCalls.id,origin.callId)).limit(1);\n const[operation]=call?await tx.select().from(subscriptionControlledOperations).where(eq(subscriptionControlledOperations.id,call.operationId)).limit(1):[];\n const[fact]=await tx.select().from(subscriptionControlledFacts).where(eq(subscriptionControlledFacts.id,origin.factId)).limit(1);\n const[original]=resource?await tx.select({subscription:subscriptions,scope:subscriptionMerchantScopes}).from(subscriptions).innerJoin(subscriptionMerchantScopes,eq(subscriptionMerchantScopes.subscriptionId,subscriptions.id)).where(eq(subscriptions.id,resource.subscriptionId)).limit(1):[];\n const validate=validateOriginalControlledCharge({resource,call,operation,fact,original},input,origin);\n if(!resource)mismatch();\n const journal=await controlledProviderJournal(tx,resource.id);\n return validate(journal);\n}\n/** Fresh common-resource ancestry only. No supplied journal/proof, lock,\n * cached business verdict, bank eligibility or caller closure is accepted. */\nexport async function readOriginalControlledChargeAuthorities(tx:Tx,requested:{resourceId:string;occurrences:readonly{cash:ControlledCashEvidence;origin:ControlledCashOrigin}[]}){\n if(!z.uuid().safeParse(requested.resourceId).success||!requested.occurrences.length||requested.occurrences.length>5000\n  ||new Set(requested.occurrences.map(row=>`${row.origin.callId}:${row.origin.factId}`)).size!==requested.occurrences.length\n  ||requested.occurrences.some(row=>!controlledCashOrigin.safeParse(row.origin).success||row.origin.resourceId!==requested.resourceId))mismatch();\n const[actual]=await tx.select({resource:subscriptionControlledResources,postgresFingerprint:sql<string>`encode(sha256(convert_to(to_jsonb(${subscriptionControlledResources})::text,'UTF8')),'hex')`}).from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,requested.resourceId)).limit(1);\n if(!actual||!/^[a-f0-9]{64}$/.test(actual.postgresFingerprint))mismatch();const resource=actual.resource;\n const[original]=await tx.select({subscription:subscriptions,scope:subscriptionMerchantScopes}).from(subscriptions).innerJoin(subscriptionMerchantScopes,eq(subscriptionMerchantScopes.subscriptionId,subscriptions.id)).where(eq(subscriptions.id,resource.subscriptionId)).limit(1);\n const journal=await controlledProviderJournal(tx,resource.id);\n if(!original)mismatch();\n const identities=new Set([`subscription_controlled_resources:${resource.id}`,`subscriptions:${original.subscription.id}`,`subscription_merchant_scopes:${original.scope.subscriptionId}`,\n  ...journal.operations.map(row=>`subscription_controlled_operations:${row.id}`),...journal.calls.map(row=>`subscription_controlled_calls:${row.id}`),...journal.facts.map(row=>`subscription_controlled_facts:${row.id}`),\n  ...journal.finishes.map(row=>`subscription_controlled_finishes:${row.callId}`),...journal.stops.map(row=>`subscription_controlled_stops:${row.callId}`),...journal.verifications.map(row=>`subscription_controlled_verifications:${row.operationId}`),\n  ...journal.chargeOrigins.map(row=>`subscription_controlled_charge_origins:${row.receiptId}`),...journal.closures.map(row=>`subscription_controlled_closures:${row.resourceId}`)]);\n if(identities.size!==journal.count+2||identities.size>5000)mismatch();\n const calls=new Map(journal.calls.map(row=>[row.id,row])),operations=new Map(journal.operations.map(row=>[row.id,row])),facts=new Map(journal.facts.map(row=>[row.id,row]));\n const authorities=requested.occurrences.map(({cash,origin})=>{const call=calls.get(origin.callId),operation=call?operations.get(call.operationId):undefined,fact=facts.get(origin.factId);\n  return validateOriginalControlledCharge({resource,call,operation,fact,original},cash,origin)(journal);\n });\n return{resource,postgresFingerprint:actual.postgresFingerprint,historyRevision:journal.revision,historyCount:journal.count,physicalCount:identities.size,authorities};\n}\nexport async function originalControlledChargeAuthority(ctx:ServiceContext,input:ControlledCashEvidence,origin:ControlledCashOrigin){\n await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`controlled-provider:${origin.resourceId}`}))`);\n await ctx.tx.select({id:subscriptionControlledResources.id}).from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,origin.resourceId)).limit(1).for(\"update\");\n return readOriginalControlledChargeAuthority(ctx.tx,input,origin);\n}\nexport async function retainControlledChargeOrigin(ctx:ServiceContext,receiptId:string,authority:Awaited<ReturnType<typeof originalControlledChargeAuthority>>){\n const binding=authority.controlledOrigin;\n const[receipt]=await ctx.tx.select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.id,receiptId)).limit(1);\n const cash=authority.controlledCash;\n if(!receipt||receipt.subscriptionId!==authority.subscription.id||receipt.providerPlatformAccountId!==cash.providerPlatformAccountId||receipt.chargeAccountId!==(cash.providerAccountId??null)\n  ||receipt.providerSubscriptionRef!==cash.providerSubscriptionRef||receipt.providerInvoiceRef!==cash.providerInvoiceRef||receipt.providerPaymentIntentRef!==cash.providerPaymentIntentRef\n  ||receipt.amountMinor!==cash.amountMinor||receipt.currency!==cash.currency||receipt.providerChargeRef!==null&&cash.providerChargeRef!==undefined&&receipt.providerChargeRef!==cash.providerChargeRef)mismatch();\n const[prior]=await ctx.tx.select().from(subscriptionControlledChargeOrigins).where(eq(subscriptionControlledChargeOrigins.receiptId,receiptId)).limit(1);\n if(prior){if(prior.resourceId!==binding.resourceId)mismatch();return;}\n // The deferred causal guard additionally refuses adoption of any older\n // phase/generation-owned receipt, including the same amount/account.\n await ctx.tx.execute(sql`select set_config('freeholder.controlled_provider_v1','1',true)`);\n await ctx.tx.insert(subscriptionControlledChargeOrigins).values({receiptId,...binding});\n}\n",
+      "finiteChanges": [
+        {
+          "afterStart": 2609,
+          "afterEnd": 3157,
+          "before": "",
+          "after": "type ControlledChargeJournal=Awaited<ReturnType<typeof controlledProviderJournal>>;\ntype ControlledChargeRows={resource:typeof subscriptionControlledResources.$inferSelect|undefined;call:typeof subscriptionControlledCalls.$inferSelect|undefined;operation:typeof subscriptionControlledOperations.$inferSelect|undefined;fact:typeof subscriptionControlledFacts.$inferSelect|undefined;\n original:{subscription:typeof subscriptions.$inferSelect;scope:typeof subscriptionMerchantScopes.$inferSelect}|undefined};\n/** Two pure stages preserve the scalar's "
+        },
+        {
+          "afterStart": 3159,
+          "afterEnd": 3163,
+          "before": "",
+          "after": "act "
+        },
+        {
+          "afterStart": 3164,
+          "afterEnd": 3183,
+          "before": "",
+          "after": "re-journal refusal "
+        },
+        {
+          "afterStart": 3185,
+          "afterEnd": 3223,
+          "before": "",
+          "after": "dering.\n * The closure is used immedia"
+        },
+        {
+          "afterStart": 3224,
+          "afterEnd": 3227,
+          "before": "",
+          "after": "ely"
+        },
+        {
+          "afterStart": 3228,
+          "afterEnd": 3241,
+          "before": "",
+          "after": "within this c"
+        },
+        {
+          "afterStart": 3242,
+          "afterEnd": 3255,
+          "before": "",
+          "after": "ll, never per"
+        },
+        {
+          "afterStart": 3256,
+          "afterEnd": 3262,
+          "before": "yn",
+          "after": "isted/"
+        },
+        {
+          "afterStart": 3263,
+          "afterEnd": 3269,
+          "before": "",
+          "after": "ached."
+        },
+        {
+          "afterStart": 3270,
+          "afterEnd": 3273,
+          "before": "",
+          "after": "*/\n"
+        },
+        {
+          "afterStart": 3282,
+          "afterEnd": 3289,
+          "before": "r",
+          "after": "validat"
+        },
+        {
+          "afterStart": 3290,
+          "afterEnd": 3290,
+          "before": "ad",
+          "after": ""
+        },
+        {
+          "afterStart": 3314,
+          "afterEnd": 3323,
+          "before": "Au",
+          "after": "(rows:Con"
+        },
+        {
+          "afterStart": 3324,
+          "afterEnd": 3331,
+          "before": "",
+          "after": "rolledC"
+        },
+        {
+          "afterStart": 3332,
+          "afterEnd": 3337,
+          "before": "",
+          "after": "argeR"
+        },
+        {
+          "afterStart": 3338,
+          "afterEnd": 3340,
+          "before": "rity(tx:Tx",
+          "after": "ws"
+        },
+        {
+          "afterStart": 3406,
+          "afterEnd": 3407,
+          "before": "[",
+          "after": "{"
+        },
+        {
+          "afterStart": 3415,
+          "afterEnd": 3415,
+          "before": "]=await tx.select().from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id",
+          "after": ""
+        },
+        {
+          "afterStart": 3416,
+          "afterEnd": 3416,
+          "before": "origin.resourceId)).limit(1);\n const[",
+          "after": ""
+        },
+        {
+          "afterStart": 3420,
+          "afterEnd": 3420,
+          "before": "]=await tx.select().from(subscriptionControlledCalls).where(eq(subscriptionControlledCalls.id",
+          "after": ""
+        },
+        {
+          "afterStart": 3421,
+          "afterEnd": 3421,
+          "before": "origin.callId)).limit(1);\n const[",
+          "after": ""
+        },
+        {
+          "afterStart": 3430,
+          "afterEnd": 3430,
+          "before": "]=call?await tx.select().from(subscriptionControlledOperations).where(eq(subscriptionControlledOperations.id",
+          "after": ""
+        },
+        {
+          "afterStart": 3431,
+          "afterEnd": 3431,
+          "before": "call.operationId)).limit(1):[];\n const[",
+          "after": ""
+        },
+        {
+          "afterStart": 3435,
+          "afterEnd": 3435,
+          "before": "]=await tx.select().from(subscriptionControlledFacts).where(eq(subscriptionControlledFacts.id",
+          "after": ""
+        },
+        {
+          "afterStart": 3436,
+          "afterEnd": 3436,
+          "before": "origin.factId)).limit(1);\n const[",
+          "after": ""
+        },
+        {
+          "afterStart": 3444,
+          "afterEnd": 3445,
+          "before": "]",
+          "after": "}"
+        },
+        {
+          "afterStart": 3447,
+          "afterEnd": 3449,
+          "before": "e",
+          "after": "ow"
+        },
+        {
+          "afterStart": 3450,
+          "afterEnd": 3450,
+          "before": "ource?await tx.select({subscription:subscriptions,scope:subscriptionMerchantScopes}).from(subscriptions).innerJoin(subscriptionMerchantScopes,eq(subscriptionMerchantScopes.subscriptionId,subscriptions.id)).where(eq(subscriptions.id,resource.subscriptionId)).limit(1):[]",
+          "after": ""
+        },
+        {
+          "afterStart": 5848,
+          "afterEnd": 5853,
+          "before": "co",
+          "after": "retur"
+        },
+        {
+          "afterStart": 5854,
+          "afterEnd": 5855,
+          "before": "st ",
+          "after": "("
+        },
+        {
+          "afterStart": 5862,
+          "afterEnd": 5864,
+          "before": "=await c",
+          "after": ":C"
+        },
+        {
+          "afterStart": 5873,
+          "afterEnd": 5876,
+          "before": "P",
+          "after": "Cha"
+        },
+        {
+          "afterStart": 5877,
+          "afterEnd": 5878,
+          "before": "ovid",
+          "after": "g"
+        },
+        {
+          "afterStart": 5879,
+          "afterEnd": 5879,
+          "before": "r",
+          "after": ""
+        },
+        {
+          "afterStart": 5886,
+          "afterEnd": 5886,
+          "before": "(tx,resource.id",
+          "after": ""
+        },
+        {
+          "afterStart": 5887,
+          "afterEnd": 5890,
+          "before": ";",
+          "after": "=>{"
+        },
+        {
+          "afterStart": 7686,
+          "afterEnd": 11962,
+          "before": "",
+          "after": "};\n };\n}\nexport async function readOriginalControlledChargeAuthority(tx:Tx,input:ControlledCashEvidence,origin:ControlledCashOrigin){\n const[resource]=await tx.select().from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,origin.resourceId)).limit(1);\n const[call]=await tx.select().from(subscriptionControlledCalls).where(eq(subscriptionControlledCalls.id,origin.callId)).limit(1);\n const[operation]=call?await tx.select().from(subscriptionControlledOperations).where(eq(subscriptionControlledOperations.id,call.operationId)).limit(1):[];\n const[fact]=await tx.select().from(subscriptionControlledFacts).where(eq(subscriptionControlledFacts.id,origin.factId)).limit(1);\n const[original]=resource?await tx.select({subscription:subscriptions,scope:subscriptionMerchantScopes}).from(subscriptions).innerJoin(subscriptionMerchantScopes,eq(subscriptionMerchantScopes.subscriptionId,subscriptions.id)).where(eq(subscriptions.id,resource.subscriptionId)).limit(1):[];\n const validate=validateOriginalControlledCharge({resource,call,operation,fact,original},input,origin);\n if(!resource)mismatch();\n const journal=await controlledProviderJournal(tx,resource.id);\n return validate(journal);\n}\n/** Fresh common-resource ancestry only. No supplied journal/proof, lock,\n * cached business verdict, bank eligibility or caller closure is accepted. */\nexport async function readOriginalControlledChargeAuthorities(tx:Tx,requested:{resourceId:string;occurrences:readonly{cash:ControlledCashEvidence;origin:ControlledCashOrigin}[]}){\n if(!z.uuid().safeParse(requested.resourceId).success||!requested.occurrences.length||requested.occurrences.length>5000\n  ||new Set(requested.occurrences.map(row=>`${row.origin.callId}:${row.origin.factId}`)).size!==requested.occurrences.length\n  ||requested.occurrences.some(row=>!controlledCashOrigin.safeParse(row.origin).success||row.origin.resourceId!==requested.resourceId))mismatch();\n const[actual]=await tx.select({resource:subscriptionControlledResources,postgresFingerprint:sql<string>`encode(sha256(convert_to(to_jsonb(${subscriptionControlledResources})::text,'UTF8')),'hex')`}).from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,requested.resourceId)).limit(1);\n if(!actual||!/^[a-f0-9]{64}$/.test(actual.postgresFingerprint))mismatch();const resource=actual.resource;\n const[original]=await tx.select({subscription:subscriptions,scope:subscriptionMerchantScopes}).from(subscriptions).innerJoin(subscriptionMerchantScopes,eq(subscriptionMerchantScopes.subscriptionId,subscriptions.id)).where(eq(subscriptions.id,resource.subscriptionId)).limit(1);\n const journal=await controlledProviderJournal(tx,resource.id);\n if(!original)mismatch();\n const identities=new Set([`subscription_controlled_resources:${resource.id}`,`subscriptions:${original.subscription.id}`,`subscription_merchant_scopes:${original.scope.subscriptionId}`,\n  ...journal.operations.map(row=>`subscription_controlled_operations:${row.id}`),...journal.calls.map(row=>`subscription_controlled_calls:${row.id}`),...journal.facts.map(row=>`subscription_controlled_facts:${row.id}`),\n  ...journal.finishes.map(row=>`subscription_controlled_finishes:${row.callId}`),...journal.stops.map(row=>`subscription_controlled_stops:${row.callId}`),...journal.verifications.map(row=>`subscription_controlled_verifications:${row.operationId}`),\n  ...journal.chargeOrigins.map(row=>`subscription_controlled_charge_origins:${row.receiptId}`),...journal.closures.map(row=>`subscription_controlled_closures:${row.resourceId}`)]);\n if(identities.size!==journal.count+2||identities.size>5000)mismatch();\n const calls=new Map(journal.calls.map(row=>[row.id,row])),operations=new Map(journal.operations.map(row=>[row.id,row])),facts=new Map(journal.facts.map(row=>[row.id,row]));\n const authorities=requested.occurrences.map(({cash,origin})=>{const call=calls.get(origin.callId),operation=call?operations.get(call.operationId):undefined,fact=facts.get(origin.factId);\n  return validateOriginalControlledCharge({resource,call,operation,fact,original},cash,origin)(journal);\n });\n return{resource,postgresFingerprint:actual.postgresFingerprint,historyRevision:journal.revision,historyCount:journal.count,physicalCount:identities.size,authorities"
+        }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-cash-namespace.ts",
+      "beforeSha256": "899257f306238f67cdd568b7e162c608041757325b3c389071758cf0554e36db",
+      "afterSha256": "5d5cefaabb889dd8837399e42397a91869632e8a031214e766c087d260ae73ec",
+      "wholeBefore": "// Copyright (C) 2026 Tony Aly\n// SPDX-License-Identifier: Apache-2.0\n// C12.38: a plain original-source reader for the parent cash/refund/principal boundary.\nimport { and,eq,sql } from \"drizzle-orm\";\nimport type { Tx } from \"@/core/service\";\nimport { ServiceError } from \"@/core/service\";\nimport { merchantTaxDigest } from \"@/modules/invoicing/merchant-tax-store\";\nimport { subscriptionProviderChargeReceipts } from \"./schema\";\nimport { subscriptionControlledChargeOrigins,subscriptionControlledResources,subscriptionControlledFacts,subscriptionControlledCalls,subscriptionControlledOperations } from \"./controlled-provider-schema\";\nimport { controlledCashEvidence,readOriginalControlledChargeAuthority } from \"./controlled-provider-cash-origin\";\nimport { controlledRawFinancialReview } from \"./controlled-provider-raw-financial-review\";\nimport { controlledProviderJournal } from \"./controlled-provider-proof\";\nconst primaryKinds=new Set([\"bootstrap\",\"discover_bootstrap\",\"pause_drafts\",\"read_bootstrap\",\"read_customer_financials\",\"list_invoices\",\"create_schedule\",\"read_calendar\",\"update_calendar\",\"read_invoice\",\"finalize_invoice\",\"pay_invoice\",\"cancel_calendar\",\"void_invoice\",\"delete_draft\"]);\n/** verified is ancestry, never paid/refunded/settled authority. The parent must\n * still prove actual principal/route/refunds/disputes/current bank inventory.\n * A missing bridge for an exact controlled namespace cannot fall through as\n * historical/non-controlled. No lookup uses a buyer, present account or amount. */\nexport async function readControlledReceiptNamespace(tx:Tx,receiptId:string){\n const[receipt]=await tx.select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.id,receiptId)).limit(1);\n if(!receipt)throw new ServiceError(\"not_found\",\"Restore the actual original canonical receipt before reading controlled ancestry.\");\n const[origin]=await tx.select().from(subscriptionControlledChargeOrigins).where(eq(subscriptionControlledChargeOrigins.receiptId,receiptId)).limit(1);\n const candidates=await tx.select({resource:subscriptionControlledResources}).from(subscriptionControlledResources)\n  .innerJoin(subscriptionControlledOperations,eq(subscriptionControlledOperations.resourceId,subscriptionControlledResources.id))\n  .innerJoin(subscriptionControlledCalls,eq(subscriptionControlledCalls.operationId,subscriptionControlledOperations.id))\n  .innerJoin(subscriptionControlledFacts,eq(subscriptionControlledFacts.callId,subscriptionControlledCalls.id))\n  .where(and(eq(subscriptionControlledResources.subscriptionId,receipt.subscriptionId),sql`${subscriptionControlledResources.originalScope}->>'providerPlatformAccountId'=${receipt.providerPlatformAccountId}`,\n   sql`coalesce(${subscriptionControlledResources.originalScope}->>'providerAccountId','')=coalesce(${receipt.chargeAccountId},'')`,\n   sql`((${subscriptionControlledFacts.actual}->>'kind'='bootstrap_subscription' and ${subscriptionControlledFacts.actual}->'raw'->>'id'=${receipt.providerSubscriptionRef}) or (${subscriptionControlledFacts.actual}->>'kind'='cash_observed' and ${subscriptionControlledFacts.actual}->'raw'->'cash'->>'providerPaymentIntentRef'=${receipt.providerPaymentIntentRef})\n    or(${subscriptionControlledFacts.actual}->>'kind'='subscription_list_read' and ${subscriptionControlledOperations.kind}='discover_bootstrap' and exists(\n     select 1 from jsonb_array_elements(case when jsonb_typeof(${subscriptionControlledFacts.actual}->'raw'->'data')='array' then ${subscriptionControlledFacts.actual}->'raw'->'data' else '[]'::jsonb end) discovered\n     where discovered->>'id'=${receipt.providerSubscriptionRef}\n      and (case jsonb_typeof(discovered->'customer') when 'string' then discovered->>'customer' when 'object' then discovered->'customer'->>'id' else null end)=${subscriptionControlledResources.originalScope}->>'providerCustomerRef'\n      and discovered->'metadata'->>'freeholder_controlled_subscription_version'='1'\n      and discovered->'metadata'->>'freeholder_subscription_id'=${subscriptionControlledResources.subscriptionId}::text\n      and discovered->'metadata'->>'freeholder_subscription_terms_id'=${subscriptionControlledResources.termsId}::text\n      and discovered->'metadata'->>'freeholder_controlled_generation'=${subscriptionControlledResources.generation}::text\n      and discovered->'metadata'->>'freeholder_platform_account_id'=${subscriptionControlledResources.originalScope}->>'providerPlatformAccountId'\n      and exists(select 1 from subscription_controlled_operations bootstrap where bootstrap.resource_id=${subscriptionControlledResources.id} and bootstrap.kind='bootstrap'\n       and bootstrap.id::text=discovered->'metadata'->>'freeholder_bootstrap_operation_id' and bootstrap.request_digest=discovered->'metadata'->>'freeholder_bootstrap_request_digest')))\n)`)).limit(5001);\n const resourceIds=[...new Set(candidates.map(row=>row.resource.id))];\n if(!origin&&!resourceIds.length)return{applies:false as const,verified:false,resourceId:null,operationId:null,factId:null,financialCallerDebt:false,principalCallerDebt:false,rawCashReview:false,inventoryCount:0,revision:merchantTaxDigest({receiptId,controlled:false})};\n if(candidates.length>5000||resourceIds.length!==1||!origin||!resourceIds.includes(origin.resourceId))return{applies:true as const,verified:false,resourceId:origin?.resourceId??null,operationId:origin?.operationId??null,factId:origin?.factId??null,\n  financialCallerDebt:true,principalCallerDebt:true,rawCashReview:true,inventoryCount:candidates.length,revision:merchantTaxDigest({receipt,origin,resourceIds,incomplete:true})};\n const history=await controlledProviderJournal(tx,origin.resourceId),fact=history.facts.find(row=>row.id===origin.factId);\n if(!fact||fact.actual.kind!==\"cash_observed\")throw new ServiceError(\"conflict\",\"Restore the original controlled cash bridge's exact actual positive occurrence.\");\n const cash=controlledCashEvidence.parse(fact.actual.raw.cash);\n const authority=await readOriginalControlledChargeAuthority(tx,cash,{resourceId:origin.resourceId,callId:origin.callId,factId:origin.factId});\n const verified=authority.controlledOrigin.operationId===origin.operationId&&authority.controlledOrigin.originalEvidenceDigest===origin.originalEvidenceDigest\n  &&cash.providerSubscriptionRef===receipt.providerSubscriptionRef&&cash.providerInvoiceRef===receipt.providerInvoiceRef&&cash.providerPaymentIntentRef===receipt.providerPaymentIntentRef\n  &&cash.amountMinor===receipt.amountMinor&&cash.currency===receipt.currency&&(!receipt.providerChargeRef||!cash.providerChargeRef||receipt.providerChargeRef===cash.providerChargeRef);\n const originalResource=candidates.find(row=>row.resource.id===origin.resourceId)?.resource;\n if(!originalResource)throw new ServiceError(\"conflict\",\"Restore the actual original controlled resource before classifying its retained raw financial facts.\");\n const primaryDebt=history.calls.some(call=>history.unfinished.includes(call.id)&&history.operations.some(operation=>operation.id===call.operationId&&primaryKinds.has(operation.kind)));\n let rawCashReview=controlledRawFinancialReview(originalResource,history).factIds.length>0;\n for(const occurrence of history.facts){\n  if(occurrence.actual.kind!==\"cash_observed\")continue;\n  const actual=controlledCashEvidence.safeParse(occurrence.actual.raw.cash);\n  if(!actual.success){rawCashReview=true;continue;}\n  // Exact original PI namespace/owner chooses a source, never equal amounts.\n  if(actual.data.providerPlatformAccountId!==receipt.providerPlatformAccountId||(actual.data.providerAccountId??null)!==receipt.chargeAccountId||actual.data.providerPaymentIntentRef!==receipt.providerPaymentIntentRef)continue;\n  if(actual.data.providerSubscriptionRef!==receipt.providerSubscriptionRef||actual.data.providerInvoiceRef!==receipt.providerInvoiceRef||actual.data.amountMinor!==receipt.amountMinor||actual.data.currency!==receipt.currency\n   ||actual.data.providerChargeRef&&receipt.providerChargeRef&&actual.data.providerChargeRef!==receipt.providerChargeRef)rawCashReview=true;\n  await readOriginalControlledChargeAuthority(tx,actual.data,{resourceId:origin.resourceId,callId:occurrence.callId,factId:occurrence.id});\n }\n return{applies:true as const,verified,resourceId:origin.resourceId,operationId:origin.operationId,factId:origin.factId,financialCallerDebt:history.unfinished.length>0,principalCallerDebt:primaryDebt,\n  rawCashReview:rawCashReview||!verified,inventoryCount:history.count,revision:merchantTaxDigest({receipt,origin,historyRevision:history.revision,verified,rawCashReview})};\n}\n",
+      "wholeAfter": "// Copyright (C) 2026 Tony Aly\n// SPDX-License-Identifier: Apache-2.0\n// C12.38: a plain original-source reader for the parent cash/refund/principal boundary.\nimport { and,eq,sql } from \"drizzle-orm\";\nimport type { Tx } from \"@/core/service\";\nimport { ServiceError } from \"@/core/service\";\nimport { merchantTaxDigest } from \"@/modules/invoicing/merchant-tax-store\";\nimport { subscriptionProviderChargeReceipts } from \"./schema\";\nimport { subscriptionControlledChargeOrigins,subscriptionControlledResources,subscriptionControlledFacts,subscriptionControlledCalls,subscriptionControlledOperations } from \"./controlled-provider-schema\";\nimport { controlledCashEvidence,readOriginalControlledChargeAuthorities } from \"./controlled-provider-cash-origin\";\nimport { controlledRawFinancialReview } from \"./controlled-provider-raw-financial-review\";\nimport { controlledProviderJournal } from \"./controlled-provider-proof\";\nconst primaryKinds=new Set([\"bootstrap\",\"discover_bootstrap\",\"pause_drafts\",\"read_bootstrap\",\"read_customer_financials\",\"list_invoices\",\"create_schedule\",\"read_calendar\",\"update_calendar\",\"read_invoice\",\"finalize_invoice\",\"pay_invoice\",\"cancel_calendar\",\"void_invoice\",\"delete_draft\"]);\n/** verified is ancestry, never paid/refunded/settled authority. The parent must\n * still prove actual principal/route/refunds/disputes/current bank inventory.\n * A missing bridge for an exact controlled namespace cannot fall through as\n * historical/non-controlled. No lookup uses a buyer, present account or amount. */\nexport async function readControlledReceiptNamespace(tx:Tx,receiptId:string){\n const[receipt]=await tx.select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.id,receiptId)).limit(1);\n if(!receipt)throw new ServiceError(\"not_found\",\"Restore the actual original canonical receipt before reading controlled ancestry.\");\n const[origin]=await tx.select().from(subscriptionControlledChargeOrigins).where(eq(subscriptionControlledChargeOrigins.receiptId,receiptId)).limit(1);\n const candidates=await tx.select({resource:subscriptionControlledResources,postgresFingerprint:sql<string>`encode(sha256(convert_to(to_jsonb(${subscriptionControlledResources})::text,'UTF8')),'hex')`}).from(subscriptionControlledResources)\n  .innerJoin(subscriptionControlledOperations,eq(subscriptionControlledOperations.resourceId,subscriptionControlledResources.id))\n  .innerJoin(subscriptionControlledCalls,eq(subscriptionControlledCalls.operationId,subscriptionControlledOperations.id))\n  .innerJoin(subscriptionControlledFacts,eq(subscriptionControlledFacts.callId,subscriptionControlledCalls.id))\n  .where(and(eq(subscriptionControlledResources.subscriptionId,receipt.subscriptionId),sql`${subscriptionControlledResources.originalScope}->>'providerPlatformAccountId'=${receipt.providerPlatformAccountId}`,\n   sql`coalesce(${subscriptionControlledResources.originalScope}->>'providerAccountId','')=coalesce(${receipt.chargeAccountId},'')`,\n   sql`((${subscriptionControlledFacts.actual}->>'kind'='bootstrap_subscription' and ${subscriptionControlledFacts.actual}->'raw'->>'id'=${receipt.providerSubscriptionRef}) or (${subscriptionControlledFacts.actual}->>'kind'='cash_observed' and ${subscriptionControlledFacts.actual}->'raw'->'cash'->>'providerPaymentIntentRef'=${receipt.providerPaymentIntentRef})\n    or(${subscriptionControlledFacts.actual}->>'kind'='subscription_list_read' and ${subscriptionControlledOperations.kind}='discover_bootstrap' and exists(\n     select 1 from jsonb_array_elements(case when jsonb_typeof(${subscriptionControlledFacts.actual}->'raw'->'data')='array' then ${subscriptionControlledFacts.actual}->'raw'->'data' else '[]'::jsonb end) discovered\n     where discovered->>'id'=${receipt.providerSubscriptionRef}\n      and (case jsonb_typeof(discovered->'customer') when 'string' then discovered->>'customer' when 'object' then discovered->'customer'->>'id' else null end)=${subscriptionControlledResources.originalScope}->>'providerCustomerRef'\n      and discovered->'metadata'->>'freeholder_controlled_subscription_version'='1'\n      and discovered->'metadata'->>'freeholder_subscription_id'=${subscriptionControlledResources.subscriptionId}::text\n      and discovered->'metadata'->>'freeholder_subscription_terms_id'=${subscriptionControlledResources.termsId}::text\n      and discovered->'metadata'->>'freeholder_controlled_generation'=${subscriptionControlledResources.generation}::text\n      and discovered->'metadata'->>'freeholder_platform_account_id'=${subscriptionControlledResources.originalScope}->>'providerPlatformAccountId'\n      and exists(select 1 from subscription_controlled_operations bootstrap where bootstrap.resource_id=${subscriptionControlledResources.id} and bootstrap.kind='bootstrap'\n       and bootstrap.id::text=discovered->'metadata'->>'freeholder_bootstrap_operation_id' and bootstrap.request_digest=discovered->'metadata'->>'freeholder_bootstrap_request_digest')))\n)`)).limit(5001);\n const resourceIds=[...new Set(candidates.map(row=>row.resource.id))];\n if(!origin&&!resourceIds.length)return{applies:false as const,verified:false,resourceId:null,operationId:null,factId:null,financialCallerDebt:false,principalCallerDebt:false,rawCashReview:false,inventoryCount:0,revision:merchantTaxDigest({receiptId,controlled:false})};\n if(candidates.length>5000||resourceIds.length!==1||!origin||!resourceIds.includes(origin.resourceId))return{applies:true as const,verified:false,resourceId:origin?.resourceId??null,operationId:origin?.operationId??null,factId:origin?.factId??null,\n  financialCallerDebt:true,principalCallerDebt:true,rawCashReview:true,inventoryCount:candidates.length,revision:merchantTaxDigest({receipt,origin,resourceIds,incomplete:true})};\n const history=await controlledProviderJournal(tx,origin.resourceId),fact=history.facts.find(row=>row.id===origin.factId);\n if(!fact||fact.actual.kind!==\"cash_observed\")throw new ServiceError(\"conflict\",\"Restore the original controlled cash bridge's exact actual positive occurrence.\");\n const cash=controlledCashEvidence.parse(fact.actual.raw.cash);\n const originalResource=candidates.find(row=>row.resource.id===origin.resourceId)?.resource;\n if(!originalResource)throw new ServiceError(\"conflict\",\"Restore the actual original controlled resource before classifying its retained raw financial facts.\");\n const primaryDebt=history.calls.some(call=>history.unfinished.includes(call.id)&&history.operations.some(operation=>operation.id===call.operationId&&primaryKinds.has(operation.kind)));\n let rawCashReview=controlledRawFinancialReview(originalResource,history).factIds.length>0;\n const occurrences=[{cash,origin:{resourceId:origin.resourceId,callId:origin.callId,factId:origin.factId}}];\n for(const occurrence of history.facts){\n  if(occurrence.actual.kind!==\"cash_observed\")continue;\n  const actual=controlledCashEvidence.safeParse(occurrence.actual.raw.cash);\n  if(!actual.success){rawCashReview=true;continue;}\n  // Exact original PI namespace/owner chooses a source, never equal amounts.\n  if(actual.data.providerPlatformAccountId!==receipt.providerPlatformAccountId||(actual.data.providerAccountId??null)!==receipt.chargeAccountId||actual.data.providerPaymentIntentRef!==receipt.providerPaymentIntentRef)continue;\n  if(actual.data.providerSubscriptionRef!==receipt.providerSubscriptionRef||actual.data.providerInvoiceRef!==receipt.providerInvoiceRef||actual.data.amountMinor!==receipt.amountMinor||actual.data.currency!==receipt.currency\n   ||actual.data.providerChargeRef&&receipt.providerChargeRef&&actual.data.providerChargeRef!==receipt.providerChargeRef)rawCashReview=true;\n  // Only the literal anchor request is already present. A second actual\n  // fact with the same cash remains a distinct required ownership proof.\n  if(occurrence.callId===origin.callId&&occurrence.id===origin.factId){if(merchantTaxDigest(actual.data)!==merchantTaxDigest(cash))throw new ServiceError(\"conflict\",\"Retain the changed original controlled anchor before reading its namespace.\");}\n  else occurrences.push({cash:actual.data,origin:{resourceId:origin.resourceId,callId:occurrence.callId,factId:occurrence.id}});\n }\n const priorCalls=new Map(history.calls.map(row=>[row.id,row])),priorOperations=new Map(history.operations.map(row=>[row.id,row])),priorFacts=new Map(history.facts.map(row=>[row.id,row]));\n const batch=await readOriginalControlledChargeAuthorities(tx,{resourceId:origin.resourceId,occurrences}),prior=candidates.find(row=>row.resource.id===origin.resourceId);\n if(!prior||batch.historyRevision!==history.revision||batch.historyCount!==history.count||batch.postgresFingerprint!==prior.postgresFingerprint||merchantTaxDigest(batch.resource)!==merchantTaxDigest(originalResource)\n  ||batch.authorities.length!==occurrences.length||batch.authorities.some((actual,index)=>{const requested=occurrences[index],call=requested?priorCalls.get(requested.origin.callId):undefined,operation=call?priorOperations.get(call.operationId):undefined,fact=requested?priorFacts.get(requested.origin.factId):undefined;\n   return!requested||!call||!operation||!fact||actual.controlledOrigin.resourceId!==requested.origin.resourceId||actual.controlledOrigin.callId!==requested.origin.callId||actual.controlledOrigin.factId!==requested.origin.factId||actual.controlledOrigin.operationId!==operation.id\n   ||merchantTaxDigest(actual.controlledCash)!==merchantTaxDigest(requested.cash)||actual.controlledOrigin.originalEvidenceDigest!==merchantTaxDigest({resource:originalResource,operation,call,fact,cash:actual.controlledCash});}))throw new ServiceError(\"conflict\",\"The full original controlled journal or resource changed during ancestry reading. Retain every actual fact and restore its exact current owner before comparison.\");\n const authority=batch.authorities[0];if(!authority)throw new ServiceError(\"conflict\",\"Restore the exact original controlled anchor authority.\");\n const verified=authority.controlledOrigin.operationId===origin.operationId&&authority.controlledOrigin.originalEvidenceDigest===origin.originalEvidenceDigest\n  &&cash.providerSubscriptionRef===receipt.providerSubscriptionRef&&cash.providerInvoiceRef===receipt.providerInvoiceRef&&cash.providerPaymentIntentRef===receipt.providerPaymentIntentRef\n  &&cash.amountMinor===receipt.amountMinor&&cash.currency===receipt.currency&&(!receipt.providerChargeRef||!cash.providerChargeRef||receipt.providerChargeRef===cash.providerChargeRef);\n return{applies:true as const,verified,resourceId:origin.resourceId,operationId:origin.operationId,factId:origin.factId,financialCallerDebt:history.unfinished.length>0,principalCallerDebt:primaryDebt,\n  rawCashReview:rawCashReview||!verified,inventoryCount:history.count,revision:merchantTaxDigest({receipt,origin,historyRevision:history.revision,verified,rawCashReview})};\n}\n",
+      "finiteChanges": [
+        {
+          "afterStart": 702,
+          "afterEnd": 705,
+          "before": "y",
+          "after": "ies"
+        },
+        {
+          "afterStart": 2105,
+          "afterEnd": 2230,
+          "before": "",
+          "after": ",postgresFingerprint:sql<string>`encode(sha256(convert_to(to_jsonb(${subscriptionControlledResources})::text,'UTF8')),'hex')`"
+        },
+        {
+          "afterStart": 6107,
+          "afterEnd": 6107,
+          "before": "authority=await readOriginalControlledChargeAuthority(tx,cash,{resourceId:origin.resourceId,callId:origin.callId,factId:origin.factId});\n const verified=authority.controlledOrigin.operationId===origin.operationId&&authority.controlledOrigin.originalEvidenceDigest===origin.originalEvidenceDigest\n  &&cash.providerSubscriptionRef===receipt.providerSubscriptionRef&&cash.providerInvoiceRef===receipt.providerInvoiceRef&&cash.providerPaymentIntentRef===receipt.providerPaymentIntentRef\n  &&cash.amountMinor===receipt.amountMinor&&cash.currency===receipt.currency&&(!receipt.providerChargeRef||!cash.providerChargeRef||receipt.providerChargeRef===cash.providerChargeRef);\n const ",
+          "after": ""
+        },
+        {
+          "afterStart": 6630,
+          "afterEnd": 6739,
+          "before": "",
+          "after": ";\n const occurrences=[{cash,origin:{resourceId:origin.resourceId,callId:origin.callId,factId:origin.factId}}]"
+        },
+        {
+          "afterStart": 7639,
+          "afterEnd": 7656,
+          "before": "",
+          "after": "// Only the liter"
+        },
+        {
+          "afterStart": 7657,
+          "afterEnd": 7720,
+          "before": "",
+          "after": "l anchor request is already present. A second actual\n  // fact "
+        },
+        {
+          "afterStart": 7721,
+          "afterEnd": 7742,
+          "before": "",
+          "after": "ith the same cash rem"
+        },
+        {
+          "afterStart": 7744,
+          "afterEnd": 7756,
+          "before": "",
+          "after": "ns a distinc"
+        },
+        {
+          "afterStart": 7760,
+          "afterEnd": 7801,
+          "before": "",
+          "after": "quired ownership proof.\n  if(occurrence.c"
+        },
+        {
+          "afterStart": 7802,
+          "afterEnd": 7805,
+          "before": "",
+          "after": "llI"
+        },
+        {
+          "afterStart": 7806,
+          "afterEnd": 7970,
+          "before": "O",
+          "after": "===origin.callId&&occurrence.id===origin.factId){if(merchantTaxDigest(actual.data)!==merchantTaxDigest(cash))throw new ServiceError(\"conflict\",\"Retain the changed o"
+        },
+        {
+          "afterStart": 7977,
+          "afterEnd": 7979,
+          "before": "C",
+          "after": " c"
+        },
+        {
+          "afterStart": 7988,
+          "afterEnd": 7989,
+          "before": "Ch",
+          "after": " "
+        },
+        {
+          "afterStart": 7990,
+          "afterEnd": 7992,
+          "before": "rgeAut",
+          "after": "nc"
+        },
+        {
+          "afterStart": 7995,
+          "afterEnd": 8011,
+          "before": "",
+          "after": " before reading "
+        },
+        {
+          "afterStart": 8013,
+          "afterEnd": 8053,
+          "before": "y",
+          "after": "s namespace.\");}\n  else occurrences.push"
+        },
+        {
+          "afterStart": 8054,
+          "afterEnd": 8060,
+          "before": "tx,",
+          "after": "{cash:"
+        },
+        {
+          "afterStart": 8072,
+          "afterEnd": 8079,
+          "before": "",
+          "after": "origin:"
+        },
+        {
+          "afterStart": 8155,
+          "afterEnd": 8156,
+          "before": "",
+          "after": "}"
+        },
+        {
+          "afterStart": 8161,
+          "afterEnd": 10444,
+          "before": "",
+          "after": "\n const priorCalls=new Map(history.calls.map(row=>[row.id,row])),priorOperations=new Map(history.operations.map(row=>[row.id,row])),priorFacts=new Map(history.facts.map(row=>[row.id,row]));\n const batch=await readOriginalControlledChargeAuthorities(tx,{resourceId:origin.resourceId,occurrences}),prior=candidates.find(row=>row.resource.id===origin.resourceId);\n if(!prior||batch.historyRevision!==history.revision||batch.historyCount!==history.count||batch.postgresFingerprint!==prior.postgresFingerprint||merchantTaxDigest(batch.resource)!==merchantTaxDigest(originalResource)\n  ||batch.authorities.length!==occurrences.length||batch.authorities.some((actual,index)=>{const requested=occurrences[index],call=requested?priorCalls.get(requested.origin.callId):undefined,operation=call?priorOperations.get(call.operationId):undefined,fact=requested?priorFacts.get(requested.origin.factId):undefined;\n   return!requested||!call||!operation||!fact||actual.controlledOrigin.resourceId!==requested.origin.resourceId||actual.controlledOrigin.callId!==requested.origin.callId||actual.controlledOrigin.factId!==requested.origin.factId||actual.controlledOrigin.operationId!==operation.id\n   ||merchantTaxDigest(actual.controlledCash)!==merchantTaxDigest(requested.cash)||actual.controlledOrigin.originalEvidenceDigest!==merchantTaxDigest({resource:originalResource,operation,call,fact,cash:actual.controlledCash});}))throw new ServiceError(\"conflict\",\"The full original controlled journal or resource changed during ancestry reading. Retain every actual fact and restore its exact current owner before comparison.\");\n const authority=batch.authorities[0];if(!authority)throw new ServiceError(\"conflict\",\"Restore the exact original controlled anchor authority.\");\n const verified=authority.controlledOrigin.operationId===origin.operationId&&authority.controlledOrigin.originalEvidenceDigest===origin.originalEvidenceDigest\n  &&cash.providerSubscriptionRef===receipt.providerSubscriptionRef&&cash.providerInvoiceRef===receipt.providerInvoiceRef&&cash.providerPaymentIntentRef===receipt.providerPaymentIntentRef\n  &&cash.amountMinor===receipt.amountMinor&&cash.currency===receipt.currency&&(!receipt.providerChargeRef||!cash.providerChargeRef||receipt.providerChargeRef===cash.providerChargeRef);"
+        }
+      ]
+    }
+  ],
+  "sharedLiteralPredicates": {
+    "preJournal": " if(!resource||!call||!operation||!fact||!original||operation.resourceId!==resource.id||fact.callId!==call.id||fact.actual.kind!==\"cash_observed\"\n  ||!originalControlledCall(operation,call)||fact.actualDigest!==merchantTaxDigest(fact.actual)||input.subscriptionId!==resource.subscriptionId\n  ||resource.originalScope.providerPlatformAccountId!==input.providerPlatformAccountId||(resource.originalScope.providerAccountId??null)!==(input.providerAccountId??null)\n  ||resource.originalScope.providerCustomerRef!==input.providerCustomerRef||resource.originalScope.currency!==input.currency)mismatch();\n const expected=controlledCashEvidence.parse(JSON.parse(JSON.stringify(fact.actual.raw.cash)));\n if(merchantTaxDigest(expected)!==merchantTaxDigest(controlledCashEvidence.parse(JSON.parse(JSON.stringify(input)))))mismatch();\n const invoice=record.parse(fact.actual.raw.invoice),intent=record.parse(fact.actual.raw.intent),tag=metadata(invoice);\n const parent=record.safeParse(invoice.parent),details=record.safeParse(parent.success?parent.data.subscription_details:undefined),actualSub=ref(invoice.subscription)??(details.success?ref(details.data.subscription):undefined);\n if(ref(invoice.id)!==input.providerInvoiceRef||actualSub!==input.providerSubscriptionRef||ref(invoice.customer)!==input.providerCustomerRef||ref(intent.id)!==input.providerPaymentIntentRef\n  ||ref(intent.customer)!==input.providerCustomerRef||intent.amount_received!==input.amountMinor||typeof intent.currency!==\"string\"||intent.currency.toUpperCase()!==input.currency\n  ||input.providerChargeRef!==undefined&&ref(intent.latest_charge)!==input.providerChargeRef||tag.freeholder_controlled_subscription_version!==\"1\"\n  ||tag.freeholder_subscription_id!==resource.subscriptionId||tag.freeholder_subscription_terms_id!==resource.termsId||tag.freeholder_controlled_generation!==String(resource.generation)\n  ||tag.freeholder_platform_account_id!==input.providerPlatformAccountId)mismatch();\n const route=merchantIntentEvidence(resource.originalScope,intent);\n if(input.customerChargeVerified!==(intent.status===\"succeeded\"&&ref(intent.customer)===input.providerCustomerRef&&ref(invoice.customer)===input.providerCustomerRef)\n  ||input.merchantRouteVerified!==route.merchantRouteVerified||input.destinationAccountId!==route.destinationAccountId||input.settlementMerchantAccountId!==route.settlementMerchantAccountId)mismatch();\n",
+    "postJournal": " const bootstrap=journal.operations.find(row=>row.kind===\"bootstrap\"&&row.id===tag.freeholder_bootstrap_operation_id);\n if(!bootstrap||bootstrap.requestDigest!==tag.freeholder_bootstrap_request_digest||!journal.facts.some(row=>{\n  const creator=journal.calls.find(value=>value.id===row.callId),creatorOperation=creator?journal.operations.find(value=>value.id===creator.operationId):null;\n  if(creator?.operationId===bootstrap.id&&row.actual.kind===\"bootstrap_subscription\"&&ref(row.actual.raw.id)===input.providerSubscriptionRef)return true;\n  if(creatorOperation?.kind!==\"discover_bootstrap\"||row.actual.kind!==\"subscription_list_read\"||!Array.isArray(row.actual.raw.data))return false;\n  return row.actual.raw.data.some(value=>{const actual=record.safeParse(value),actualTag=actual.success?record.safeParse(actual.data.metadata):null;\n   return actual.success&&actualTag?.success&&ref(actual.data.id)===input.providerSubscriptionRef&&ref(actual.data.customer)===resource.originalScope.providerCustomerRef\n    &&actualTag.data.freeholder_bootstrap_operation_id===bootstrap.id&&actualTag.data.freeholder_bootstrap_request_digest===bootstrap.requestDigest\n    &&actualTag.data.freeholder_subscription_id===resource.subscriptionId&&actualTag.data.freeholder_subscription_terms_id===resource.termsId;});\n }))mismatch();\n const scope=subscriptionMerchantScope.parse(original.scope);\n if(scope.providerPlatformAccountId!==input.providerPlatformAccountId||scope.chargeAccountId!==(input.providerAccountId??null)||scope.providerScheduleApiVersion!==resource.originalScope.providerApiVersion)mismatch();\n return{...original,operation:null,controlledCash:expected,controlledOrigin:{...origin,operationId:operation.id,originalEvidenceDigest:merchantTaxDigest({resource,operation,call,fact,cash:expected})}};"
+  },
+  "originalScalarFetches": " const[resource]=await tx.select().from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,origin.resourceId)).limit(1);\n const[call]=await tx.select().from(subscriptionControlledCalls).where(eq(subscriptionControlledCalls.id,origin.callId)).limit(1);\n const[operation]=call?await tx.select().from(subscriptionControlledOperations).where(eq(subscriptionControlledOperations.id,call.operationId)).limit(1):[];\n const[fact]=await tx.select().from(subscriptionControlledFacts).where(eq(subscriptionControlledFacts.id,origin.factId)).limit(1);\n const[original]=resource?await tx.select({subscription:subscriptions,scope:subscriptionMerchantScopes}).from(subscriptions).innerJoin(subscriptionMerchantScopes,eq(subscriptionMerchantScopes.subscriptionId,subscriptions.id)).where(eq(subscriptions.id,resource.subscriptionId)).limit(1):[];\n",
+  "originalNamespaceVerified": " const verified=authority.controlledOrigin.operationId===origin.operationId&&authority.controlledOrigin.originalEvidenceDigest===origin.originalEvidenceDigest\n  &&cash.providerSubscriptionRef===receipt.providerSubscriptionRef&&cash.providerInvoiceRef===receipt.providerInvoiceRef&&cash.providerPaymentIntentRef===receipt.providerPaymentIntentRef\n  &&cash.amountMinor===receipt.amountMinor&&cash.currency===receipt.currency&&(!receipt.providerChargeRef||!cash.providerChargeRef||receipt.providerChargeRef===cash.providerChargeRef);\n",
+  "originalNamespaceReturn": " return{applies:true as const,verified,resourceId:origin.resourceId,operationId:origin.operationId,factId:origin.factId,financialCallerDebt:history.unfinished.length>0,principalCallerDebt:primaryDebt,\n  rawCashReview:rawCashReview||!verified,inventoryCount:history.count,revision:merchantTaxDigest({receipt,origin,historyRevision:history.revision,verified,rawCashReview})};\n}\n",
+  "protected": {
+    "tests/modules/controlled-atomic-refund-residual84.test.ts": {
+      "sha256": "c627b8fb89a1cefbab815727157a16a430472733474a1eb1ff7971c32a21332f",
+      "actualSha256": "c627b8fb89a1cefbab815727157a16a430472733474a1eb1ff7971c32a21332f",
+      "unchanged": true
+    },
+    "tests/modules/atomic-credit-fee-persistence84.test.ts": {
+      "sha256": "d31f96db01533a22d8e7351c1fec33b72700318b438d03a7885a699742188ec4",
+      "actualSha256": "d31f96db01533a22d8e7351c1fec33b72700318b438d03a7885a699742188ec4",
+      "unchanged": true
+    },
+    "tests/modules/atomic-auxiliary-fee84.test.ts": {
+      "sha256": "c1339a7ef5fb7a0a71237773b7f983495acdede62ff64f397f440d0f23a1fa61",
+      "actualSha256": "c1339a7ef5fb7a0a71237773b7f983495acdede62ff64f397f440d0f23a1fa61",
+      "unchanged": true
+    },
+    "tests/modules/original-cash-inventory-causal84.test.ts": {
+      "sha256": "55d6d406d794aa38ce255c04801fb38277f0ecd2c4359590b3d9cebf3bc6a50b",
+      "actualSha256": "55d6d406d794aa38ce255c04801fb38277f0ecd2c4359590b3d9cebf3bc6a50b",
+      "unchanged": true
+    },
+    "tests/helpers/actual-controlled-period84.ts": {
+      "sha256": "4d448cb8f404fec98c493b8114606ec9f86ef4279538b4ef18fc0d595826a77d",
+      "actualSha256": "4d448cb8f404fec98c493b8114606ec9f86ef4279538b4ef18fc0d595826a77d",
+      "unchanged": true
+    },
+    "tests/helpers/actual-controlled-open-invoice84.ts": {
+      "sha256": "a592aa78781c4e5476254d412956c368703f4ce71fb8a5b24784908ba02df431",
+      "actualSha256": "a592aa78781c4e5476254d412956c368703f4ce71fb8a5b24784908ba02df431",
+      "unchanged": true
+    },
+    "tests/helpers/merchant-controlled-collection84.ts": {
+      "sha256": "79f79e4250726e7e7d3f521dbf11507a6c273ef6abae400e2a1620e96319cbf9",
+      "actualSha256": "79f79e4250726e7e7d3f521dbf11507a6c273ef6abae400e2a1620e96319cbf9",
+      "unchanged": true
+    },
+    "tests/helpers/merchant-controlled-period84.ts": {
+      "sha256": "ac871792c0f1b9a0b9870696d4d2db13cf83ed0fbdac981871f88138b1139e41",
+      "actualSha256": "ac871792c0f1b9a0b9870696d4d2db13cf83ed0fbdac981871f88138b1139e41",
+      "unchanged": true
+    }
+  },
+  "requiredRootJournalContinuation": {
+    "head": "7d6676b6017c827f59d6c90df5bf003706d84409",
+    "path": "src/modules/subscriptions/controlled-provider-proof.ts",
+    "currentRootSourceSha256": "e37498dde8b862e987c6f08e0d6f6a43b308d996430d74a4ea38fe4bce843c0a",
+    "baseSourceSha256": "7b80eab48cffb23d0b37254614df9aa725e278c6f1bdee14e61a2e82303522f6",
+    "scope": "Preserve exact root4 type-only false-arm row-array annotations and source-control narrowing; no journal edit in this leaf. No stale61fa whole-journal pin is an acceptance requirement."
+  },
+  "batchSignature": "readOriginalControlledChargeAuthorities(realTx,{resourceId,occurrences:[{cash,origin}]})",
+  "inputExcludes": [
+    "history",
+    "proof",
+    "authority",
+    "caller waiver",
+    "cached verdict",
+    "session or Tx marker"
+  ],
+  "readPass": "batch owns actual resource+PGSHA once, actual parent/scope once, complete fresh journal once; derives actual op/call/fact and applies all original scalar predicates to every requested pair",
+  "namespacePass": "initial full actual journal plus ONE fresh batch journal; exact full historyRevision/count and complete canonical+postgres resource equality; per-occurrence op/call/fact/cash/digest equality; every original flag/revision expression retained",
+  "identityBound": "one exact table/PK union including resource/journal/subscription/merchantScope <=5000; literal duplicate anchor request only is omitted from requests, all distinct facts remain",
+  "preparedNativeCases": 5,
+  "notRun": [
+    "compiler",
+    "lint",
+    "tests",
+    "SQL parser",
+    "model imports",
+    "PostgreSQL",
+    "provider",
+    "host"
+  ],
+  "independentFrom": "Noncash fda/dd3 are independent held/unqualified branches; this leaf is solely root61fa two-file performance source."
+}

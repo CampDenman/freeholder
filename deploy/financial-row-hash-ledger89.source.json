@@ -1,0 +1,160 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "financial_row_hash_ledger89.v1",
+  "checklist": [
+    "C12.38",
+    "C11.05",
+    "C1.08"
+  ],
+  "status": "FORWARD SOURCE CONTINUATION; real fresh-database insert/update/rollback/refusal controls pass; not payment acceptance",
+  "previousSourceRecord": "deploy/controlled-runtime-dedup88.source.json",
+  "artifacts": [
+    {
+      "path": "db/migrations/0089_financial_row_hash_ledger.sql",
+      "sha256": "52f29ffc916111e416ba4949f1c6898d6c8b2fc5de70ebaea7fcb060623a57bc"
+    },
+    {
+      "path": "src/modules/invoicing/financial-row-hash-schema.ts",
+      "sha256": "b1ddc92496cfaf3a2a3cb1231f6fd2bb060715d31587207bb17b40cc818a0b2e"
+    },
+    {
+      "path": "src/modules/invoicing/controlled-provider-financial-parent.ts",
+      "sha256": "9d9c6fb41437aba4f190228491a7ced14768c3c4c7246e19b5947c107fea2d9e"
+    },
+    {
+      "path": "src/modules/invoicing/tables.ts",
+      "sha256": "e843f314de96ff4427a646439e975d5a3cdba6f404bf853320f5ea1aaca8d7d2"
+    },
+    {
+      "path": "tests/modules/financial-row-hash-ledger89.test.ts",
+      "sha256": "b4344e60714da3abde32d88b1576ce52f8ddb8efe4368ea185487f4836f908ef"
+    }
+  ],
+  "sourceTables": [
+    "subscriptions",
+    "subscription_commercial_terms",
+    "subscription_merchant_scopes",
+    "subscription_market_policies",
+    "subscription_provider_schedule_resources",
+    "subscription_provider_schedule_operations",
+    "subscription_commercial_amendments",
+    "subscription_commercial_resumptions",
+    "subscription_provider_generations",
+    "subscription_provider_charge_observations",
+    "merchant_payment_observations",
+    "payment_disputes",
+    "refunds",
+    "invoices",
+    "payments",
+    "credit_notes",
+    "subscription_provider_charge_receipts",
+    "merchant_agreement_payment_routes",
+    "payment_methods",
+    "merchant_tax_profiles",
+    "merchant_fee_refunds",
+    "merchant_fee_observations",
+    "merchant_payment_requests",
+    "merchant_payment_dispatches",
+    "merchant_payment_resource_bindings",
+    "merchant_payment_retirement_acks",
+    "merchant_payment_terminal_receipts",
+    "merchant_payment_creation_refusals",
+    "merchant_payment_dispatch_finishes",
+    "merchant_payment_dispatch_stops",
+    "subscription_provider_read_tickets",
+    "subscription_provider_read_finishes",
+    "subscription_provider_read_stops",
+    "subscription_provider_invoice_observations",
+    "subscription_provider_invoice_lines",
+    "invoice_lines",
+    "invoice_market_policies",
+    "invoice_merchant_tax_quotes",
+    "invoice_merchant_tax_quote_lines",
+    "invoice_credit_applications",
+    "invoice_credit_reservations",
+    "invoice_credit_funding"
+  ],
+  "testContinuations": [
+    {
+      "path": "tests/modules/controlled-safe-response-composition87.test.ts",
+      "afterSha256": "76424c00c4c11ae0013954495cc4ecdc2e8481828438f5da41be839b1eab3c1b",
+      "beforeSha256": "6f0697f3d8568005809f2f95c7d6fb87fd9347b2c05bd89ef79a1ec75f674d9f",
+      "edits": [
+        {
+          "before": "",
+          "after": "import { restoreRowHashLedgerSource } from \"../helpers/row-hash-ledger-forward\";\n",
+          "occurrences": 1
+        },
+        {
+          "before": "    let restored = read(row.path);",
+          "after": "    let restored = restoreRowHashLedgerSource(row.path, read(row.path));",
+          "occurrences": 3
+        },
+        {
+          "before": "    const views = proof.indexOf(\"const verificationViews=await Promise.all(verifications.map\");",
+          "after": "    const views = proof.indexOf(\"Promise.all(verifications.map\");",
+          "occurrences": 1
+        }
+      ]
+    },
+    {
+      "path": "tests/core/migrate-boundary.test.ts",
+      "afterSha256": "7d7b1cf319ee7335a6f8c62f22f7d47139d6926618be5dd1c6bf332c60403a95",
+      "beforeSha256": "c0dbb628485b8fe2c5341987bee2b8b6311162c9865267b859d645334137d4f9",
+      "edits": [
+        {
+          "before": "",
+          "after": "import { restoreRowHashLedgerSource } from \"../helpers/row-hash-ledger-forward\";\n",
+          "occurrences": 1
+        },
+        {
+          "before": "  let current = readFileSync(path);",
+          "after": "  let current = Buffer.from(restoreRowHashLedgerSource(path, readFileSync(path, \"utf8\")));",
+          "occurrences": 1
+        },
+        {
+          "before": "    expect(Buffer.byteLength(guard)).toBe(2038);\n",
+          "after": "    expect(Buffer.byteLength(guard)).toBe(2599);\n",
+          "occurrences": 1
+        },
+        {
+          "before": "  it(\"manual failure output never adopts hostile error properties\", () => {\n",
+          "after": "  it(\"manual failure output reads a wrapped code and still never adopts hostile error properties\", () => {\n",
+          "occurrences": 1
+        },
+        {
+          "before": "    const child = spawnSync(process.execPath, [\"--input-type=module\", \"-e\", `const m=await import(${JSON.stringify(cli)});const hostile={get code(){throw new Error(\"PRIVATE\")}};const proxy=new Proxy({},{getOwnPropertyDescriptor(){throw new Error(\"PRIVATE\")}});const ok=m.migrationFailureCode({code:\"55006\",message:\"PRIVATE\"})===\"55006\"&&m.migrationFailureCode({code:\"PRIVATE\",query:\"PRIVATE\",cause:\"PRIVATE\"})===\"MIGRATION_FAILED\"&&m.migrationFailureCode(hostile)===\"MIGRATION_FAILED\"&&m.migrationFailureCode(proxy)===\"MIGRATION_FAILED\";process.stdout.write(ok?\"SAFE\":\"UNSAFE\");`], { env: { PATH: process.env.PATH, NODE_ENV: \"test\" }, encoding: \"utf8\" });\n",
+          "after": "    const child = spawnSync(process.execPath, [\"--input-type=module\", \"-e\", `const m=await import(${JSON.stringify(cli)});const hostile={get code(){throw new Error(\"PRIVATE\")}};const proxy=new Proxy({},{getOwnPropertyDescriptor(){throw new Error(\"PRIVATE\")}});const ok=m.migrationFailureCode({code:\"55006\",message:\"PRIVATE\"})===\"55006\"&&m.migrationFailureCode({code:\"PRIVATE\",query:\"PRIVATE\",cause:\"PRIVATE\"})===\"MIGRATION_FAILED\"&&m.migrationFailureCode(hostile)===\"MIGRATION_FAILED\"&&m.migrationFailureCode(proxy)===\"MIGRATION_FAILED\"&&m.migrationFailureCode({message:\"PRIVATE\",query:\"PRIVATE\",cause:{code:\"55P03\",message:\"PRIVATE\"}})===\"55P03\"&&m.migrationFailureCode({cause:{cause:{code:\"FH_MIGRATION_PREFIX_MISMATCH\"}}})===\"FH_MIGRATION_PREFIX_MISMATCH\"&&m.migrationFailureCode({cause:{cause:{code:\"PRIVATE\"}}})===\"MIGRATION_FAILED\"&&m.migrationFailureCode({cause:{get code(){throw new Error(\"PRIVATE\")}}})===\"MIGRATION_FAILED\";process.stdout.write(ok?\"SAFE\":\"UNSAFE\");`], { env: { PATH: process.env.PATH, NODE_ENV: \"test\" }, encoding: \"utf8\" });\n",
+          "occurrences": 1
+        },
+        {
+          "before": "  expect(sha(readFileSync(\"deploy/controlled-safe-migration-boundary-20261114.source.json\"))).toBe(\"b8ff2f954f038c43c09ba02854ab7f53c477d2f78127f3267e531cc9e0306e51\");\n",
+          "after": "  expect(sha(readFileSync(\"deploy/controlled-safe-migration-boundary-20261114.source.json\"))).toBe(\"ecd8e8124c73d20cecb1a108fd67b6a77127b2bb73cc5d6ab4344eb7f18cfd11\");\n",
+          "occurrences": 1
+        }
+      ]
+    },
+    {
+      "path": "MASTER.md",
+      "afterSha256": "332e0037a2bf3eaa6f52e274e15dd9ddd6dc08c7b06bb94543750fde15ff43b3",
+      "beforeSha256": "b2d22136bbd58a0e29b082c23cfb57176980b60ded7cd8d8ea642a432216345d",
+      "edits": [
+        {
+          "before": "",
+          "after": "Row-hash ledger and payment-profile continuation2026-11-15\n(C12.38/C11.05/C1.08/C11.10): fresh ordinary migrations88/89 and their real\ninsert/update/rollback/direct-write controls PASS; all42 parent source tables and\nnine controlled families have exact stored fingerprints. Focused source reversals,\nTypeScript and affected lint PASS. The unchanged positive native still TIMES OUT\nat180s on separate fresh databases before proration acceptance, including a CPU-\nprofiled run. Canonicalization, snapshot cloning, garbage collection and idle work\nremain measured costs; the key-index and authenticated frozen-view digest repairs\nare source-qualified only until their genuine native runs. No checklist row closes.\nSee `deploy/controlled-row-hash-ledger88.source.json`,\n`deploy/financial-row-hash-ledger89.source.json`,\n`deploy/merchant-tax-key-index89.source.json` and\n`deploy/controlled-safe-view-digest89.source.json`.\n\n",
+          "occurrences": 1
+        },
+        {
+          "before": "",
+          "after": "Controlled journal-head continuation2026-11-15 (C12.38/C11.05/C1.08): migration90\nmaintains a guarded per-resource certificate from the actual immutable row ledger;\nits independent fresh-database integrity/refusal control and both genuine journal\nrevalidation controls PASS. Heads reduced diagnostic journal work but the first\nunchanged positive run still TIMED OUT at180s. Deterministic deeply frozen safe\nviews may now reuse only the same fresh content certificate; raw retainers never\ncontain them and no authority verdict is cached. Its separate positive run remains\nrequired. No row closes. See `deploy/controlled-journal-heads90.source.json` and\n`deploy/controlled-view-cache90.source.json`.\n\n",
+          "occurrences": 1
+        }
+      ]
+    }
+  ],
+  "originalPaymentOracle": {
+    "path": "tests/modules/atomic-credit-fee-persistence84.test.ts",
+    "sha256": "d31f96db01533a22d8e7351c1fec33b72700318b438d03a7885a699742188ec4",
+    "timeoutSeconds": 180
+  }
+}

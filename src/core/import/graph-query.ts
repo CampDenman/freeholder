@@ -33,7 +33,12 @@ export const sourceGraphReview = defineService({
     const rows = await ctx.tx.select({ ordinal: importSourceEntries.ordinal, kind: importSourceEntries.kind, metadata: importSourceEntries.metadata, target: importSourceEntries.targetSlug, pageId: importSourceEntries.targetPageId, resolution: importSourceEntries.resolution }).from(importSourceEntries).where(and(eq(importSourceEntries.graphId, graph.id), gt(importSourceEntries.ordinal, input.afterOrdinal))).orderBy(asc(importSourceEntries.ordinal)).limit(input.limit + 1);
     const [total] = await ctx.tx.select({ indexed: sql<number>`count(*)::int` }).from(importSourceEntries).where(eq(importSourceEntries.graphId, graph.id));
     const mediaRows = await ctx.tx.select().from(importSourceMedia).where(and(eq(importSourceMedia.graphId, graph.id), gt(importSourceMedia.key, input.afterMediaKey))).orderBy(asc(importSourceMedia.key)).limit(input.limit + 1);
-    const media = mediaRows.slice(0, input.limit).map(row => { const planned = graphMediaPlanSchema.parse(row.planned); return { key: row.key, sourceUrl: planned.sourceUrl, filename: planned.filename, assetId: row.assetId, bytes: row.bytes, error: row.error }; });
+    const media = mediaRows.slice(0, input.limit).map(row => {
+      const minimized = object(row.planned);
+      if (minimized.redacted === true && Object.keys(minimized).length === 1) return { key: row.key, sourceUrl: "", filename: "", assetId: row.assetId, bytes: row.bytes, error: row.error };
+      const planned = graphMediaPlanSchema.parse(row.planned);
+      return { key: row.key, sourceUrl: planned.sourceUrl, filename: planned.filename, assetId: row.assetId, bytes: row.bytes, error: row.error };
+    });
     const active = object(object(run.checkpoint).sourceUpload);
     const activeUpload = upload.safeParse({ uploadId: active.uploadId, chunks: active.chunks, received: Array.isArray(active.received) ? active.received.length : 0, expiresAt: active.expiresAt });
     const entries = rows.slice(0, input.limit).map(row => {

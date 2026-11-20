@@ -1,0 +1,30 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C11.10",
+    "C1.08"
+  ],
+  "status": "REQUIRED_SOURCE_RETENTION_REPAIR_OPEN",
+  "sourceHead": "1f89a8eca61e2e286ee225ee49c8b3748c150e28",
+  "sourceFindings": [
+    {
+      "path": "src/adapters/payments/stripe-controlled-invoice.ts",
+      "sha256": "b8746ce57d7620f3a6406f36da30952b705daf507e2d1fef1310d42671681460"
+    },
+    {
+      "path": "src/adapters/payments/stripe-controlled-customer-financials.ts",
+      "sha256": "c91e78c20f133d2e4f89702c0b50f43548d51cb274cf3f0737992ac4328a976a"
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-execution.ts",
+      "sha256": "e66eebdd947834e86e231dd34ae3ed432e01ec4aba9d95a02e22e37dc953c264"
+    }
+  ],
+  "finding": "Existing invoice/intent/expanded-charge and customer/credit-note readers send whole provider JSON to original occurrence callbacks/results. Safe projection before retention plus complete financial unknown-debt handling and version compatibility are required.",
+  "assignedAgent": "/root/carrier_resume3",
+  "heldTerminalOnlySafeLeaf": "aef437a2ad3c667de371f647d4ecaf923dba38ce",
+  "heldTerminalOnlyLeafDoesNotCloseGenericFinding": true,
+  "malformedFinancialMapPrivateBytesMustBecomeTypedUnknownNotKnownZero": true,
+  "requiredIndependentReviewer": "Tony Aly",
+  "securitySignOff": false
+}

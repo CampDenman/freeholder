@@ -176,6 +176,8 @@ export const mediaUploads = pgTable(
   "media_uploads",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    // NEW shared upload birth only; legacy NULL is never filled from a key.
+    originalReservationId: uuid("original_reservation_id"),
     strategy: text("strategy", { enum: ["direct_multipart", "proxy"] })
       .notNull(),
     state: text("state", {
@@ -219,6 +221,7 @@ export const mediaUploads = pgTable(
   },
   (t) => [
     uniqueIndex("media_uploads_storage_key_unique").on(t.storageKey),
+    uniqueIndex("media_uploads_original_reservation_idx").on(t.originalReservationId).where(sql`${t.originalReservationId} is not null`),
     index("media_uploads_state_expiry_idx").on(t.state, t.expiresAt),
     index("media_uploads_asset_idx").on(t.assetId),
     index("media_uploads_owner_idx").on(t.ownerContactId),
@@ -235,6 +238,7 @@ export const mediaObjects = pgTable(
   "media_objects",
   {
     key: text("key").primaryKey(),
+    reservationId:uuid("reservation_id").defaultRandom(),
     ownerContactId: uuid("owner_contact_id").references(() => contacts.id, { onDelete: "restrict" }),
     assetId: uuid("asset_id").references(() => assets.id, {
       onDelete: "cascade",
@@ -253,6 +257,7 @@ export const mediaObjects = pgTable(
     updatedAt: updatedAtColumn(),
   },
   (t) => [
+    uniqueIndex("media_objects_reservation_idx").on(t.reservationId),
     index("media_objects_asset_idx").on(t.assetId),
     index("media_objects_pending_idx").on(t.state, t.createdAt),
     index("media_objects_upload_idx").on(t.uploadId),

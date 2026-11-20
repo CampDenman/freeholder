@@ -1,0 +1,33 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "multipart_part_withheld_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Scoped withheld-part disposition lifecycle qualified on fresh migration99 PostgreSQL; provider revocation and hosted acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "b64d1b733ee5d251d4e1d88d642743e61b694b8d3c1c60d2a9341643411be01b" },
+    { "path": "tests/core/media-multipart-part-withheld-lifecycle.test.ts", "sha256": "e83f3fa1bd1fba6da52b7ae231f7bf37c15c0ace404f99eb6475195b4e0e5838" }
+  ],
+  "controls": {
+    "before": { "database": "multipart_part_withheld_audit_20261115", "passed": 5, "failed": 1, "cause": "Direct observation insert omitted the genuine shared request capability" },
+    "final": { "database": "multipart_part_withheld_final_20261115", "passed": 6, "failed": 0, "durationSeconds": 54.06 },
+    "coverage": ["post-mint hold becomes withheld with real FINs and no returned URL", "new genuine attempt preserves first withheld receipt", "exposed link cannot become withheld", "withheld link cannot become exposed", "paused local caller stays pending", "additional retained positive fact reopens debt without replacing first return"],
+    "guardsWeakened": false,
+    "runtimeChanges": false,
+    "focusedLint": "passed"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "b64d1b733ee5d251d4e1d88d642743e61b694b8d3c1c60d2a9341643411be01b",
+      "beforeSha256": "cd2f0104796c6b488d10dcc04678560d54a683307d68c3396169356463924068",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  consumption, transport authentication or C-item acceptance follows.\n  Signing containment source2026-11-13",
+          "after": "  consumption, transport authentication or C-item acceptance follows.\n  Withheld-part lifecycle qualification2026-11-15: the first current run passed\n  5/6; its final direct observation insert lacked the shared request capability.\n  Using the genuine capability without weakening guards gives final6/6 on fresh\n  migration99. Private refusal, later genuine issuance, exposed/withheld immutable\n  dispositions, paused callers and additional positive-fact debt reopening retain\n  their original returns and evidence. Focused lint passes. See\n  `deploy/multipart-part-withheld-lifecycle.source.json`. No revocation/provider\n  account or C-item acceptance follows.\n  Signing containment source2026-11-13",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

@@ -833,12 +833,15 @@ export const memberSealedBlobs = pgTable(
     conversationId: uuid("conversation_id").notNull().references(() => memberConversations.id, { onDelete: "cascade" }),
     messageId: uuid("message_id").references(() => memberMessages.id, { onDelete: "set null" }),
     storageKey: text("storage_key").notNull(),
+    // Future claims only. Legacy NULL birth is never backfilled by equal key.
+    originalReservationId:uuid("original_reservation_id"),
     size: integer("size").notNull(),
     state: text("state", { enum: ["pending", "ready"] }).notNull().default("pending"),
     createdAt: createdAtColumn(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (t) => [
+    uniqueIndex("member_sealed_blobs_reservation_idx").on(t.originalReservationId),
     index("member_sealed_blobs_message_idx").on(t.messageId),
     index("member_sealed_blobs_purge_idx").on(t.deletedAt, t.createdAt),
     check("member_sealed_blobs_state_valid", sql`${t.state} in ('pending','ready')`),

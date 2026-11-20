@@ -1,0 +1,220 @@
+diff --git a/src/core/contacts/service.ts b/src/core/contacts/service.ts
+index da70b0bb..22f506da 100644
+--- a/src/core/contacts/service.ts
++++ b/src/core/contacts/service.ts
+@@ -456,6 +456,19 @@ export interface ContactReference {
+     duplicateId: string,
+     survivingId: string,
+   ) => Promise<{ state: unknown; undoable: boolean; blocker?: string }>;
++  /** Shared providers are invoked once, before any verification or inverse.
++   * Discover and lock the whole pair's financial graph, never one reference's
++   * canonical rows before another reference's resource/parent prefix. */
++  lockForUndo?: (tx: Tx, duplicateId: string, survivingId: string) => Promise<void>;
++  /** Verify the fully merged preimage now; return only its exact inverse.
++   * The closure stays in this transaction and is never public authority. */
++  prepareUndo?: (
++    tx: Tx,
++    before: unknown,
++    after: unknown,
++    duplicateId: string,
++    survivingId: string,
++  ) => Promise<() => Promise<void>>;
+   /** Restore `before` after verifying the table still matches `after`. */
+   restoreAfterUndo: (
+     tx: Tx,
+@@ -1117,15 +1130,7 @@ export const undoContactMerge = defineService({
+       );
+     }
+ 
+-    const { id: _survivorId, ...survivorValues } =
+-      contactSnapshotValues(survivorBefore);
+-    await ctx.tx
+-      .update(contacts)
+-      .set(survivorValues)
+-      .where(eq(contacts.id, survivorBefore.id));
+-    await ctx.tx.insert(contacts).values(contactSnapshotValues(duplicateBefore));
+-
+-    for (const state of storedReferenceStateSchema.parse(operation.referenceState)) {
++    const undoReferences = storedReferenceStateSchema.parse(operation.referenceState).map((state) => {
+       const reference = contactReferences().find((item) => item.table === state.table);
+       if (!reference) {
+         throw new ServiceError(
+@@ -1133,15 +1138,27 @@ export const undoContactMerge = defineService({
+           `${state.table} is not available, so its merge changes cannot be restored.`,
+         );
+       }
+-      await reference.restoreAfterUndo(
+-        ctx.tx,
+-        state.before,
+-        state.after,
+-        duplicateBefore.id,
+-        survivorBefore.id,
+-      );
++      return { state, reference };
++    });
++    const lockProviders = new Set(undoReferences.flatMap(({ reference }) => reference.lockForUndo ? [reference.lockForUndo] : []));
++    for (const lock of lockProviders) await lock(ctx.tx, duplicateBefore.id, survivorBefore.id);
++    const inverses: Array<() => Promise<void>> = [];
++    for (const { state, reference } of undoReferences) {
++      inverses.push(reference.prepareUndo
++        ? await reference.prepareUndo(ctx.tx, state.before, state.after, duplicateBefore.id, survivorBefore.id)
++        : () => reference.restoreAfterUndo(ctx.tx, state.before, state.after, duplicateBefore.id, survivorBefore.id));
+     }
+ 
++    const { id: _survivorId, ...survivorValues } =
++      contactSnapshotValues(survivorBefore);
++    await ctx.tx
++      .update(contacts)
++      .set(survivorValues)
++      .where(eq(contacts.id, survivorBefore.id));
++    await ctx.tx.insert(contacts).values(contactSnapshotValues(duplicateBefore));
++
++    for (const inverse of inverses) await inverse();
++
+     if (operation.candidateId) {
+       const pair = [survivorBefore.id, duplicateBefore.id].sort();
+       await ctx.tx
+diff --git a/src/modules/invoicing/invoice-service.ts b/src/modules/invoicing/invoice-service.ts
+index d7a50175..3acec1f9 100644
+--- a/src/modules/invoicing/invoice-service.ts
++++ b/src/modules/invoicing/invoice-service.ts
+@@ -29,7 +29,9 @@ import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
+ import { z } from "zod";
+ import {
+   registerContactReference,
++  type ContactReference,
+ } from "@/core/contacts/service";
++import { lockContactFinancialUndo } from "./contact-undo-financial-lock";
+ import { contacts } from "@/core/contacts/schema";
+ import {eraseBuyerMoneySource} from "./buyer-money-erasure";
+ import { registerContactPrivacySource } from "@/core/privacy/service";
+@@ -224,26 +226,21 @@ function registerPointer(
+   selectRows: (tx: Tx, ids: string[]) => Promise<PointerRow[] | null>,
+   repointRows: (tx: Tx, from: string, to: string) => Promise<unknown>,
+ ): void {
+-  registerContactReference({
+-    table,
+-    repoint: repointRows,
+-    captureForUndo: async (tx, duplicateId, survivingId) => {
+-      const state = await selectRows(tx, [duplicateId, survivingId]);
+-      return { state: state ?? [], undoable: state !== null, ...(state === null ? { blocker: "Original invoice financial dependencies exceed the bounded undo limit." } : {}) };
+-    },
+-    restoreAfterUndo: async (tx, beforeState, afterState, duplicateId, survivingId) => {
+-      const schema = z.array(z.object({ id: z.string().uuid(), contactId: z.string().uuid(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/).optional() }));
+-      const before = schema.parse(beforeState);
+-      const after = schema.parse(afterState);
+-      const current = await selectRows(tx, [duplicateId, survivingId]);
+-      const currentById = new Map(current?.map((row) => [row.id, row]) ?? []);
+-      if (current === null || current.length !== after.length || after.some((row) => currentById.get(row.id)?.contactId !== row.contactId || currentById.get(row.id)?.fingerprint !== row.fingerprint)) {
+-        throw new ServiceError(
+-          "conflict",
+-          `A ${table.replaceAll("_", " ")} record changed after this merge. Leave the merge in place or restore that record first.`,
+-        );
+-      }
+-      const movedIds = before.filter((row) => row.contactId === duplicateId).map((row) => row.id);
++  const prepareUndo: NonNullable<ContactReference["prepareUndo"]> = async (tx, beforeState, afterState, duplicateId, survivingId) => {
++    const schema = z.array(z.object({ id: z.string().uuid(), contactId: z.string().uuid(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/).optional() }));
++    const before = schema.parse(beforeState);
++    const after = schema.parse(afterState);
++    const current = await selectRows(tx, [duplicateId, survivingId]);
++    const currentById = new Map(current?.map((row) => [row.id, row]) ?? []);
++    if (current === null || current.length !== after.length || after.some((row) => currentById.get(row.id)?.contactId !== row.contactId || currentById.get(row.id)?.fingerprint !== row.fingerprint)) {
++      throw new ServiceError(
++        "conflict",
++        `A ${table.replaceAll("_", " ")} record changed after this merge. Leave the merge in place or restore that record first.`,
++      );
++    }
++    const movedIds = before.filter((row) => row.contactId === duplicateId).map((row) => row.id);
++
++    return async () => {
+       if (movedIds.length === 0) return;
+       if (table === "invoices") {
+         await tx.update(invoices).set({ contactId: duplicateId }).where(inArray(invoices.id, movedIds));
+@@ -255,6 +252,20 @@ function registerPointer(
+       } else {
+         await tx.update(paymentMethods).set({ contactId: duplicateId }).where(inArray(paymentMethods.id, movedIds));
+       }
++    };
++  };
++  registerContactReference({
++    table,
++    repoint: repointRows,
++    captureForUndo: async (tx, duplicateId, survivingId) => {
++      const state = await selectRows(tx, [duplicateId, survivingId]);
++      return { state: state ?? [], undoable: state !== null, ...(state === null ? { blocker: "Original invoice financial dependencies exceed the bounded undo limit." } : {}) };
++    },
++    lockForUndo: lockContactFinancialUndo,
++    prepareUndo,
++    restoreAfterUndo: async (tx, beforeState, afterState, duplicateId, survivingId) => {
++      await lockContactFinancialUndo(tx, duplicateId, survivingId);
++      await (await prepareUndo(tx, beforeState, afterState, duplicateId, survivingId))();
+     },
+   });
+ }
+diff --git a/src/modules/subscriptions/service.ts b/src/modules/subscriptions/service.ts
+index 3aa00f79..7f572be0 100644
+--- a/src/modules/subscriptions/service.ts
++++ b/src/modules/subscriptions/service.ts
+@@ -35,7 +35,8 @@ import {
+   type ServiceContext,
+   type Tx,
+ } from "@/core/service";
+-import { registerContactReference } from "@/core/contacts/service";
++import { registerContactReference, type ContactReference } from "@/core/contacts/service";
++import { lockContactFinancialUndo } from "@/modules/invoicing/contact-undo-financial-lock";
+ import { registerContactPrivacySource } from "@/core/privacy/service";
+ import { prepareBuyerAgreementErasure, minimizeBuyerAgreements } from "./buyer-agreement-erasure";
+ import { buyerAcceptedProration } from "./proration-buyer-export";
+@@ -1578,6 +1579,26 @@ export const cancelMySubscription = defineService({
+ 
+ // §4.1: a table with a `contact_id` repoints on merge, or the first merge
+ // orphans it. A subscription is a standing agreement, so it moves wholesale.
++const prepareSubscriptionUndo: NonNullable<ContactReference["prepareUndo"]> = async (tx, before, after, duplicateId, survivingId) => {
++    const original = await subscriptionOriginalEvidence(tx, [duplicateId, survivingId]);
++    const modern = !Array.isArray(before) ? merchantSubscriptionUndo.parse(before) : null;
++    if (modern) {
++      const expected = merchantSubscriptionUndo.parse(after);
++      if (original.overflow || JSON.stringify(original.evidence) !== JSON.stringify(expected.originalEvidence)) throw new ServiceError("conflict", "Original subscription scope or observed money changed after the merge. Reconcile it before separating ownership.");
++    } else if (original.overflow || original.evidence.length) throw new ServiceError("conflict", "This historical merge did not record the new original subscription evidence. Restore the pre-upgrade snapshot to separate it safely.");
++    const ids = (modern?.movedIds ?? (Array.isArray(before) ? before : [])).filter(
++      (each): each is string => typeof each === "string",
++    );
++
++    return async () => {
++      if (ids.length === 0) return;
++      await tx
++        .update(subscriptions)
++        .set({ contactId: duplicateId })
++        .where(inArray(subscriptions.id, ids));
++    };
++};
++
+ registerContactReference({
+   table: "subscriptions",
+   repoint: async (tx, duplicateId, survivingId) => {
+@@ -1598,21 +1619,11 @@ registerContactReference({
+     const movedIds = moved.map(each => each.id);
+     return { state: original.evidence.length ? { movedIds, originalEvidence: original.evidence } : movedIds, undoable: true };
+   },
++  lockForUndo: lockContactFinancialUndo,
++  prepareUndo: prepareSubscriptionUndo,
+   restoreAfterUndo: async (tx, before, after, duplicateId, survivingId) => {
+-    const original = await subscriptionOriginalEvidence(tx, [duplicateId, survivingId]);
+-    const modern = !Array.isArray(before) ? merchantSubscriptionUndo.parse(before) : null;
+-    if (modern) {
+-      const expected = merchantSubscriptionUndo.parse(after);
+-      if (original.overflow || JSON.stringify(original.evidence) !== JSON.stringify(expected.originalEvidence)) throw new ServiceError("conflict", "Original subscription scope or observed money changed after the merge. Reconcile it before separating ownership.");
+-    } else if (original.overflow || original.evidence.length) throw new ServiceError("conflict", "This historical merge did not record the new original subscription evidence. Restore the pre-upgrade snapshot to separate it safely.");
+-    const ids = (modern?.movedIds ?? (Array.isArray(before) ? before : [])).filter(
+-      (each): each is string => typeof each === "string",
+-    );
+-    if (ids.length === 0) return;
+-    await tx
+-      .update(subscriptions)
+-      .set({ contactId: duplicateId })
+-      .where(inArray(subscriptions.id, ids));
++    await lockContactFinancialUndo(tx, duplicateId, survivingId);
++    await (await prepareSubscriptionUndo(tx, before, after, duplicateId, survivingId))();
+   },
+ });
+ 

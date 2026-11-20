@@ -44,7 +44,7 @@ import {
 } from "@/modules/catalog/service";
 import { createPayment, createRefund, getInvoice, settlePayment, settleRefund, startRefund } from "@/modules/invoicing/invoice-service";
 import { onReturnRefundSucceeded } from "@/modules/catalog/fulfillment";
-import {processPaymentProviderEvents} from "@/modules/invoicing/payment-provider-service";
+import {processPaymentProviderEvents,retainPaymentProviderEvidence} from "@/modules/invoicing/payment-provider-service";
 import {addTaxRate,createTaxZone,setTaxRegistration} from "@/modules/invoicing/tax-service";
 import {adjustCustomerBalance,applyCustomerBalance} from "@/modules/invoicing/advanced-money-service";
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
@@ -76,7 +76,14 @@ describe.runIf(hasDatabase)("catalog fulfillment", { timeout: 40_000 }, () => {
       await db().update(memberSettings).set({payoutModel:"seller_merchant",payoutAdapter:"stripe_connect"}).where(eq(memberSettings.id,1));
       await db().insert(memberPayoutAccounts).values({userId:OWNER.userId,adapter:"stripe_connect",status:"ready",externalAccountId:"acct_originalseller",chargesReady:true,merchantName:"Original Seller",merchantSupport:{email:"support@seller.example",phone:null,url:null,address:null}});
       const manual=paymentAdapters.createManualPayments();
-      vi.spyOn(paymentAdapters,"paymentAdapter").mockReturnValue({...manual,id:"stripe",capabilities:()=>({...manual.capabilities(),sellerMerchantCharges:true})});
+      vi.spyOn(paymentAdapters,"paymentAdapter").mockReturnValue({...manual,id:"stripe",capabilities:()=>({...manual.capabilities(),sellerMerchantCharges:true}),platformAccountIdentity:async()=>({providerPlatformAccountId:"acct_originalPlatform"})});
+      const {configureMerchantCollection}=await import("@/modules/invoicing/merchant-collection");
+      await configureMerchantCollection.call({collectionKind:"direct"},OWNER);
+      const {merchantTaxZoneConfiguration,saveMyMerchantTaxProfile}=await import("@/modules/invoicing/merchant-tax-profiles");
+      const merchantZone=await createTaxZone.call({name:"Original merchant jurisdiction",country:"CA",regions:["BC"],basis:"destination",pricesIncludeTax:false,roundingScope:"line",roundingMode:"half_up"},OWNER);
+      const merchantRate=await addTaxRate.call({zoneId:merchantZone.id,name:"Fictional zero-rate review",jurisdiction:"Original merchant fixture",ratePpm:0,appliesToShipping:true},OWNER);
+      const merchantConfiguration=await merchantTaxZoneConfiguration.call({zoneId:merchantZone.id},OWNER);
+      await saveMyMerchantTaxProfile.call({expectedVersion:0,idempotencyKey:crypto.randomUUID(),acceptPolicy:true,liability:"seller",origin:{country:"CA",region:"BC"},collectionStatus:"registered",registrations:[{zoneId:merchantZone.id,number:"ORIGINAL-SELLER-REVIEW",rateIds:[merchantRate.id],configurationDigest:merchantConfiguration.configurationDigest,status:"active"}]},OWNER);
     }
     const studio = await createLocationService.call(
       { name: "Studio", slug: "ful-studio", city: "Courtenay", country: "CA" },
@@ -101,13 +108,16 @@ describe.runIf(hasDatabase)("catalog fulfillment", { timeout: 40_000 }, () => {
       await setTaxRegistration.call({zoneId:zone.id,number:"RETURN-GST",status:"active"},OWNER);
       await addTaxRate.call({zoneId:zone.id,name:"GST",jurisdiction:"Canada",ratePpm:50_000,appliesToShipping:false},OWNER);
     }
+    const merchantQuote=directSeller?await (await import("@/modules/catalog/merchant-checkout-quote")).quoteMerchantCheckout.call({cartId:basket.cart.id,shippingAddress:{country:"CA",region:"BC",city:"Courtenay"},locationId:studio.id},OWNER):null;
+    if(directSeller&&!merchantQuote)throw Error("The actual original merchant quote is required");
     const placed = await checkoutCart.call(
       {
         cartId: basket.cart.id,
         contactId: contact.id,
         idempotencyKey: `ful-${crypto.randomUUID()}`,
         acceptedTerms: true,
-        shippingAddress: { country: "CA", city: "Courtenay" },
+        shippingAddress: { country: "CA", city: "Courtenay", region: "BC" },
+        ...(merchantQuote?{taxQuoteDigest:merchantQuote.taxQuoteDigest,commercialQuoteDigest:merchantQuote.commercialQuoteDigest}:{}),
       },
       OWNER,
     );
@@ -120,13 +130,18 @@ describe.runIf(hasDatabase)("catalog fulfillment", { timeout: 40_000 }, () => {
       {
         invoiceId: placed.order.invoiceId!,
         provider: directSeller?"stripe":"manual",
-        method: directSeller?"provider_schedule":"bank_transfer",
+        method: directSeller?"saved_method":"bank_transfer",
         amountMinor: split ? 1_000 : placed.order.totalMinor,
         idempotencyKey: `pay-${placed.order.id}`,
       },
       directSeller?{kind:"system"}:OWNER,
     );
-    await settlePayment.call({ id: payment.id, providerRef: directSeller?`pi_${payment.id}`:`manual:${placed.order.id}` }, directSeller?{kind:"system"}:OWNER);
+    if(directSeller){
+      const receivedAt=new Date().toISOString(),bodySha256="a".repeat(64);
+      const events=[{id:`evt_${payment.id}`,kind:"payment_succeeded" as const,providerRef:`pi_${payment.id.replaceAll("-","")}`,paymentAttemptId:payment.id,amountMinor:payment.amountMinor,currency:"CAD",occurredAt:receivedAt,providerPlatformAccountId:"acct_originalPlatform",providerAccountId:"acct_originalseller",customerChargeVerified:true,merchantRouteVerified:true,providerChargeRef:`ch_${payment.id}`,applicationFeeRef:`fee_${payment.id}`}];
+      const retained=await retainPaymentProviderEvidence("stripe",events,{rawBodySha256:bodySha256,receivedAt});
+      await processPaymentProviderEvents.call({provider:"stripe",bodySha256,receivedAt,events:retained},{kind:"system"});
+    }else await settlePayment.call({ id: payment.id, providerRef: `manual:${placed.order.id}` }, OWNER);
     }
     if (split) {
       const second = await createPayment.call({invoiceId:placed.order.invoiceId!,provider:"manual",method:"cash",amountMinor:placed.order.totalMinor-1_000,idempotencyKey:`pay-rest-${placed.order.id}`},OWNER);
@@ -146,12 +161,14 @@ describe.runIf(hasDatabase)("catalog fulfillment", { timeout: 40_000 }, () => {
     const original=await paidPhysical(split,false,false,directSeller);
     const {payments}=await import("@/modules/invoicing/schema");
     const rows=await db().select().from(payments).where(eq(payments.invoiceId,original.paid.order.invoiceId!));
-    for(const payment of rows) await db().update(payments).set({provider:"stripe",providerRef:`pi_${payment.id}`}).where(eq(payments.id,payment.id));
+    if(!directSeller)for(const payment of rows) await db().update(payments).set({provider:"stripe",providerRef:`pi_${payment.id}`}).where(eq(payments.id,payment.id));
     const received=await receivedReturn(original.paid);
     const manual=paymentAdapters.createManualPayments();
     const refund=vi.fn<paymentAdapters.PaymentAdapter["refund"]>();
-    vi.spyOn(paymentAdapters,"paymentAdapter").mockReturnValue({...manual,id:"stripe",refund});
-    return {...original,received,refund};
+    const merchantRefund=vi.fn<NonNullable<paymentAdapters.PaymentAdapter["createMerchantRefund"]>>();
+    const recoverRefund=vi.fn<NonNullable<paymentAdapters.PaymentAdapter["recoverMerchantRefund"]>>();
+    vi.spyOn(paymentAdapters,"paymentAdapter").mockReturnValue({...manual,id:"stripe",refund,...(directSeller?{createMerchantRefund:merchantRefund,recoverMerchantRefund:recoverRefund}:{})});
+    return {...original,received,refund,merchantRefund,recoverRefund};
   }
 
   async function mixedReturn(){
@@ -359,28 +376,42 @@ describe.runIf(hasDatabase)("catalog fulfillment", { timeout: 40_000 }, () => {
   });
 
   it("reconciles normalized authenticated feedback only on the original seller account",async()=>{
-    const {received,paid,payment,refund}=await providerReturn(false,true);
+    const {received,paid,payment,merchantRefund,recoverRefund}=await providerReturn(false,true);
     const {invoiceMerchantAllocations,paymentMerchantRoutes}=await import("@/modules/invoicing/schema");
+    const {merchantPaymentRoutes,invoiceMerchantCollections}=await import("@/modules/invoicing/merchant-collection-schema");
     // Checkout freezes the original seller and exact merchandise fee before
     // issue; refund reconciliation must preserve this complete evidence.
     expect(await db().select().from(invoiceMerchantAllocations).where(eq(invoiceMerchantAllocations.invoiceId,paid.order.invoiceId!))).toEqual([expect.objectContaining({sellerUserId:OWNER.userId,revenueMinor:4000,shippingMinor:500,totalMinor:4500,feeMinor:400})]);
-    expect(await db().select().from(paymentMerchantRoutes).where(eq(paymentMerchantRoutes.paymentId,payment.id))).toEqual([expect.objectContaining({providerAccountId:"acct_originalseller",applicationFeeMinor:400})]);
-    refund.mockImplementation(async request=>{
+    expect(await db().select({route:merchantPaymentRoutes,collection:invoiceMerchantCollections}).from(merchantPaymentRoutes).innerJoin(invoiceMerchantCollections,eq(invoiceMerchantCollections.allocationId,merchantPaymentRoutes.allocationId)).where(eq(merchantPaymentRoutes.paymentId,payment.id))).toMatchObject([{route:{applicationFeeMinor:400},collection:{collectionKind:"direct",providerPlatformAccountId:"acct_originalPlatform",chargeAccountId:"acct_originalseller",recipientAccountId:"acct_originalseller",settlementMerchantAccountId:"acct_originalseller"}}]);
+    expect(await db().select().from(paymentMerchantRoutes).where(eq(paymentMerchantRoutes.paymentId,payment.id))).toEqual([]);
+    merchantRefund.mockImplementation(async request=>{
       expect(request.providerAccountId).toBe("acct_originalseller");
-      expect(request.refundApplicationFee).toBe(true);
-      return {providerRef:"re_originalseller",providerAccountId:"acct_originalseller",status:"pending"};
+      expect(request).toMatchObject({refundApplicationFee:false,reverseTransfer:false});
+      const actual={providerRef:"re_originalseller",paymentProviderRef:request.paymentProviderRef,providerPlatformAccountId:"acct_originalPlatform",providerAccountId:"acct_originalseller",providerApiVersion:"2026-02-25.clover" as const,amountMinor:request.amountMinor,currency:request.currency,status:"pending" as const,providerStatus:"pending" as const,bindingVerified:true};
+      await request.onRefundResourceAcknowledged(actual.providerRef);
+      await request.onRefundObserved(actual);
+      return actual;
     });
     const input={id:received.return.id,idempotencyKey:"original-seller-return"};
     expect((await submitReturnProviderRefund.call(input,OWNER)).return.status).toBe("received");
     const at=new Date().toISOString();
-    const event={id:"evt_originalseller_return",kind:"refund_succeeded" as const,providerRef:"re_originalseller",paymentProviderRef:`pi_${payment.id}`,amountMinor:4000,currency:"CAD",occurredAt:at,providerAccountId:"acct_originalseller"};
-    const deliver=(providerAccountId:string)=>processPaymentProviderEvents.call({provider:"stripe",bodySha256:"a".repeat(64),receivedAt:at,events:[{...event,providerAccountId}]},{kind:"system"});
+    const event={id:"evt_originalseller_return",kind:"refund_succeeded" as const,providerRef:"re_originalseller",paymentProviderRef:`pi_${payment.id.replaceAll("-","")}`,amountMinor:4000,currency:"CAD",occurredAt:at,providerAccountId:"acct_originalseller",providerPlatformAccountId:"acct_originalPlatform",providerStatus:"succeeded" as const,observedProviderApiVersion:"2026-02-25.clover"};
+    const deliver=async(providerAccountId:string)=>{
+      const events=await retainPaymentProviderEvidence("stripe",[{...event,providerAccountId}],{rawBodySha256:"a".repeat(64),receivedAt:at});
+      return processPaymentProviderEvents.call({provider:"stripe",bodySha256:"a".repeat(64),receivedAt:at,events},{kind:"system"});
+    };
     await expect(deliver("acct_other")).rejects.toMatchObject({code:"conflict"});
     expect((await getInvoice.call({id:paid.order.invoiceId!},OWNER)).invoice.refundedMinor).toBe(0);
     await deliver("acct_originalseller");
+    recoverRefund.mockImplementation(async request=>{
+      const actual={providerRef:"re_originalseller",paymentProviderRef:request.paymentProviderRef,providerPlatformAccountId:"acct_originalPlatform",providerAccountId:"acct_originalseller",providerApiVersion:"2026-02-25.clover" as const,amountMinor:request.amountMinor,currency:request.currency,status:"succeeded" as const,providerStatus:"succeeded" as const,bindingVerified:true};
+      await request.onRefundObserved(actual);
+      return {state:"observed" as const,evidence:actual};
+    });
     await onReturnRefundSucceeded({invoiceId:paid.order.invoiceId!});
     expect((await submitReturnProviderRefund.call(input,OWNER)).return.status).toBe("refunded");
-    expect(refund).toHaveBeenCalledTimes(1);
+    expect(merchantRefund).toHaveBeenCalledTimes(1);
+    expect(recoverRefund).toHaveBeenCalledTimes(1);
   });
 
   it("does not close or retry a refused provider return",async()=>{

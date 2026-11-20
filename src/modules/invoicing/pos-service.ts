@@ -3,6 +3,9 @@
 // In-person collection through the POS adapter family (C5.24).
 // Cash and Terminal takes become ordinary Payment rows on the invoice.
 
+import { lockControlledOrdinaryCollectionParent } from "./controlled-ordinary-collection-parent";
+import { requireControlledOrdinaryCollectionAuthority } from "./controlled-ordinary-collection-authority";
+import { invoiceOutstanding } from "./invoice-balance";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { pointOfSaleAdapter, pointOfSaleAdapters, type PointOfSalePayment } from "@/adapters/point-of-sale";
@@ -101,12 +104,14 @@ export const claimInPersonPayment = defineService({
     payment: paymentRow.nullable(),
   }),
   handler: async (input, ctx) => {
+    const controlled=await lockControlledOrdinaryCollectionParent(ctx.tx,input.invoiceId);
+    if(input.method==="cash")await requireControlledOrdinaryCollectionAuthority(ctx,controlled,{provider:"manual",method:input.method});
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.invoiceId)).limit(1);
     if (!invoice || !invoice.number) throw new ServiceError("not_found", "That issued invoice is not here.");
     const locations = await ctx.callAsSystem(listLocations, { includeHidden: true });
     const location = locations.find((row) => row.id === input.locationId);
     if (!location) throw new ServiceError("not_found", "That location is not here.");
-    const amountMinor = input.amountMinor ?? invoice.totalMinor - invoice.paidMinor;
+    const amountMinor = input.amountMinor ?? invoiceOutstanding(invoice);
     if (amountMinor <= 0) throw new ServiceError("validation", "That invoice has no outstanding balance.");
     const claimed = { invoiceId: invoice.id, currency: invoice.currency, locationId: location.id, locationName: location.name, amountMinor };
     // Cash needs no external party, so its payment is written once, settled.

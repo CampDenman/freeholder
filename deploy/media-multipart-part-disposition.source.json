@@ -1,0 +1,32 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_multipart_part_disposition.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Actual original local part-response disposition controls pass; no remote proof or provider acceptance is claimed",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "43a87ceee983258c99622001a6b75e0790ddbde7173b85c544364e587bf9bf1a" },
+    { "path": "tests/core/media-multipart-part-disposition.test.ts", "sha256": "18a887501dca5bd0b852a6778e8ae355da8c00e06bd9ad6bfbdc2d0a0ecfe471" }
+  ],
+  "controls": {
+    "final": { "passed": 6, "failed": 0, "durationSeconds": 0.721 },
+    "coverage": ["assertion outside its actual local invocation refused", "exact call/token identity required", "returned URL cannot acquire withheld disposition", "success and failure both expire authority", "concurrent sibling and nested callers cannot borrow ownership", "detached asynchronous work loses authority after the owning invocation closes"],
+    "runtimeChanges": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "43a87ceee983258c99622001a6b75e0790ddbde7173b85c544364e587bf9bf1a",
+      "beforeSha256": "a20dc49a75effcdf92e0d02ed4f51acaabfda387a0538b5cd2ef399424c2f566",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  original body, ACK, FIN, complete physical absence or executor stop.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  original body, ACK, FIN, complete physical absence or executor stop.\n  Part-disposition qualification2026-11-16: all6 actual process-local controls\n  pass. Only the exact active invocation/token can assert withheld authority;\n  returned URLs cannot acquire it; success, failure and detached work expire it;\n  concurrent siblings and nested callers cannot borrow it. Focused lint passes.\n  See `deploy/media-multipart-part-disposition.source.json`. No remote proof or\n  provider acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

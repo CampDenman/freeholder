@@ -17,7 +17,9 @@ import { listLocations } from "@/core/locations/service";
 import { checkCoverage } from "@/core/locations/coverage";
 import { defineService, permits, ServiceError, type Tx } from "@/core/service";
 import { QUANTITY_SCALE } from "@/modules/invoicing/money";
-import { payments } from "@/modules/invoicing/schema";
+import { payments,taxCategories } from "@/modules/invoicing/schema";
+import {captureOrderCommercialTerms} from "./order-commercial";
+import {merchantTaxAddress} from "@/modules/invoicing/merchant-tax-contract";
 import {
   createDraftInvoice,
   getInvoice,
@@ -143,6 +145,7 @@ export const checkoutCart = defineService({
   summary: "Turn an open cart into an order and an invoice.",
   kind: "mutation",
   permission: "public",
+  auditInputFields:["cartId","contactId","acceptedTerms","termsVersion","termsHash","shippingMethodId","locationId","applyBalance"],
   input: z.object({
     cartId: id,
     contactId: id,
@@ -151,6 +154,9 @@ export const checkoutCart = defineService({
     termsVersion: z.string().trim().min(1).max(100).optional(),
     termsHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     shippingAddress: address.optional(),
+    taxDestination:merchantTaxAddress.optional(),
+    taxQuoteDigest:z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    commercialQuoteDigest:z.string().regex(/^[a-f0-9]{64}$/).optional(),
     shippingMethodId: id.optional(),
     locationId: id.optional(),
     couponCode: z
@@ -198,11 +204,14 @@ export const checkoutCart = defineService({
     // Keep original ownership and shipping terms stable from admission until
     // the one invoice and its seller portions commit. Later catalog edits
     // cannot become the owner of an already purchased line.
-    const originalVariants = await ctx.tx.select({ variantId: productVariants.id, sellerUserId: products.sellerUserId, requiresShipping: productVariants.requiresShipping })
+    const originalVariants = await ctx.tx.select({ variantId: productVariants.id, sellerUserId: products.sellerUserId, taxCategoryId:products.taxCategoryId, requiresShipping: productVariants.requiresShipping })
       .from(productVariants).innerJoin(products, eq(products.id, productVariants.productId))
       .where(inArray(productVariants.id, basket.lines.map(line => line.variantId)))
       .orderBy(productVariants.id).for("share");
     if (originalVariants.length !== new Set(basket.lines.map(line => line.variantId)).size || basket.lines.some(line => originalVariants.find(variant => variant.variantId === line.variantId)?.requiresShipping !== line.requiresShipping)) throw new ServiceError("conflict", "The original checkout items changed. Refresh the cart before purchasing.");
+    const categoryIds=[...new Set(originalVariants.flatMap(variant=>variant.taxCategoryId?[variant.taxCategoryId]:[]))];
+    const categories=categoryIds.length?await ctx.tx.select({id:taxCategories.id,code:taxCategories.code}).from(taxCategories).where(inArray(taxCategories.id,categoryIds)).orderBy(taxCategories.id).for("share"):[];
+    const categoryFor=(variantId:string)=>{const original=originalVariants.find(row=>row.variantId===variantId)!;if(!original.taxCategoryId)return "standard";const category=categories.find(row=>row.id===original.taxCategoryId);if(!category)throw new ServiceError("conflict","The original product tax category needs review.");return category.code;};
     // §44.8: member listings sell only when their sellers can be paid.
     await assertSellable(ctx, basket.lines.map((line) => line.variantId));
     if (!basket.allPriced) {
@@ -318,6 +327,7 @@ export const checkoutCart = defineService({
       .insert(orders)
       .values({
         contactId: input.contactId,
+        commercialEpoch:1,
         cartId: basket.cart.id,
         currency: basket.cart.currency,
         subtotalMinor: basket.subtotalMinor,
@@ -334,14 +344,14 @@ export const checkoutCart = defineService({
       .returning();
 
     const insertedOrderLines: Array<typeof orderItems.$inferSelect> = [];
-    for (const line of basket.lines) {
+    for (const [position,line] of basket.lines.entries()) {
       const [inserted] = await ctx.tx.insert(orderItems).values({
         orderId: order!.id,
         variantId: line.variantId,
         quantity: line.quantity,
         unitAmountMinor: line.unitAmountMinor!,
         lineTotalMinor: line.lineTotalMinor!,
-        snapshot: { sku: line.sku, productName: line.productName, requiresShipping: line.requiresShipping, sellerUserId: originalVariants.find(variant => variant.variantId === line.variantId)!.sellerUserId },
+        snapshot: {linePosition:position,invoiceDiscountMinor:discountShares[position]??0,taxCategoryCode:categoryFor(line.variantId), sku: line.sku, productName: line.productName, requiresShipping: line.requiresShipping, sellerUserId: originalVariants.find(variant => variant.variantId === line.variantId)!.sellerUserId },
         // Provenance survives checkout, or it was never provenance: the
         // owner has to know which gallery and which frame an order line is
         // for long after the cart is gone.
@@ -351,6 +361,8 @@ export const checkoutCart = defineService({
       insertedOrderLines.push(inserted!);
     }
 
+    const declaredTaxDestination=needsShipping&&input.shippingAddress?merchantTaxAddress.parse(input.shippingAddress):input.taxDestination;
+    const commercial=await ctx.callAsSystem(captureOrderCommercialTerms,{orderId:order!.id,destination:declaredTaxDestination,quoteDigest:input.taxQuoteDigest,commercialDigest:input.commercialQuoteDigest});
     const locations = await ctx.callAsSystem(listLocations, {});
     const origin = locations.find((row) => row.isPrimary) ?? locations[0];
     const invoice = await ctx.callAsSystem(createDraftInvoice, {
@@ -368,10 +380,12 @@ export const checkoutCart = defineService({
         unitAmountMinor: line.unitAmountMinor!,
         discountMinor: discountShares[index] ?? 0,
         requiresShipping: line.requiresShipping,
+        taxCategoryCode:categoryFor(line.variantId),
         snapshot: { sku: line.sku },
       })),
-      tax:
-        needsShipping && input.shippingAddress && origin
+      tax:commercial.merchantTax
+        ? {mode:"merchant" as const,destination:declaredTaxDestination!,quoteDigest:input.taxQuoteDigest}
+        : needsShipping && input.shippingAddress && origin
           ? {
               mode: "calculate" as const,
               origin: {

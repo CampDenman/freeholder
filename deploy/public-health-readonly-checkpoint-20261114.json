@@ -1,0 +1,48 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C3.28",
+    "C11.17"
+  ],
+  "status": "PUBLIC_AVAILABILITY_ONLY_NO_LAUNCH_ACCEPTANCE",
+  "checkedAtUtc": "2026-11-14T16:12:00.193588+00:00",
+  "evidence": {
+    "path": "/tmp/freeholder-public-health-readonly-v1-20261114.json",
+    "sha256": "46f1804b258ff0e802be01e3d678d88e71f5bbc75c1c30d8ef53e8fabead81cc"
+  },
+  "unauthenticatedPublicResponses": [
+    {
+      "url": "https://freeholder.ai/api/health",
+      "method": "GET",
+      "ownerClaimOrAuthUsed": false,
+      "status": 200,
+      "bytesRead": 418,
+      "publicHealthFields": {
+        "ok": true,
+        "version": "0.2.0-beta.3"
+      }
+    },
+    {
+      "url": "https://demo.freeholder.ai/api/health",
+      "method": "GET",
+      "ownerClaimOrAuthUsed": false,
+      "status": 200,
+      "bytesRead": 418,
+      "publicHealthFields": {
+        "ok": true,
+        "version": "0.2.0-beta.6"
+      }
+    },
+    {
+      "url": "https://freeholder.ai/",
+      "method": "GET",
+      "ownerClaimOrAuthUsed": false,
+      "status": 200
+    }
+  ],
+  "noRedirectOrOwnerClaimFollowed": true,
+  "noOwnerLoginOrRestrictedKeyOrPublishRefusalAcceptance": true,
+  "noDeploymentPerformed": true,
+  "sourceCandidateNotStableSigned": true,
+  "anyCGateClosed": false
+}

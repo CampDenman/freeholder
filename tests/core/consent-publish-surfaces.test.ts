@@ -389,9 +389,11 @@ describe.runIf(hasDatabase)("consent-gated publish surfaces (C8.16)", { timeout:
   it("keeps a packaged gallery offline while any of its items are unpublished", async () => {
     const made = await publishedCaseStudy();
     const standalone = await image("Standalone.jpg");
-    const { storage } = await import("@/adapters/storage");
-    await storage().put(made.before.storageKey, new TextEncoder().encode("BEFORE"), "image/jpeg");
-    await storage().put(standalone.storageKey, new TextEncoder().encode("SOLO"), "image/jpeg");
+    // Fixture bytes only, so they go through the sanctioned low-level
+    // provider rather than the managed store's guarded put.
+    const { fixtureStorage } = await import("../helpers/raw-storage");
+    await fixtureStorage().put(made.before.storageKey, new TextEncoder().encode("BEFORE"), "image/jpeg");
+    await fixtureStorage().put(standalone.storageKey, new TextEncoder().encode("SOLO"), "image/jpeg");
 
     const gallery = await createGallery.call(
       {

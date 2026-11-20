@@ -1,0 +1,212 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C12.38",
+    "C1.12",
+    "C11.08",
+    "C1.08",
+    "C9.33"
+  ],
+  "status": "CURRENT_SOURCE_SCHEMA_SDK_QUALIFIED_ORIGINAL_BUSINESS_CASE_STILL_FAILS",
+  "sourceHead": "8df9e847737dd1fdbd3990e28e00bf6d0e6dced5",
+  "source": {
+    "actualPassed": 1497,
+    "completeFiles": 240,
+    "explicitDatabaseSkipped": 524,
+    "currentSqlContractsRerun": true,
+    "typesAndLintUnchangedTsQualification": {
+      "path": "/tmp/freeholder-current-full86-causal-media161-source-v95-20261114-result.json",
+      "bytes": 45217,
+      "sha256": "d1d6033956273f5906c45c297c1613b1a1defd06e8c420ed03400dafb79b70eb",
+      "passed": true
+    }
+  },
+  "database": {
+    "name": "freeholder_current_full86_causal_media161_normal_v55_test_20261114",
+    "ordinaryMigrations": 86,
+    "modelTargets": 161,
+    "existingPhysicalPublicTables": 596,
+    "guards": 365,
+    "completeFunctionBodies": 415,
+    "queries": 4142,
+    "expressionPlans": 2495,
+    "model161IsExistingMediaUploadsNotNewTable": true,
+    "failedV52Preserved": true,
+    "noFailureDatabaseResetOrReuse": true
+  },
+  "sdk": {
+    "actualTests": 8,
+    "generatedUnchanged": true,
+    "allElevenPrivateNamesHidden": true
+  },
+  "installation": {
+    "threeReadinessPredicatesTrue": true,
+    "missingPaymentKeepsUnknownPending": true,
+    "all596WholeRowsJournalAndSequenceUnchanged": true,
+    "bothMediaCapabilitiesAbsent": true,
+    "noBankMoneyProviderAuthority": true
+  },
+  "originalWholeFeeNative": {
+    "reference": "6e87db53:tests/modules/controlled-atomic-refund-residual84.test.ts",
+    "wholeFileUnchanged": true,
+    "v6Passed": false,
+    "v6Seconds": 157.58851288200822,
+    "firstFailure": "lockControlledAtomicRefundTarget current target unavailable after genuine tiny whole return and current controlled bank reinspections",
+    "progressInsideFailedCaseOnly": {
+      "invoicePaidMinor": 4200,
+      "invoiceRefundedMinor": 1,
+      "targetPayments": 2,
+      "originalCashRecoveryOwners": 1,
+      "originalCashRecoveryOperations": 4,
+      "originalCashRecoveryFacts": 28,
+      "originalCashRecoveryClosures": 1,
+      "feeReturnOperations": 0
+    },
+    "failureDatabaseRetainedAndDrained": true,
+    "negativeAndAuxiliaryAndCausalNativesUnrun": true
+  },
+  "actualReadOnlyDiagnosis": {
+    "all596WholeRowsJournalAndSequenceUnchanged": true,
+    "bothTargetResourcesKnownAndNotPending": true,
+    "atomicSqlTargetReturnsNoRows": true,
+    "genericRefundCurrentReceiptStaleAfterActualCaptures": true,
+    "genericResolverRefusalRetained": true,
+    "newerGenuineLineagedControlledBankAvailable": true,
+    "exactTinyRefundSucceededAmountMinor": 1,
+    "bankPhysicalWitnessCounts": [
+      384,
+      422
+    ],
+    "nextRepair": "Finite atomic-boundary consumption of actual latest controlled bank/refund/caller proof; no generic resolver relaxation, capture omission, old receipt rewriting or blind retry cycle."
+  },
+  "sourceCorrections": [
+    {
+      "path": "deploy/current-media-causal-lint-root-continuation.manifest.json",
+      "sha256": "1f0ac6240ab83570596c1bfd4bc6bd137742ea3f6446a941dd4b334f0c8b0cee"
+    },
+    {
+      "path": "deploy/media-multipart-artifact-alias-root-continuation.manifest.json",
+      "sha256": "35ca934b0494770fc8cd89f00353b4c0d0a1976ef500c03d14de765245632824"
+    },
+    {
+      "path": "deploy/atomic-auxiliary-fee-route-alias85.manifest.json",
+      "sha256": "b86f3c70439314410a9519732f84ed84d595ac75468e916442a658df9c41f1da"
+    }
+  ],
+  "evidence": {
+    "source": {
+      "path": "/tmp/freeholder-current-full86-causal-media161-source-v97-20261114-result.json",
+      "bytes": 45380,
+      "sha256": "b21c753e8d20b6891ebdc8d31ecefde69d2040bcd58c8dec44c9970f229ba065",
+      "passed": true
+    },
+    "typesAndLint": {
+      "path": "/tmp/freeholder-current-full86-causal-media161-source-v95-20261114-result.json",
+      "bytes": 45217,
+      "sha256": "d1d6033956273f5906c45c297c1613b1a1defd06e8c420ed03400dafb79b70eb",
+      "passed": true
+    },
+    "normal": {
+      "path": "/tmp/freeholder-current-full86-normal-v55-result-20261113.json",
+      "bytes": 11811,
+      "sha256": "1eb533c33a89886b2766516ecc80182704d941f944bd4186fac9cf9927cdd8cf",
+      "passed": true
+    },
+    "normalManifest": {
+      "path": "/tmp/freeholder-current-full86-normal-v55-manifest-20261113.json",
+      "bytes": 22350,
+      "sha256": "d72af7284868ef8b7f575390114477d2b418f816af7936e9bff0b70b0890283a",
+      "passed": null
+    },
+    "strict": {
+      "path": "/tmp/freeholder-current-full86-parity161-v67-result-20261113.json",
+      "bytes": 2253580,
+      "sha256": "080f3ae69903d2948d064838c69779f9907789fefe4d32edf5b79a08586cb8bc",
+      "passed": true
+    },
+    "strictManifest": {
+      "path": "/tmp/freeholder-current-full86-parity161-v67-manifest-20261113.json",
+      "bytes": 479567,
+      "sha256": "a5522305bebb1cbe86668deb687298aadb298285c1ce10a3a8bbe21540d0f198",
+      "passed": null
+    },
+    "strictDrain": {
+      "path": "/tmp/freeholder-current-full86-parity161-v67-drain-20261113.json",
+      "bytes": 484,
+      "sha256": "b85ead94ca3bdd636577a55e24f7bf3f67abdf98e79028871e6271bd51413c95",
+      "passed": true
+    },
+    "sdk": {
+      "path": "/tmp/freeholder-current-full86-sdk-verification-v34-20261114-result.json",
+      "bytes": 972,
+      "sha256": "bb3ebf8c8db35adec1ca5a2a3947d52f42e1425db138d0ae7c62b83fc0a1bbbb",
+      "passed": true
+    },
+    "readiness": {
+      "path": "/tmp/freeholder-current-full86-auxiliary-installation-readiness-v2-20261114-result.json",
+      "bytes": 1015,
+      "sha256": "27dec54c37270a884a82245227d0c08b5a1d2aae9bf54a2888d103b7b59adf20",
+      "passed": true
+    },
+    "originalPositiveFailureV5": {
+      "path": "/tmp/freeholder-current-full86-fee161-residual-native-v5-20261114-result.json",
+      "bytes": 717,
+      "sha256": "038fee5a8907d2e727282827b806cc7cabd0bb8537a47c82f1af2192a21342b6",
+      "passed": false
+    },
+    "originalPositiveFailureV6": {
+      "path": "/tmp/freeholder-current-full86-fee161-residual-native-v6-20261114-result.json",
+      "bytes": 718,
+      "sha256": "6d6b6f2e2c37a2bab1e138dffad3572bb0f1a12f40c8a9cf6354a4d08f885b9f",
+      "passed": false
+    },
+    "originalPositiveV6After": {
+      "path": "/tmp/freeholder-current-full86-fee161-residual-native-v6-20261114-after.json",
+      "bytes": 126823,
+      "sha256": "2f5598c14124ac894551331531d5572451851b205157e6b2f1b10a5344974e29",
+      "passed": true
+    },
+    "readOnlyCurrentTargetV1": {
+      "path": "/tmp/freeholder-current-full86-native-v55-current-target-v1-20261114-result.json",
+      "bytes": 3819,
+      "sha256": "a2b8fa50329095d6388103b5ae1b999407f42f009e4d4fd44f024aa288d4e95e",
+      "passed": true
+    },
+    "readOnlyCurrentTargetV2": {
+      "path": "/tmp/freeholder-current-full86-native-v55-current-target-v2-20261114-result.json",
+      "bytes": 5640,
+      "sha256": "7bfe532b373ba78bbe5ba9b24ac55781df961e53d5a2143410bc01e866ac7d47",
+      "passed": true
+    },
+    "readOnlyCurrentTargetV3": {
+      "path": "/tmp/freeholder-current-full86-native-v55-current-target-v3-20261114-result.json",
+      "bytes": 7453,
+      "sha256": "bc97cec70f7f6f358578fc24732b55fa430ab6828b70a627736e8eb0698e5419",
+      "passed": true
+    },
+    "preservedFailedNormalV52": {
+      "path": "/tmp/freeholder-current-full86-normal-v52-result-20261113.json",
+      "bytes": 634,
+      "sha256": "561213b4a4861be68c9a69a6e68c824680ffee13e2de6e8c4625c8d5341892b4",
+      "passed": false
+    }
+  },
+  "historicalPrivacyAcceptance": {
+    "head": "ee7b4a39e3f1f9d3b0ea833374c4511d49e640ff",
+    "actualNativeCasesPassed": 5,
+    "doesNotTransferToLaterCode": true
+  },
+  "publication": {
+    "version": "0.2.0-beta.6",
+    "stableSigned": false,
+    "mainMerged": false,
+    "deployed": false,
+    "linkedinPosted": false,
+    "linkedinDraftLocalOnly": "/home/tony/studio-artifacts/freeholder-linkedin/post.txt",
+    "lastConfirmedRemoteBackup": "7322c43f13ff17468217bcd46aab6c5869ece8ab",
+    "backupPushApproval": "PENDING; auto-review rejected sending potentially private source/audit artifacts to GitHub without explicit destination authorization; no retry or bypass."
+  },
+  "fullSpecificationAcceptance": false,
+  "anyCGateClosed": false,
+  "remainingAuthority": "MASTER.md \u00a743, including full current spec and existing explicit \u00a743.18 deferrals only; Tony security review and final signature pending."
+}

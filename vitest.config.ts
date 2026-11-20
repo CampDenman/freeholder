@@ -12,6 +12,9 @@
 //     secret of anything that isn't a test.
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import RuntimeBalancedSequencer from "./scripts/runtime-balanced-sequencer";
 
 // The same file the app reads. Variables already in the environment win, so an
@@ -53,6 +56,11 @@ const credentialKey =
   "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
 process.env.CREDENTIAL_KEY = credentialKey;
 
+// Native tests also need file isolation: accumulated development media otherwise
+// becomes an unrelated inventory that can stall physical-erasure controls.
+const localStorageRoot = process.env.LOCAL_STORAGE_ROOT ?? mkdtempSync(join(tmpdir(), "freeholder-native-media-"));
+process.env.LOCAL_STORAGE_ROOT = localStorageRoot;
+
 export default defineConfig({
   resolve: {
     alias: {
@@ -86,6 +94,7 @@ export default defineConfig({
       ...(testDatabaseUrl ? { DATABASE_URL: testDatabaseUrl } : {}),
       SESSION_SECRET: sessionSecret,
       CREDENTIAL_KEY: credentialKey,
+      LOCAL_STORAGE_ROOT: localStorageRoot,
     },
   },
 });

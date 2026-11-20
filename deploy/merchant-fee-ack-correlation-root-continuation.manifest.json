@@ -1,0 +1,42 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C12.38",
+    "C1.08"
+  ],
+  "status": "SOURCE_ONLY_UNQUALIFIED",
+  "base": "e56ff44a168253e57133374859bb79077bda0ecf",
+  "path": "src/modules/invoicing/merchant-payment-debt.ts",
+  "beforeSha256": "19491214f728d25681bf7188acae3efb859e47ec51797b635f4a26793cd5ada3",
+  "afterSha256": "23cc73150aef24506c64e47ffc5ba89846405b3c135c25368012ca9ada55026b",
+  "finiteDelta": [
+    {
+      "before": "const reason = z.enum(",
+      "after": "import { merchantFeeObservationMatchesRefund } from \"./merchant-fee-observation-match\";\n\nconst reason = z.enum(",
+      "count": 1
+    },
+    {
+      "before": "exists(select 1 from merchant_fee_observations a where a.operation_id=${merchantFeeRefunds.id} and a.binding_verified and a.provider_ref=${merchantFeeRefunds.providerRef} and a.amount_minor=${merchantFeeRefunds.amountMinor} and a.currency=${merchantFeeRefunds.currency} and a.application_fee_ref=${merchantFeeRefunds.applicationFeeRef})",
+      "after": "${merchantFeeObservationMatchesRefund()}",
+      "count": 1
+    }
+  ],
+  "originalNativeWholeFileSha256": "c627b8fb89a1cefbab815727157a16a430472733474a1eb1ff7971c32a21332f",
+  "normal82And85Unchanged": true,
+  "schemaModelsColumnsServicesPermissionAndBankProofChanges": false,
+  "cause": "Actual Drizzle single-table selection dequalifies Column chunks inside correlated EXISTS; generated a.operation_id=\"id\" binds inner acknowledgement ID. Explicit Table+identifier SQL chunks preserve all outer refund predicates.",
+  "beforeEvidence": {
+    "path": "/tmp/freeholder-current-full86-native-v58-debt-v6-20261114-result.json",
+    "database": "freeholder_current_full86_causal_media161_normal_v58_test_20261114",
+    "actualUnmatched": true,
+    "genuineFullyQualifiedEquivalentUnmatched": false,
+    "all596TablesJournalSequenceUnchanged": true
+  },
+  "pending": [
+    "current source",
+    "fresh ordinary86/strict161/SDK",
+    "original unchanged whole native180s",
+    "counter/A/causal/bank native controls",
+    "full specification/provider/recovery/security/signature"
+  ]
+}

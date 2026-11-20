@@ -70,6 +70,7 @@ export default async function TaxStudioPage({
           {t("tax.title")}
         </h1>
         <p className="mt-1 max-w-prose text-sm text-ink-muted">{t("tax.intro")}</p>
+        <a className="mt-3 inline-block text-sm underline" href="/admin/invoices/tax/business">{t("merchantTax.siteTitle")}</a>
       </div>
       {errorCode ? (
         <Callout tone="danger" icon={<WarningCircle size={17} weight="fill" />}>
@@ -298,6 +299,7 @@ export default async function TaxStudioPage({
       <Card>
         <CardHeader title={t("tax.thresholds")} />
         <CardBody>
+          <p className="mb-3 text-sm text-ink-muted">{t("tax.thresholds.siteOnlyHint")} <a className="underline" href="/admin/invoices/tax/business">{t("merchantTax.siteTitle")}</a></p>
           {thresholds.thresholds.length === 0 ? (
             <p className="text-sm text-ink-muted">{t("tax.thresholds.empty")}</p>
           ) : (

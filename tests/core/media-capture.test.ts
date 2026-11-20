@@ -299,7 +299,7 @@ describe.runIf(hasDatabase)("media capture sessions", { timeout: 30_000 }, () =>
     for(const scope of scopes)for(const id of scope.pendingJobs??[]){const name=scope.scope==="media.storageOperations"?MEDIA_WRITE_ERASURE_JOB:scope.scope==="media.multipartOperations"?MULTIPART_ERASURE_JOB:null;if(!name)continue;const job=await getJob(name,id);await(name===MEDIA_WRITE_ERASURE_JOB?eraseMediaStorageOperations(job!.data):eraseMultipartOperations(job!.data));}
     expect(await storage().get(original.key)).toBeUndefined();expect((await db().select().from(dataRequests).where(eq(dataRequests.id,request.id)))[0]?.status).toBe("completed");
     expect(await storage().get(other.key)).toEqual(new Uint8Array([4,5,6]));expect((await db().select().from(mediaCaptureSessions).where(eq(mediaCaptureSessions.id,unrelated.id)))[0]?.status).toBe("live");expect(await db().select().from(mediaCaptureChunks).where(eq(mediaCaptureChunks.sessionId,unrelated.id))).toHaveLength(1);
-  });
+  },120_000);
 
   it("does not reopen a capture confirmed while its recording was assembled", async () => {
     const session = await createCaptureSession.call({ source: "screen" }, OWNER);

@@ -1,0 +1,32 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "multipart_part_manifest_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Scoped multipart body-declaration lifecycle qualified on fresh migration99 PostgreSQL; consumption and provider acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "cd2f0104796c6b488d10dcc04678560d54a683307d68c3396169356463924068" },
+    { "path": "tests/core/media-multipart-part-manifest-lifecycle.test.ts", "sha256": "92178bc1e2bb001535df9310b117b1f48bcd4123917b795590a1baba7f9abcd3" }
+  ],
+  "controls": {
+    "final": { "database": "multipart_part_manifest_audit_20261115", "passed": 5, "failed": 0, "durationSeconds": 61.04 },
+    "coverage": ["genuine CREATE-bound declaration", "idempotent repeat without provider calls", "same-size changed-file refusal", "wrong part-size refusal", "other-customer refusal", "named-hold refusal before declaration or signing"],
+    "guardsWeakened": false,
+    "runtimeChanges": false,
+    "focusedLint": "passed"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "cd2f0104796c6b488d10dcc04678560d54a683307d68c3396169356463924068",
+      "beforeSha256": "a0fc620452ba613620eccc43120cb2b2caed8f3b116003c7b1dd6f45329b64f7",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  `deploy/multipart-readback-lifecycle.source.json`. No terminal/provider claim.\n  Signing containment source2026-11-13",
+          "after": "  `deploy/multipart-readback-lifecycle.source.json`. No terminal/provider claim.\n  Part-manifest lifecycle qualification2026-11-15: fresh migration99 execution\n  passes5/5. Complete declarations bind to the genuine CREATE caller and repeat\n  idempotently; changed same-size bytes, wrong sizes, other customers and named\n  holds are refused before new provider calls or signing authority. Focused lint\n  passes. See `deploy/multipart-part-manifest-lifecycle.source.json`. No provider\n  consumption, transport authentication or C-item acceptance follows.\n  Signing containment source2026-11-13",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

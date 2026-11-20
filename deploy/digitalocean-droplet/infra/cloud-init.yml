@@ -42,5 +42,8 @@ runcmd:
   - systemctl enable --now docker
   - mkdir -p /opt/freeholder
   - chmod 750 /opt/freeholder
+  # Empty on legacy launches: emptiness is never a provider origin assertion.
+  - install -d -m 750 -o root -g 1001 /opt/freeholder/namespace-origin
+  - install -d -m 700 -o 1001 -g 1001 /opt/freeholder/namespace-origin-state
   # Security updates apply themselves; an unattended box is worse than none.
   - systemctl enable --now unattended-upgrades

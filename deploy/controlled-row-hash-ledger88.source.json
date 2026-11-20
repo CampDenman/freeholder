@@ -1,0 +1,29 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "controlled_row_hash_ledger88.v1",
+  "checklist": ["C12.38", "C11.05", "C1.08"],
+  "status": "FORWARD SOURCE CONTINUATION; real fresh-database ledger controls pass; the unchanged positive payment oracle remains unqualified",
+  "previousSourceRecord": "deploy/controlled-safe-public-boundary88.source.json",
+  "artifacts": [
+    { "path": "db/migrations/0088_controlled_row_hash_ledger.sql", "sha256": "fa8b9af57821c2bdd3420b88608428b179b490a3365d51f4887e3aeab091ca47" },
+    { "path": "src/modules/subscriptions/controlled-provider-schema.ts", "sha256": "95141d6aed8df1b55bb2cd3f741f7b8bf33a9bf89feeab65e687ee651231dfb5" },
+    { "path": "src/modules/subscriptions/controlled-provider-proof.ts", "sha256": "4c5862f5e66a308afb4776c84ecf379d8dae36d8c19c587c82aba34b87a81df5" },
+    { "path": "tests/modules/controlled-row-hash-ledger88.test.ts", "sha256": "b4133780a9f5404c9d32c501bf4e5fbdae032ddc64e8a17a46fc868e93475f0c" }
+  ],
+  "sourceTables": [
+    "subscription_controlled_resources",
+    "subscription_controlled_operations",
+    "subscription_controlled_calls",
+    "subscription_controlled_facts",
+    "subscription_controlled_finishes",
+    "subscription_controlled_stops",
+    "subscription_controlled_verifications",
+    "subscription_controlled_charge_origins",
+    "subscription_controlled_closures"
+  ],
+  "originalPaymentOracle": {
+    "path": "tests/modules/atomic-credit-fee-persistence84.test.ts",
+    "sha256": "d31f96db01533a22d8e7351c1fec33b72700318b438d03a7885a699742188ec4",
+    "timeoutSeconds": 180
+  }
+}

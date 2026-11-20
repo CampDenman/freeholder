@@ -72,15 +72,20 @@ async function initializeRuntime(): Promise<void> {
       const { startJobs } = await import("@/core/jobs");
       await startJobs();
       return;
-    } catch {
+    } catch (error) {
       // A dependency outage must keep liveness green and readiness red. Retry
       // idempotent initialization in-process so database recovery does not
-      // require an operator restart. Never print the caught error: SQL and
-      // provider errors may contain values that do not belong in logs.
+      // require an operator restart. Never print the caught error's MESSAGE or
+      // stack: SQL and provider errors may contain values that do not belong
+      // in logs. A bounded code or class name carries no values, and it is the
+      // difference between a diagnosable failure and a loop whose only output
+      // is "retrying" -- which is exactly how the packaged-image and
+      // native-install journeys failed in CI, with nothing to say why.
       const now = Date.now();
       if (attempt === 0 || now - lastFailureLogAt >= 60_000) {
+        const cause = failureDiscriminator(error);
         console.error(
-          `[freeholder] ${phase} unavailable; readiness is unavailable; retrying`,
+          `[freeholder] ${phase} unavailable${cause ? ` (${cause})` : ""}; readiness is unavailable; retrying`,
         );
         lastFailureLogAt = now;
       }
@@ -88,6 +93,57 @@ async function initializeRuntime(): Promise<void> {
       await wait(retryDelay(attempt), runtimeAbort.signal);
       attempt += 1;
     }
+  }
+}
+
+/**
+ * A failure's code, from anywhere in its cause chain, or its class name.
+ *
+ * Still never the message, the stack, or any other part of a cause: those
+ * carry SQL fragments, connection strings and provider payloads. A `code` is a
+ * fixed token by convention -- `42703` from PostgreSQL, `ECONNREFUSED` from
+ * Node, a `ServiceError` code from this codebase -- so it is bounded here to a
+ * short identifier charset rather than trusted to be one.
+ *
+ * The chain is walked because the database driver wraps. `DrizzleQueryError`
+ * sets no `name` and no `code` and puts the real PostgresError in `cause`, so
+ * reading only the outermost own `code` reported a migration refusal as plain
+ * "Error" -- which is how a guard in migration 0086 that made every packaged
+ * deploy unbootable survived three CI runs without naming itself. A wrapper's
+ * class name must never outrank a real code underneath it, so every code in
+ * the chain is preferred to the outer name. The walk is bounded and
+ * cycle-safe, and reads properties without invoking accessors, because an
+ * error object here is untrusted input.
+ */
+function failureDiscriminator(error: unknown): string | null {
+  const seen = new Set<unknown>();
+  for (let current: unknown = error; current !== null && typeof current === "object" && !seen.has(current) && seen.size < 4; ) {
+    seen.add(current);
+    const code = own(current, "code");
+    if (typeof code === "string" && /^[A-Za-z0-9_.-]{1,64}$/.test(code)) return code;
+    if (typeof code === "number" && Number.isInteger(code)) return String(code);
+    current = own(current, "cause");
+  }
+  // `name` is read normally, not as an own property: Error keeps it on the
+  // prototype, so an own-property read would quietly return nothing for every
+  // ordinary Error and leave the log with no discriminator at all.
+  let name: unknown;
+  try {
+    name = error !== null && typeof error === "object" ? (error as { name?: unknown }).name : undefined;
+  } catch {
+    name = undefined;
+  }
+  if (typeof name === "string" && /^[A-Za-z0-9_.-]{1,64}$/.test(name)) return name;
+  return null;
+}
+
+/** An own data property's value, never a getter's return and never a throw. */
+function own(target: object, key: string): unknown {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(target, key);
+    return descriptor && "value" in descriptor ? descriptor.value : undefined;
+  } catch {
+    return undefined;
   }
 }
 

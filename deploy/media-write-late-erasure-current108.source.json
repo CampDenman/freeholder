@@ -1,0 +1,40 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_write_late_erasure_current108.v1",
+  "checklist": ["C1.12", "C3.22", "C11.08"],
+  "status": "Unchanged write-ownership and late-erasure controls pass on fresh migration108 after the shared late-original caller/quota repair; provider and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "8cf3432984c7e19849000bbb0367a354ab8cf6d3234f54762a694f9bdb11d72f" },
+    { "path": "tests/core/media-write-ownership.test.ts", "sha256": "75d7d4140296293e75a383864fe3884b4f7e5dc6167bab2bf82180a6ea52d210" },
+    { "path": "tests/core/media-late-erasure.test.ts", "sha256": "df0dc0d2fdcc1483a33df5359bc8f771c515a327e25759d1c40de7552a7226b9" },
+    { "path": "src/core/media/write-ledger.ts", "sha256": "84c3cf5c87875de994335721d99bcb29cdb614063b9e696310ca44858a8623d2" }
+  ],
+  "controls": {
+    "database": "media_write_late_erasure_current108_20261116",
+    "files": [
+      { "path": "tests/core/media-write-ownership.test.ts", "passed": 5, "failed": 0 },
+      { "path": "tests/core/media-late-erasure.test.ts", "passed": 4, "failed": 0 }
+    ],
+    "total": { "passed": 9, "failed": 0, "durationSeconds": 108.23 },
+    "coverage": ["lost original and rendition acknowledgements retain ownership", "late physical bytes preserve original lineage", "unresolved writers never expire into absence", "replacement storage namespaces cannot acknowledge deletion", "late PUT reopens completed erasure and requires exact restored proof", "published, unrelated and named-hold assets retain original protection"],
+    "testOracleChanged": false,
+    "productCodeChanged": false,
+    "guardsWeakened": false,
+    "remaining": "Hosted provider, clean-room, independent review and checklist acceptance remain open"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "8cf3432984c7e19849000bbb0367a354ab8cf6d3234f54762a694f9bdb11d72f",
+      "beforeSha256": "06fd7bc32d9b13eb6db4b3ed3dfcab0386065974ec5af4093cfb3b3886565f7e",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  pass. See `deploy/media-late-erasure-lifecycle.source.json`. No hosted/provider/C closure.\n  Transfer-preview historical cohort qualification2026-11-16 (C1.12/C11.08):",
+          "after": "  pass. See `deploy/media-late-erasure-lifecycle.source.json`. No hosted/provider/C closure.\n  Write/late-erasure post-repair qualification2026-11-16 (C1.12/C3.22/C11.08):\n  the unchanged ownership and late-erasure files PASS9/9 in108.23s on one fresh current\n  database after the shared late-original caller/quota repair. Original and parallel\n  rendition witnesses survive lost ACKs, unresolved writers never expire into absence,\n  replacement namespaces cannot acknowledge deletion, and late bytes reopen exact\n  erasure debt while published/unrelated/held assets remain protected. No test or\n  product source changed. See `deploy/media-write-late-erasure-current108.source.json`.\n  Hosted provider and checklist acceptance remain open.\n  Transfer-preview historical cohort qualification2026-11-16 (C1.12/C11.08):",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

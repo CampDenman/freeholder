@@ -139,6 +139,7 @@ export const taxQuote = z.object({
 });
 
 export const invoiceRow = row({
+  creditedMinor: z.number().int().nonnegative().default(0),
   id: uuid,
   contactId: uuid,
   number: z.string().nullable(),

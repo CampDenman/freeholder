@@ -1,0 +1,34 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "import_hosted_media_browser_current.v1",
+  "checklist": ["C3.22", "C11.17"],
+  "status": "Current four-locale hosted-source media approval journeys pass; live provider and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "d258c779bc1b4d7ea926e6152d7365f6cf5b227490c0f57bba40e6dbeccb5649" },
+    { "path": "tests/browser/import-hosted-media.spec.ts", "sha256": "333b92650d7c8d7fe05c46810c6c6bcdc53b2f92010d6b96e9204994a2c77b55" }
+  ],
+  "controls": {
+    "database": "browser_import_hosted_media_a11y_current_20261116",
+    "native": { "passed": 4, "failed": 0, "durationSeconds": 46.9, "locales": ["en", "es", "fr", "ar"] },
+    "coverage": ["approve a file origin", "review staged media", "cancel the staged import"],
+    "storage": "Disposable local/synthetic browser fixtures, not a live provider account",
+    "testOracleChanged": false,
+    "productCodeChanged": false,
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "d258c779bc1b4d7ea926e6152d7365f6cf5b227490c0f57bba40e6dbeccb5649",
+      "beforeSha256": "32a8c550a608b1ff836e01f44115a6dc949783ee9372cdc9b96f20a03ba1009a",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  No product source changed. See `deploy/editor-media-browser-current.source.json`.\n  Full clean-room and signed acceptance remain open.\n  Raster-fixture qualification2026-11-16 (C1.12/C11.10): the full file passes15/15",
+          "after": "  No product source changed. See `deploy/editor-media-browser-current.source.json`.\n  Full clean-room and signed acceptance remain open.\n  Hosted-source media browser qualification2026-11-16 (C3.22/C11.17): unchanged\n  Chromium journeys PASS4/4 in46.9s across en/es/fr/ar on a fresh current database.\n  Origin approval, staged-media review and cancellation pass. Local/synthetic fixtures\n  supply no live provider or C-item acceptance. See\n  `deploy/import-hosted-media-browser-current.source.json`. No product source changed.\n  Raster-fixture qualification2026-11-16 (C1.12/C11.10): the full file passes15/15",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

@@ -86,6 +86,17 @@ describe("Docker Compose launch preparation", () => {
     for (const name of secrets) expect(again[name]).toBe(values[name]);
   });
 
+  it("preserves an explicit Spaces choice and derives the endpoint from its region", async () => {
+    const dir = await checkout();
+    const result = await prepareLaunch({ directory: dir, target: "docker-selfhost", environment: { FREEHOLDER_STORAGE: "spaces" } });
+    expect(result.missing).toEqual(["S3_REGION", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"]);
+    const ready = await prepareLaunch({ directory: dir, target: "docker-selfhost", environment: { S3_REGION: "sfo3", S3_BUCKET: "owner-media", S3_ACCESS_KEY_ID: "synthetic-key", S3_SECRET_ACCESS_KEY: "synthetic-secret" } });
+    const values = parseEnv(await readFile(ready.privateEnvironmentFile, "utf8"));
+    expect(ready.configurationReady).toBe(true);
+    expect(values).toMatchObject({ FREEHOLDER_STORAGE: "spaces", S3_REGION: "sfo3", S3_BUCKET: "owner-media" });
+    expect(values.S3_ENDPOINT).toBeUndefined();
+  });
+
   it("uses plain HTTP Compose on localhost, and keeps an existing database password", async () => {
     const dir = await checkout();
     await writeFile(join(dir, "deploy", "docker-selfhost", ".env"), "POSTGRES_PASSWORD=existing-db-password\n", { mode: 0o600 });

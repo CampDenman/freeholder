@@ -1,0 +1,43 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_transfer_privacy_scope_reachability.v1",
+  "checklist": ["C1.12", "C10.32", "C11.08"],
+  "status": "OPEN: genuine transfer privacy workers reject later cross-scope physical receipts; the copied object remains unredacted and native acceptance is not claimed",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "5a9bb521b39779cd95176f1883f9a60215e32aaee2fed8392cd5521f8f0606ba" },
+    { "path": "tests/fixtures/media-transfer-quota-role.config.ts", "sha256": "91ce28d4e9eeca7f021ccc545058504211beb7fe284b33cbc51b450bcffa69d1" },
+    { "path": "tests/fixtures/media-transfer-quota-role.probe.ts", "sha256": "9a52c724bb7fbadd612dfc6a0fb9da159759facd4a6635e7d68389fd64cd6922" },
+    { "path": "tests/core/media-transfer-quota-role-lifecycle.test.ts", "sha256": "b1a8912af431dec7be134a277c2f61158fbe307d925503326795b2b3b072b0e1" }
+  ],
+  "control": {
+    "database": "media_quota_role_privacy_worker_20261116",
+    "producer": "passed: actual copied cohort, verified erasure and pending transfer-privacy job",
+    "worker": "Actual pg-boss runner started against the persisted original job",
+    "initialResult": "Identity-lock contention placed the related jobs into genuine retry states",
+    "retryResult": "Storage and multipart workers rejected later physical receipts as outside their immutable first scopes; transfer scope remained pending",
+    "observedSeconds": 150,
+    "objectRedacted": false,
+    "nativePassed": false,
+    "deadline": "The original short deadline was restored after the genuine 60-second retry schedule was observed"
+  },
+  "typecheck": "passed",
+  "focusedLint": "passed",
+  "guardsWeakened": false,
+  "productCodeChanged": false,
+  "remaining": "Repair cross-scope worker coordination and rerun this native control; three other cohorts also remain open",
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "5a9bb521b39779cd95176f1883f9a60215e32aaee2fed8392cd5521f8f0606ba",
+      "beforeSha256": "9527a3af7e6ad7b38e71b075f4221db393785f51aff52b5a1a889360df8aef23",
+      "continue": true,
+      "edits": [
+        {
+          "before": "Four other native cohorts and actual provider/checklist acceptance remain open.\n\n\nSource-only continuation, 2026-11-14 (C1.12/C11.08): the idle multipart",
+          "after": "Four other native cohorts and actual provider/checklist acceptance remain open.\n\nPrivacy quota reachability2026-11-16 (C1.12/C10.32/C11.08): a genuine copied\ncohort produces a verified erasure and real pending transfer/storage/multipart jobs.\nActual retries then reject one another's later physical receipts as outside immutable\nfirst captures; the transfer remains unredacted after150s. This is a cross-scope\ncoordination defect, not a provider or timeout pass. The failed cohort is preserved and\nthe short test deadline restored. TypeScript/lint pass; no product guard changes. See\n`deploy/media-transfer-privacy-scope-reachability.source.json`. Repair and native\nacceptance remain open; no C-item closes.\n\n\nSource-only continuation, 2026-11-14 (C1.12/C11.08): the idle multipart",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

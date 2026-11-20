@@ -760,6 +760,13 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
   let dispatchId: string | null = null;
   let observedReply: ObservedMailReply | undefined;
   try {
+    if (previewMailActive() && queued.delivery.purpose === "bulk") {
+      await finishQueuedMail(deliveryId, {
+        status: "failed",
+        lastError: PREVIEW_BULK_REFUSAL,
+      }, undefined, { onlyUnsent: true });
+      return { status: "failed" };
+    }
     const sender = queued.delivery.senderId
       ? await getSender(db() as unknown as Tx, queued.delivery.senderId)
       : undefined;
@@ -770,6 +777,17 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
       throw new MailAdapterError(
         "The configured mail route changed after this message was queued.",
       );
+    }
+    if (previewMailActive()) {
+      const holdReason = await db().transaction(tx => previewMailHold(tx, queued.delivery.recipient, adapter.delivers, deliveryId));
+      if (holdReason) {
+        const held = await finishQueuedMail(deliveryId, {
+          status: "held",
+          holdReason,
+          lastError: `Private preview held this message before provider delivery (${holdReason}).`,
+        }, undefined, { onlyUnsent: true, keepBody: true });
+        return { status: held ? "held" : "failed" };
+      }
     }
     const { marketingContactId, transactionalReason, eventRef, ...outbound } = message;
     // The permission basis is declared here, by the worker, never by the

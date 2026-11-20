@@ -1,0 +1,16 @@
+{
+  "domain": "freeholder.controlled-calendar-review-windows.v1",
+  "files": [
+    {
+      "path": "src/modules/invoicing/controlled-target-raw-classification.ts",
+      "beforeSha256": "9a0252edd0e65c9b6cba8432551f1b6a93a0cedbf1d5420a1b3c6afa3c0f359f",
+      "afterSha256": "ff70b562229ce4713a0c8ad5c6b7f1a64c4f0ddbe5124e95bd578ce65eac46e7",
+      "finiteDelta": [
+        {
+          "before": "    ...(actual.collection.kind===\"period\"?{reviewedPeriodWindows:actual.review.calendar.nativeForecasts.filter(forecast=>!forecast.proration&&forecast.amountMinor===actual.terms.snapshot.periodAmountMinor).map(forecast=>({periodStart:forecast.periodStart,periodEnd:forecast.periodEnd}))}:{})},",
+          "after": "    ...(actual.collection.kind===\"period\"?{reviewedPeriodWindows:[\n     {periodStart:actual.review.calendar.originalApplicationPeriodStart,periodEnd:actual.review.calendar.originalApplicationPeriodEnd},\n     {periodStart:actual.review.calendar.proposedPeriodStart,periodEnd:actual.review.calendar.proposedPeriodEnd},\n     ...actual.review.calendar.nativeForecasts.filter(forecast=>!forecast.proration&&forecast.amountMinor===actual.terms.snapshot.periodAmountMinor).map(forecast=>({periodStart:forecast.periodStart,periodEnd:forecast.periodEnd})),\n    ]}:{})},"
+        }
+      ]
+    }
+  ]
+}

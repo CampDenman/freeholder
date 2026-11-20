@@ -10,6 +10,7 @@ import { db } from "@/core/db";
 import { ready } from "@/core/runtime";
 import { getService } from "@/core/service";
 import { storage } from "@/adapters/storage";
+import * as removal from "@/core/media/delete-with-receipt";
 import { createContact } from "@/core/contacts/service";
 import { dataRequestArtifacts, dataRequests } from "@/core/privacy/schema";
 import { createDataRequest, verifyDataRequest, fulfillDataRequest, addRetentionException } from "@/core/privacy/service";
@@ -193,7 +194,10 @@ describe.runIf(hasDatabase)("Daily owner-storage import", { timeout: 30_000 }, (
     const { contact, artifact } = await recordedArtifact();
     const request = await eraseRequest(contact.id);
     await fulfillDataRequest.call({ id: request.id, confirmation: "ERASE" }, OWNER);
-    const failing = vi.spyOn(storage(), "delete").mockRejectedValue(new Error("Storage unreachable"));
+    // The managed adapter refuses a raw storage().delete outright, so the
+    // outage is injected at the shared original-file removal service this job
+    // now uses. The product behaviour under test is unchanged.
+    const failing = vi.spyOn(removal, "deleteWithReceipt").mockRejectedValue(new Error("Storage unreachable"));
     await expect(runErasureJobs(request.id)).rejects.toThrow("Storage unreachable");
     failing.mockRestore();
     expect(await storage().head(artifact.storageKey!)).toBeDefined();

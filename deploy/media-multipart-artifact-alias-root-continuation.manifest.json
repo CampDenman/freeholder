@@ -1,0 +1,57 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C1.12",
+    "C11.08"
+  ],
+  "status": "SQL_COMPILE_CORRECTION_PREPARED_UNRUN",
+  "failure": "/tmp/freeholder-current-full86-normal-v52-result-20261113.json",
+  "preservedDatabase": "freeholder_current_full86_causal_media161_normal_v52_test_20261114",
+  "sqlstate": "42883",
+  "failedQuerySha256": "d4dc195c6a240807d4be7d00ff6188ef7fb3838d0e8042f3a9122caf2f2d0a74",
+  "scope": "Explicit value column on JSON SRF prevents outer media_storage_transfer_reviews certificate.outcome TEXT from shadowing its alias. Same artifact body, exact scope/outcome and pending job guards; no casts/predicate waiver. Correction must occur in original unpublished function because its CREATE otherwise fails before any successor. Both owned and copied normal source change identically; exact whole-source rewind retains every old prefix identity.",
+  "files": [
+    {
+      "path": "deploy/sql/0082_verified_media_transfer.unapplied.sql",
+      "beforeSha256": "7a592c66857d36e733869fd0b7acf9c9fdab35ea73ea2396b2f886432ed41aa3",
+      "afterSha256": "4e6c7c96fc76325b3787f55db698f09e93cf52e070360af254bbb4438c1409c4",
+      "beforeBytes": 1017370,
+      "afterBytes": 1017398,
+      "finiteDelta": [
+        {
+          "before": "jsonb_array_elements(artifact.body->'outcomes') outcome CROSS JOIN LATERAL jsonb_array_elements_text(outcome->'pendingJobs')",
+          "after": "jsonb_array_elements(artifact.body->'outcomes') AS outcome(value) CROSS JOIN LATERAL jsonb_array_elements_text(outcome.value->'pendingJobs')",
+          "occurrences": 1
+        },
+        {
+          "before": "WHERE outcome->>'scope'='media.multipartOperations' AND outcome->>'outcome'='pending'",
+          "after": "WHERE outcome.value->>'scope'='media.multipartOperations' AND outcome.value->>'outcome'='pending'",
+          "occurrences": 1
+        }
+      ],
+      "functionBeforeSha256": "ead4e93a1dd280a137425989b65849d6cd11ed07e76fa1911b0b64c573aa160f",
+      "functionAfterSha256": "7be22f2fdfffe530a923e3111f2329ddbe1e9fe31e7ac09ffefa35df838cffbf"
+    },
+    {
+      "path": "db/migrations/0082_verified_media_transfer.sql",
+      "beforeSha256": "7a592c66857d36e733869fd0b7acf9c9fdab35ea73ea2396b2f886432ed41aa3",
+      "afterSha256": "4e6c7c96fc76325b3787f55db698f09e93cf52e070360af254bbb4438c1409c4",
+      "beforeBytes": 1017370,
+      "afterBytes": 1017398,
+      "finiteDelta": [
+        {
+          "before": "jsonb_array_elements(artifact.body->'outcomes') outcome CROSS JOIN LATERAL jsonb_array_elements_text(outcome->'pendingJobs')",
+          "after": "jsonb_array_elements(artifact.body->'outcomes') AS outcome(value) CROSS JOIN LATERAL jsonb_array_elements_text(outcome.value->'pendingJobs')",
+          "occurrences": 1
+        },
+        {
+          "before": "WHERE outcome->>'scope'='media.multipartOperations' AND outcome->>'outcome'='pending'",
+          "after": "WHERE outcome.value->>'scope'='media.multipartOperations' AND outcome.value->>'outcome'='pending'",
+          "occurrences": 1
+        }
+      ],
+      "functionBeforeSha256": "ead4e93a1dd280a137425989b65849d6cd11ed07e76fa1911b0b64c573aa160f",
+      "functionAfterSha256": "7be22f2fdfffe530a923e3111f2329ddbe1e9fe31e7ac09ffefa35df838cffbf"
+    }
+  ]
+}

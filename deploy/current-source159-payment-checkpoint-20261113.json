@@ -1,0 +1,327 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "sourceHead": "6791cffa036b5a665f6fde6efc0a978bbe1481ba",
+  "generatedSdkCandidate": "02b44a5ca2367f7fa4110baa9fea67964d082827",
+  "status": "BOUNDED_SOURCE_SCHEMA_SDK_ORIGINAL_COLLECTION_PASS; CURRENT_APPLICATION_FAILED_BEFORE_ADMISSION",
+  "proofs": {
+    "source": {
+      "path": "/tmp/freeholder-current-full86-financial159-source-v63-20261113-result.json",
+      "sha256": "de6b2b6812b7d22ead7154b6c6782ac9319d08e25a52873c2fdd92e7c07ddd1f",
+      "passed": true
+    },
+    "normalV25": {
+      "path": "/tmp/freeholder-current-full86-normal-v25-result-20261113.json",
+      "sha256": "0b0e141fb454c09e3b8a4f2275c41ead7d3cc53b2a75408baa33934bfe031785",
+      "passed": true
+    },
+    "parityV35": {
+      "path": "/tmp/freeholder-current-full86-parity159-v35-result-20261113.json",
+      "sha256": "96486e4f58a76f0f1ebc938c2b84ac05863449eecf6dc004535a22227fdd9656",
+      "passed": true
+    },
+    "sdkGeneration": {
+      "path": "/tmp/freeholder-current-full86-sdk-generation-v10-20261113-result.json",
+      "sha256": "e05aa479afb4b52279c2a2bc7967cc9254101875526372b7b54b87d75ab8f760",
+      "passed": true
+    },
+    "sdkTypes": {
+      "path": "/tmp/freeholder-current-full86-sdk-types-lint-v11-20261113-result.json",
+      "sha256": "0c8f810050d263fb1914a0ab381c9455d78480d09f7b378394425bcedeb84e1d",
+      "passed": true
+    },
+    "originalCollection": {
+      "path": "/tmp/freeholder-current-full86-target-collection-native-v5-20261113-result.json",
+      "sha256": "d62b31119ec90bcec5d34fe27d0dc82096053f9f56b2cb1c951f309523bbef21",
+      "passed": true
+    },
+    "normalV26": {
+      "path": "/tmp/freeholder-current-full86-normal-v26-result-20261113.json",
+      "sha256": "eb76a8bf6188c4d907e64426c770e577f927b87c2c4f749410c7dc0990905163",
+      "passed": true
+    },
+    "parityV36": {
+      "path": "/tmp/freeholder-current-full86-parity159-v36-result-20261113.json",
+      "sha256": "40f93e68684df99861b0b3dee61a53dea43cc480586320bbd02203677a9b7d88",
+      "passed": true
+    },
+    "failedApplication": {
+      "path": "/tmp/freeholder-current-full86-application-full-native-v1-20261113-result.json",
+      "sha256": "85bce9fb0edf8bbeb402807378e008e20b6d55805a513c5abaa9866a583a354b",
+      "passed": false
+    },
+    "manifestDiagnosis": {
+      "path": "/tmp/freeholder-current-full86-native-v26-manifest-order-v1-20261113.json",
+      "sha256": "b5daa7f1985a3faf7bc254c7c35603f470c55a112bb789490d556e52e2538c0e",
+      "passed": true
+    },
+    "parserControls": {
+      "path": "/tmp/freeholder-current-full86-parser159-rename-controls-v1-20261113-result.json",
+      "sha256": "c2c90d4c77179abe78bc76a78827f57082b9371f28543a3a9f185d8ba38e0e35",
+      "passed": true
+    }
+  },
+  "affectedModels": 159,
+  "enabledGuards": 353,
+  "fullFunctionBodies": 351,
+  "providerAccountAcceptance": false,
+  "stableAcceptance": false,
+  "continuation20261114": {
+    "sourceHead": "c6c7d449c77119c1aae99cccb3e0090727662747",
+    "status": "FULL_LOCAL_PAID_ACCESS_MERGE_UNDO_AND_TWO_FOREIGN_ACTIVITY_REFUSALS_PASS; INJECTED_ROLLBACK_ORACLE_FAILED_ON_RUNTIME_BIRTHS; FRESH_HARNESS_RERUN_REQUIRED",
+    "sourceActualAssertions": 1321,
+    "sourceCompleteSelectedFiles": 210,
+    "explicitDatabaseSkips": 458,
+    "affectedModels": 159,
+    "enabledGuards": 356,
+    "fullFunctionBodies": 367,
+    "explainExpressions": 2415,
+    "strictQueryCount": 3995,
+    "proofs": {
+      "sourceV78": {
+        "path": "/tmp/freeholder-current-full86-financial159-source-v78-20261114-result.json",
+        "sha256": "5aa3358db5e3a49d5500b66e01da314271e4f113abc1bfeb584dceb7c2923281",
+        "passed": true
+      },
+      "normalV42": {
+        "path": "/tmp/freeholder-current-full86-normal-v42-result-20261113.json",
+        "sha256": "ed6f78b36e8d5c948aaad67456d2f89b9b74aa7df6bd797cbca49256f363a0af",
+        "passed": true
+      },
+      "strictV53": {
+        "path": "/tmp/freeholder-current-full86-parity159-v53-result-20261113.json",
+        "sha256": "87c4c47e489a4958aea1ba7b9a2582aa7c941b904731cbb1317cc47fbb5b523e",
+        "passed": true
+      },
+      "sqlSchemaOnly": {
+        "path": "/tmp/freeholder-current-full86-v42-lock-schema-v1-20261114-result.json",
+        "sha256": "2e89ef90d22fdf8f6f73782d14291d57dfc0ab4c184500c50b979aa073f6ec58",
+        "passed": true
+      },
+      "sdkV23": {
+        "path": "/tmp/freeholder-current-full86-sdk-generation-v23-20261114-result.json",
+        "sha256": "deb07a8467844791b6f51ef0398f365429386bdcaf0b76e82db001c0f0c6f176",
+        "passed": true
+      },
+      "fullPaid-result.json": {
+        "path": "/tmp/freeholder-current-full86-paid-period-full-native-v7-20261114-result.json",
+        "sha256": "f8e2f4a1b8827aafcf32ee37854283c80ea50457ef2d8c0bd917311c9a1e788e",
+        "passed": true
+      },
+      "fullPaid-before.json": {
+        "path": "/tmp/freeholder-current-full86-paid-period-full-native-v7-20261114-before.json",
+        "sha256": "5f995915d6b48982158de6b2a62be3fadc07c8c2a00d18a58874800ebc626443",
+        "passed": true
+      },
+      "fullPaid-after.json": {
+        "path": "/tmp/freeholder-current-full86-paid-period-full-native-v7-20261114-after.json",
+        "sha256": "4439fbbaec5dc7e8bd32e5cd28e4c455a6768c9b29c010094e245169fb75ee08",
+        "passed": true
+      },
+      "fullPaid-config.json": {
+        "path": "/tmp/freeholder-current-full86-paid-period-full-native-v7-20261114-config.json",
+        "sha256": "ba395f6a4dac22aa7182d366e439836f70846287624cc6451a5f0d8d99073269"
+      },
+      "fullPaid.json": {
+        "path": "/tmp/freeholder-current-full86-paid-period-full-native-v7-20261114.json",
+        "sha256": "5f0a8db9b690ead27eb742311154bdbec23124b964f602bf59114ac1b2adaa4b"
+      },
+      "cleanUndo-result.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-clean-native-v1-20261114-result.json",
+        "sha256": "2ba6a534706e962f84cc38687ea67df9f8256a60c89a68200a4c304b20df21a0",
+        "passed": true
+      },
+      "cleanUndo-before.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-clean-native-v1-20261114-before.json",
+        "sha256": "183b87a46c4416fa92f653dc5be97cf5a2b9d24b0ece195b51e7dd1d43c9a122",
+        "passed": true
+      },
+      "cleanUndo-after.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-clean-native-v1-20261114-after.json",
+        "sha256": "69d0b6c413226063a5a885b2d5b0cbb61b182081157c460da2dde0381b930273",
+        "passed": true
+      },
+      "cleanUndo-config.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-clean-native-v1-20261114-config.json",
+        "sha256": "57d85317c1b48322b1a81168a8a6052500468a0a9e8df91ef1aebc2beb1fd350"
+      },
+      "cleanUndo.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-clean-native-v1-20261114.json",
+        "sha256": "c6035e9d05882a11bc6a721bb7980914ae08493f7f80d5d911286a540836ee25"
+      },
+      "newReadRefusal-result.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-newread-native-v1-20261114-result.json",
+        "sha256": "722fd6cd2b9a9717979bb829f013ffd7b69e2ed871eab42a091330d5238dcaad",
+        "passed": true
+      },
+      "newReadRefusal-before.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-newread-native-v1-20261114-before.json",
+        "sha256": "86f974de40322eb79c70181bd4813d732ba91182bbfca28d6e6ee369b9d00282",
+        "passed": true
+      },
+      "newReadRefusal-after.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-newread-native-v1-20261114-after.json",
+        "sha256": "ea31ece03bb149dde9fb763aed98d1b8d529bb55bf0225b3efe955d3d809b41c",
+        "passed": true
+      },
+      "newReadRefusal-config.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-newread-native-v1-20261114-config.json",
+        "sha256": "3c9d5b1e24f73511c466abe3e8e989d24894fc3216a356257bdcc01b4e70ef30"
+      },
+      "newReadRefusal.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-newread-native-v1-20261114.json",
+        "sha256": "ed6f2ad8b07a1a65e706b858174388fe26435c3cd921c1eca220337b085130f7"
+      },
+      "newRefundRefusal-result.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-refund-native-v1-20261114-result.json",
+        "sha256": "124bbff68e73b27b6039b50f3f85bb8ccb8aa993430a0ec1ddac0198918708e3",
+        "passed": true
+      },
+      "newRefundRefusal-before.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-refund-native-v1-20261114-before.json",
+        "sha256": "d4575afda2c78ab6958670bdc28944be492f449f55e355d2d83fa70c14be9408",
+        "passed": true
+      },
+      "newRefundRefusal-after.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-refund-native-v1-20261114-after.json",
+        "sha256": "7f4c1e7fcff1ac8de97278e4b350369bdf7aea79418e43380c8147a76e6e2529",
+        "passed": true
+      },
+      "newRefundRefusal-config.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-refund-native-v1-20261114-config.json",
+        "sha256": "72b140e8e02a26e3d0a3fa326bc3799ec657c64bbffb36b283b1fb5d0766e1e9"
+      },
+      "newRefundRefusal.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-refund-native-v1-20261114.json",
+        "sha256": "d3e282850dc8967693cdcc6a406eb0c42355696197a7c8a1973195c91203ffff"
+      },
+      "failedRollback-result.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-rollback-native-v1-20261114-result.json",
+        "sha256": "0e99d856b25d7956dad8045569f0739fb3201d38b4129ac6e2824a1763342875",
+        "passed": false
+      },
+      "failedRollback-before.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-rollback-native-v1-20261114-before.json",
+        "sha256": "df9d440b49c755b3037c419fee9e80b7c0be613710985815a4a5b67a34b1dd0e",
+        "passed": true
+      },
+      "failedRollback-after.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-rollback-native-v1-20261114-after.json",
+        "sha256": "2120c1271617663f0e954ae2c00328b099af6eec50108a1e35ee3f9d163580f0",
+        "passed": true
+      },
+      "failedRollback-config.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-rollback-native-v1-20261114-config.json",
+        "sha256": "2b8ff5ea610200d0e66530bcf7bd41f252991fd6d28db340a9baba8184a8389a"
+      },
+      "failedRollback.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-rollback-native-v1-20261114.json",
+        "sha256": "33896739f93b26cd40151bb5d7cfe79513cf13dff87cec342fe7cbd53d956e9a"
+      }
+    },
+    "preserveFailedDatabase": "freeholder_current_full86_financial159_normal_v42_test_20261114",
+    "preparedHarnessCorrection": "deploy/verified-financial-contact-undo-runtime84.manifest.json",
+    "noProductRuntimeDelta": true,
+    "providerAccountAcceptance": false,
+    "stableAcceptance": false
+  },
+  "rollbackContinuation20261114": {
+    "sourceHead": "12b9600cb05ce373bbedbb8724a8113202588a04",
+    "productRuntimeIdenticalTo": "c6c7d449c77119c1aae99cccb3e0090727662747",
+    "status": "REAL_INJECTED_UNDO_AND_TWO_ATOMIC_ROLLBACK_CASES_PASS",
+    "proofs": {
+      "sourceV79": {
+        "path": "/tmp/freeholder-current-full86-financial159-source-v79-20261114-result.json",
+        "sha256": "a00b9bfd0e35333c8ebf1e7523a70e492bfad6ac84995724195019dcd789a55c",
+        "passed": true
+      },
+      "normalV43": {
+        "path": "/tmp/freeholder-current-full86-normal-v43-result-20261113.json",
+        "sha256": "b84e3ac7aad3b055704fdf24b6f924ae5566a5aac98810a350a6d1793828fe08",
+        "passed": true
+      },
+      "strictV54": {
+        "path": "/tmp/freeholder-current-full86-parity159-v54-result-20261113.json",
+        "sha256": "f07dbc9a5a628ba74030311fa88d4a1bc1c3129d905dce49a06a08dd378dbf9d",
+        "passed": true
+      },
+      "sdkV24": {
+        "path": "/tmp/freeholder-current-full86-sdk-generation-v24-20261114-result.json",
+        "sha256": "7a1a620f6541a8d85083b4e6951322aee040f5cb3eb0966dcbc7ba24625cc0fe",
+        "passed": true
+      },
+      "undoRollback-result.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-rollback-native-v2-20261114-result.json",
+        "sha256": "93477be68dc341098103ff527a7a065d6e38c503a3ecceef1f80264d5c044db1",
+        "passed": true
+      },
+      "undoRollback-before.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-rollback-native-v2-20261114-before.json",
+        "sha256": "f2ac6b4869a277f7f8d97d4354c32e937165386f648d68ab7bdffcc95ea6343a",
+        "passed": true
+      },
+      "undoRollback-after.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-rollback-native-v2-20261114-after.json",
+        "sha256": "929bc241e59095b8826018beb36c506b46374f424b04d43d989f48b21bfa034f",
+        "passed": true
+      },
+      "undoRollback-config.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-rollback-native-v2-20261114-config.json",
+        "sha256": "738b7664b53ace091cfe48eda29ee38b9e6576e2dd37aa3f02bbfb23f4cb24af"
+      },
+      "undoRollback.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-rollback-native-v2-20261114.json",
+        "sha256": "a5b80b4eb06891da9720dd36a15a84d01bb48ea7ffb8ffc54b7e3199cab6898d"
+      },
+      "unevenAtomicRollback-result.json": {
+        "path": "/tmp/freeholder-current-full86-atomic-uneven-rollback-native-v2-20261114-result.json",
+        "sha256": "6885166d73bfcc2236452226c687807658832583ac709ca78c9218612149176f",
+        "passed": true
+      },
+      "unevenAtomicRollback-before.json": {
+        "path": "/tmp/freeholder-current-full86-atomic-uneven-rollback-native-v2-20261114-before.json",
+        "sha256": "e91ca23958d158ef04acb3dcf949c42f144a6dae68132304b9dcc97e43d702b8",
+        "passed": true
+      },
+      "unevenAtomicRollback-after.json": {
+        "path": "/tmp/freeholder-current-full86-atomic-uneven-rollback-native-v2-20261114-after.json",
+        "sha256": "bca97242852e9a3f49d1f5c0a5f7e638cfa2def37780ff6e7c6fa44192424157",
+        "passed": true
+      },
+      "unevenAtomicRollback-config.json": {
+        "path": "/tmp/freeholder-current-full86-atomic-uneven-rollback-native-v2-20261114-config.json",
+        "sha256": "13bf45bb6f95e959acf65456dd566994a0320a0946455080bca1506f8a1737ed"
+      },
+      "unevenAtomicRollback.json": {
+        "path": "/tmp/freeholder-current-full86-atomic-uneven-rollback-native-v2-20261114.json",
+        "sha256": "7b807853e54e9a4e1b7f668b7f434a5a389295bef876bd7f9935f330ec1dd78d"
+      },
+      "equalAtomicRollback-result.json": {
+        "path": "/tmp/freeholder-current-full86-atomic-equal-rollback-native-v2-20261114-result.json",
+        "sha256": "a9ae155e4c136115a8c60ce726170582aab1fe6ec5092262693feb1a90d9699f",
+        "passed": true
+      },
+      "equalAtomicRollback-before.json": {
+        "path": "/tmp/freeholder-current-full86-atomic-equal-rollback-native-v2-20261114-before.json",
+        "sha256": "702f09a6d8ccc276c89561f9e8ca29bb1dc0568963978d0d9b3e6f501c231959",
+        "passed": true
+      },
+      "equalAtomicRollback-after.json": {
+        "path": "/tmp/freeholder-current-full86-atomic-equal-rollback-native-v2-20261114-after.json",
+        "sha256": "e2d4702e9508a7fe0d7ed99903cb9d83391d017d2c72af78fab4f27a563fa3ab",
+        "passed": true
+      },
+      "equalAtomicRollback-config.json": {
+        "path": "/tmp/freeholder-current-full86-atomic-equal-rollback-native-v2-20261114-config.json",
+        "sha256": "4ccdfaa3ee037fad61d2d62880c426ba0809288f088d188b22cd2031eaa44278"
+      },
+      "equalAtomicRollback.json": {
+        "path": "/tmp/freeholder-current-full86-atomic-equal-rollback-native-v2-20261114.json",
+        "sha256": "c6436c6b7c8f0f0037ffbc757bc8acb1fae5225ffbf6bc4720a414a2e5a6ea31"
+      }
+    },
+    "preservedFailedDatabase": "freeholder_current_full86_financial159_normal_v42_test_20261114",
+    "nextHeldMediaUnqualified": true,
+    "providerAccountAcceptance": false,
+    "stableAcceptance": false
+  }
+}

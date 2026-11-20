@@ -1,0 +1,19 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C1.12",
+    "C3.28",
+    "C11.08"
+  ],
+  "status": "ROOT_SOURCE_COMPOSED_UNQUALIFIED",
+  "base": "7db593f452482007fbb07717b30a5cf5ce4a4091",
+  "leaf": "acb1593261e237e4648ed2a66904c33cf71dea62",
+  "preservedSqlAndSdk": {
+    "db/migrations/0082_verified_media_transfer.sql": "4e6c7c96fc76325b3787f55db698f09e93cf52e070360af254bbb4438c1409c4",
+    "db/migrations/0085_controlled_collection_application.sql": "8b12245ceb657877e3ad4b739fb02c5c5efa3f3d412c7cf2b69d9d3e4b8ef6f8",
+    "packages/sdk/src/generated.ts": "03ef130ab3280be047fc51f3fc51f80e621d1abd0ccbc324d085f563d0572fc9"
+  },
+  "sourceOnly": true,
+  "actualCompatibleImageProviderOwnerRecoveryStableAcceptance": false,
+  "masterResolution": "Preserved complete root MASTER then inserted both exact isolated image-leaf status blocks. No prior source evidence/checklist states lost."
+}

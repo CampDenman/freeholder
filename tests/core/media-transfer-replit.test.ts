@@ -1,16 +1,28 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C11.08: a failed read is not permission to overwrite an occupied target.
+import { Readable } from "node:stream";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { copyManifestObjects, createReplitStore } from "../../scripts/media-transfer.mjs";
 
-const provider = vi.hoisted(() => ({ read: vi.fn(), upload: vi.fn(), save: vi.fn() }));
+type ReadResult = { ok: true; value: Buffer[] } | { ok: false; error: { statusCode: number; message: string } };
+const provider = vi.hoisted(() => ({ read: vi.fn<() => Promise<ReadResult>>(), upload: vi.fn(), save: vi.fn(), current: undefined as Buffer | undefined }));
 vi.mock("@replit/object-storage", () => ({ Client: class {
   downloadAsBytes = provider.read;
   uploadFromBytes = provider.upload;
 } }));
 vi.mock("@google-cloud/storage", () => ({ Storage: class {
-  bucket() { return { file: () => ({ save: provider.save }) }; }
+  bucket() { return { file: () => ({
+    save: provider.save,
+    download: async () => { throw new Error("Unbounded download is forbidden"); },
+    getMetadata: async () => {
+      const result = await provider.read();
+      if (!result.ok) throw Object.assign(new Error("Synthetic metadata refusal"), { code: result.error?.statusCode });
+      const value = result.value?.[0]; if (!Buffer.isBuffer(value)) throw new Error("Synthetic read omitted bytes");
+      provider.current = value; return [{ generation: "17", size: String(value.byteLength) }];
+    },
+    createReadStream: () => provider.current ? Readable.from([provider.current], { objectMode: false }) : new Readable({ read() { this.destroy(new Error("Synthetic stream has no metadata")); } }),
+  }) }; }
 } }));
 const original = new TextEncoder().encode("original source bytes"), different = new TextEncoder().encode("target owner's different bytes");
 const key = "2026/11/immutable-original.pdf";
@@ -18,7 +30,7 @@ const manifest = { format: "freeholder-media-manifest/v1" as const, objects: [{ 
 const source = { async get() { return original; }, async put() { throw new Error("Source must remain read-only"); } };
 
 describe("Replit media-transfer evidence (C11.08)", () => {
-  beforeEach(() => { provider.read.mockReset(); provider.upload.mockReset(); provider.save.mockReset(); });
+  beforeEach(() => { provider.read.mockReset(); provider.upload.mockReset(); provider.save.mockReset(); provider.current = undefined; });
   it.each([403, 503])("preserves an occupied target when its first read returns HTTP%d", async statusCode => {
     let actual = different, firstRead = true;
     provider.read.mockImplementation(async () => {

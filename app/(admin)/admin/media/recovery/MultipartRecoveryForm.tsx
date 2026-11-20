@@ -22,6 +22,7 @@ export function MultipartRecoveryForm({resourceId,operationId,witness,namespace,
   </select></Field>
   <Field label={labels.reference} htmlFor={`${prefix}-reference`}><Input id={`${prefix}-reference`} name="providerFinalReference" required minLength={8} maxLength={300} autoComplete="off"/></Field>
   <Field label={labels.evidence} htmlFor={`${prefix}-evidence`}><textarea id={`${prefix}-evidence`} name="providerEvidence" required minLength={20} maxLength={2000} rows={3} className="w-full rounded-md border border-rule-strong bg-field p-2 text-ink"/></Field>
+  <Field label={labels.stopDrainId} htmlFor={`${prefix}-stop-id`}><Input id={`${prefix}-stop-id`} name="stopDrainId" maxLength={36} autoComplete="off" dir="ltr" aria-describedby={`${prefix}-stop-hint`}/><p id={`${prefix}-stop-hint`} className="text-sm text-ink-muted">{labels.stopDrainHint}</p></Field>
   <Field label={labels.stopped} htmlFor={`${prefix}-stopped`}><textarea id={`${prefix}-stopped`} name="stoppedWriterEvidence" required minLength={20} maxLength={2000} rows={3} className="w-full rounded-md border border-rule-strong bg-field p-2 text-ink"/></Field>
   <label className="flex items-start gap-2 text-sm"><input type="checkbox" name="confirmation" value="ORIGINAL MULTIPART RESOURCE CONFIRMED" required className="mt-1"/><span>{labels.multipartConfirm}</span></label>
   <Button type="submit" disabled={pending}>{labels.submit}</Button>

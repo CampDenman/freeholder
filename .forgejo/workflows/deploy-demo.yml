@@ -1,0 +1,95 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+# Keep demo.freeholder.ai on the latest promoted code, automatically.
+#
+# Tony's standing rule, 2026-11-19: "the demo SHOULD ALWAYS CARRY THE LATEST
+# CODE". Nothing enforced it before this, which is why it drifted: the only
+# deploy path was deploy-production.yml, dispatch-only behind a typed
+# confirmation, so the demo moved as often as someone remembered. Measured
+# 2026-11-20, demo.freeholder.ai was serving an image two commits of main
+# behind its own host's available build.
+#
+# This file lives on the private forge ON PURPOSE and must not be copied to
+# .github/workflows: a public repository's hosted runner would then hold the
+# droplet SSH key, and the host address would pass through GitHub.
+#
+# WHAT IT DRIVES, and why not the obvious thing. demo.freeholder.ai is NOT a
+# separate Freeholder deploy: /opt/freeholder/Caddyfile routes it to
+# `reverse_proxy playground-app:3000`, so the demo IS the playground stack at
+# /opt/freeholder-playground, a different compose project from production's
+# /opt/freeholder. Its image is digest-pinned in that directory's .env.
+# scripts/deploy-droplet.mjs is therefore the wrong tool and would be REFUSED
+# there: deploy-droplet-remote.sh will not swap unless a backup.sh sits beside
+# compose.yml, and the playground directory has none. The work is done by
+# deploy/docker-selfhost/playground/update-image.sh, which repins and rolls
+# back on an unhealthy result.
+#
+# Production is untouched and stays manual and confirmed.
+name: Deploy demo
+
+on:
+  push:
+    branches: [main]
+  # The image is published by GitHub CI, so a push can outrun its own build.
+  # An hourly run picks up anything a push missed instead of waiting for the
+  # next merge. The script is idempotent: it exits 0 saying "already current"
+  # when there is nothing to do.
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: freeholder-demo
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Repin the demo to the promoted image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: https://data.forgejo.org/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Production and the playground differ only by directory on one droplet,
+      # and this workflow runs unattended with no confirmation. Refuse before
+      # touching the host if the target is unset or is production's directory.
+      # update-image.sh refuses again on the far side; this is the cheaper of
+      # the two refusals, not a replacement for it.
+      - name: Refuse any target but the demo
+        env:
+          DEMO_DIR: ${{ secrets.FREEHOLDER_DEMO_DIR }}
+        run: |
+          test -n "$DEMO_DIR" || { echo "FREEHOLDER_DEMO_DIR is unset; refusing to guess" >&2; exit 1; }
+          test "$DEMO_DIR" != "/opt/freeholder" || { echo "FREEHOLDER_DEMO_DIR is production; refusing" >&2; exit 1; }
+
+      - name: Configure the deploy identity
+        env:
+          DEPLOY_KEY: ${{ secrets.FREEHOLDER_DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.FREEHOLDER_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_KEY" > "$HOME/.ssh/freeholder_deploy"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 0600 "$HOME/.ssh/freeholder_deploy" "$HOME/.ssh/known_hosts"
+
+      # Copied every run so the host cannot drift from the reviewed copy.
+      - name: Install the updater and run it
+        env:
+          DEPLOY_HOST: ${{ secrets.FREEHOLDER_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.FREEHOLDER_DEPLOY_USER }}
+          DEMO_DIR: ${{ secrets.FREEHOLDER_DEMO_DIR }}
+          DEMO_HEALTH_URL: ${{ secrets.FREEHOLDER_DEMO_HEALTH_URL }}
+        run: |
+          ssh_opts="-i $HOME/.ssh/freeholder_deploy -o BatchMode=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts -o StrictHostKeyChecking=yes"
+          # shellcheck disable=SC2086
+          scp $ssh_opts deploy/docker-selfhost/playground/update-image.sh \
+            "${DEPLOY_USER:-root}@${DEPLOY_HOST}:${DEMO_DIR}/update-image.sh"
+          # shellcheck disable=SC2086
+          ssh $ssh_opts "${DEPLOY_USER:-root}@${DEPLOY_HOST}" \
+            "chmod 700 ${DEMO_DIR}/update-image.sh && PLAYGROUND_DIR='${DEMO_DIR}' PLAYGROUND_HEALTH_URL='${DEMO_HEALTH_URL}' ${DEMO_DIR}/update-image.sh"

@@ -1,0 +1,74 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "controlled_cash_origin_old_protocol_harness88.v1",
+  "checklist": ["C12.38", "C9.33", "C1.08", "C11.10"],
+  "status": "TEST-ONLY SOURCE CONTINUATION; focused malformed case and full five-case file PASS on fresh preserved databases",
+  "productBehaviorChanged": false,
+  "preUpgrade": {
+    "commit": "426009a1983711c81cef0447862120c682598515",
+    "testPath": "tests/modules/controlled-cash-origin-batch84.test.ts",
+    "testSha256": "074dc686ca5adba367044792bbc93737a3b31e47a0d1019083d1145f2e2317d2",
+    "runtimePath": "src/modules/subscriptions/controlled-provider-runtime.ts",
+    "runtimeSha256": "8a691af37824ff20bb41c43f058d762351a7b4810c11167e9d7f9c83e71b22a7",
+    "adapterPath": "src/adapters/payments/stripe.ts",
+    "adapterSha256": "c6ebf95682f9b8bb4ec37be49358df9b47c496ae329e396a73f486c64b4df6d4",
+    "migrations": 86,
+    "lastMigration": "0085_controlled_collection_application",
+    "lastMigrationWhen": 1793310000065,
+    "caseName": "retains a scripted malformed late cash callback through the real holder and keeps its raw review flag",
+    "timeoutMs": 180000
+  },
+  "successor": {
+    "path": "tests/modules/controlled-cash-origin-batch84.test.ts",
+    "beforeSha256": "65d57d8d39b5afb9622db22dec1bcd6ed66500ee2d552fdfd0abe618999280dd",
+    "afterSha256": "14628754cc5e7f80093632da489968834906fcc89f00f673dacd974fde3da2cb",
+    "edits": [
+      {
+        "before": "",
+        "after": "import {runControlledCashOriginPreUpgradeMalformed} from \"../helpers/controlled-cash-origin-old-protocol88\";\n"
+      },
+      {
+        "before": " it(\"retains a scripted malformed late cash callback through the real holder and keeps its raw review flag\",async()=>{\n  const source=await actual();if(!f)throw Error(\"Keep the genuine actual provider.\");const before=await financial(),history=await db().transaction(tx=>controlledProviderJournal(tx,source.resourceId)),fact=history.facts.find(row=>row.actual.kind===\"cash_observed\");if(!fact||fact.actual.kind!==\"cash_observed\")throw Error(\"Start from a genuinely retained original cash fact.\");\n  const provider=f.remote.provider,inspect=provider.inspectMerchantControlledInvoice?.bind(provider);if(!inspect)throw Error(\"Use the actual invoice observer.\");const malformed={...fact.actual.raw,cash:{...controlledCashEvidence.parse(fact.actual.raw.cash),amountMinor:\"scripted malformed provider counter\"}};\n  const fault=vi.spyOn(provider,\"inspectMerchantControlledInvoice\").mockImplementationOnce(async request=>{const actual=await inspect.call(provider,request);if(!request.onObserved)throw Error(\"Use the real original SDK observer.\");await request.onObserved({kind:\"cash_observed\",raw:malformed});return actual;});\n  const planned=await planControlledProviderOperation.call({resourceId:source.resourceId,kind:\"read_invoice\",providerInvoiceRef:source.open.providerInvoiceRef},system);await expect(executeControlledOperation(planned.operationId,OWNER)).rejects.toThrow();fault.mockRestore();\n  const current=await db().transaction(tx=>controlledProviderJournal(tx,source.resourceId));expect(current.facts.some(row=>row.actual.kind===\"cash_observed\"&&row.actual.raw.cash&&typeof row.actual.raw.cash===\"object\"&&Reflect.get(row.actual.raw.cash,\"amountMinor\")===\"scripted malformed provider counter\")).toBe(true);expect(current.unfinished).toEqual([]);\n  expect(await db().transaction(tx=>readControlledReceiptNamespace(tx,source.receipt.id))).toMatchObject({verified:true,rawCashReview:true});expect(await financial()).toEqual(before);\n });",
+        "after": " it(\"retains a scripted malformed late cash callback through the real holder and keeps its raw review flag\",async()=>{\n  const evidence=await runControlledCashOriginPreUpgradeMalformed();expect(evidence).toMatchObject({sourceCommit:\"426009a1983711c81cef0447862120c682598515\",databasePreserved:true,migrations:86,lastMigration:\"0085_controlled_collection_application\",passed:1,failed:0,timeoutMs:180000});\n });"
+      }
+    ]
+  },
+  "masterSuccessor": {
+    "path": "MASTER.md",
+    "beforeSha256": "78a98db602222423b32ec0c7b6407a1604e90fbe33b7738600885218c52bd389",
+    "afterSha256": "199c991a7592090a6750b99dabf12df5508b4a987ce2bf78c5faeea84b2d8a93",
+    "exactAppend": "Controlled cash old-protocol admitted-harness continuation2026-11-15\n(C12.38/C9.33/C1.08/C11.10): the integrated five-case cash-origin file keeps its\nfour current safe-protocol positives and runs the unchanged malformed late-callback\noracle from actual pinned pre-upgrade commit426009a198 through its real old adapter,\nholder and database transactions on a fresh0..85 database. The focused malformed\ncase and full five-case file PASS on separate fresh current databases, with the\nold malformed fact retained under a NULL new-protocol admission and raw review.\nNo classifier, current ticket check, production predicate, assertion, retention\nmock or180-second timeout changes; no product behavior or schema change. Exact\nforward test reversal and focused source controls PASS. The initial old-child\nsetup-timeout failure and every success/failure database are preserved. Provider,\nexternal drain, S1, security and stable acceptance remain open. See\n`deploy/controlled-cash-origin-old-protocol88.source.json`.\n\n"
+  },
+  "newFiles": [
+    {
+      "path": "tests/helpers/controlled-cash-origin-old-protocol88.ts",
+      "sha256": "9a6133807fbd56a113c465399b1060c41ecd02d867e2f982a58b8f4f16401d1c"
+    }
+  ],
+  "focusedEvidence": {
+    "currentDatabase": "fh_origin_current_test_1794740475_31164",
+    "oldProtocolDatabase": "fh_origin_old_test_10c68748b0cc4a1abf4b70b4872fd8be",
+    "workspace": "/tmp/freeholder-origin-old-protocol88-xGeFao",
+    "passed": 1,
+    "failed": 0,
+    "malformedFactId": "8eb8ef58-b633-4c14-8ec6-981a83983040",
+    "malformedCallId": "320aac39-ae71-4abf-9b63-4baa74ae102f",
+    "responseProjectionProtocol": null,
+    "databasesPreserved": true
+  },
+  "fullFileEvidence": {
+    "currentDatabase": "fh_origin_full_test_1794740638_11349",
+    "oldProtocolDatabase": "fh_origin_old_test_b80b0c157f5048088bb8b0158243dcb8",
+    "workspace": "/tmp/freeholder-origin-old-protocol88-LnnijQ",
+    "passed": 5,
+    "failed": 0,
+    "durationSeconds": 156.92,
+    "databasesPreserved": true
+  },
+  "preservedSetupFailure": {
+    "currentDatabase": "fh_origin_current_test_1794740338_10957",
+    "oldProtocolDatabase": "fh_origin_old_test_9f84bf47833c416dbaa184b215cb39d0",
+    "workspace": "/tmp/freeholder-origin-old-protocol88-QScYUP",
+    "classification": "Initial old-source beforeEach truncate reached its existing 25-second statement bound before the fixture; no native assertion ran. Database and logs preserved."
+  }
+}

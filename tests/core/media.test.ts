@@ -43,6 +43,7 @@ import {
   completeUpload,
   deleteAsset,
   dismissAltTextSuggestion,
+  declareUploadParts,
   generateAltTextSuggestion,
   getAsset,
   listAssets,
@@ -107,6 +108,16 @@ const mp4 = () =>
     Buffer.from([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 0, 0, 0, 0]),
   );
 const mp3 = () => new Uint8Array(Buffer.from("ID3\u0004\u0000\u0000sample"));
+
+function emptyS3Baseline(request: Request): Response | undefined {
+  const url = new URL(request.url);
+  if (request.method !== "GET" || url.pathname !== "/media") return undefined;
+  if (url.searchParams.has("versioning")) return new Response("<VersioningConfiguration/>");
+  if (url.searchParams.has("versions")) return new Response("<ListVersionsResult><Name>media</Name><EncodingType>url</EncodingType><IsTruncated>false</IsTruncated></ListVersionsResult>");
+  if (url.searchParams.has("list-type")) return new Response("<ListBucketResult><Name>media</Name><EncodingType>url</EncodingType><KeyCount>0</KeyCount><IsTruncated>false</IsTruncated></ListBucketResult>");
+  if (url.searchParams.has("uploads")) return new Response("<ListMultipartUploadsResult><Bucket>media</Bucket><EncodingType>url</EncodingType><IsTruncated>false</IsTruncated></ListMultipartUploadsResult>");
+  return undefined;
+}
 
 describe("what a file is", () => {
   it("decides kind from the mime type", () => {
@@ -1208,7 +1219,7 @@ describe.runIf(hasDatabase)("the asset library", () => {
     try {
       Object.assign(process.env, {
         FREEHOLDER_STORAGE: "s3",
-        S3_ENDPOINT: "https://s3.example.test",
+        S3_ENDPOINT: "https://s3.us-east-1.amazonaws.com",
         S3_REGION: "test-1",
         S3_BUCKET: "media",
         S3_ACCESS_KEY_ID: "key",
@@ -1219,22 +1230,34 @@ describe.runIf(hasDatabase)("the asset library", () => {
       resetEnvForTests();
       resetStorageForTests();
       resetMalwareScannerForTests();
+      let partChecksum = "", originalRequest = "", originalToken = "";
       vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
         const request = input instanceof Request ? input : new Request(input, init);
         const url = new URL(request.url);
+        const baseline = emptyS3Baseline(request);
+        if (baseline) return baseline;
+        const key = decodeURIComponent(url.pathname.slice("/media/".length));
         if (request.method === "POST" && url.searchParams.has("uploads")) {
-          return new Response(
-            "<InitiateMultipartUploadResult><UploadId>upload-1</UploadId></InitiateMultipartUploadResult>",
-          );
+          originalRequest = request.headers.get("x-amz-meta-freeholder-original-request") ?? "";
+          originalToken = request.headers.get("x-amz-meta-freeholder-original-token") ?? "";
+          return new Response(`<InitiateMultipartUploadResult><Bucket>media</Bucket><Key>${key}</Key><UploadId>upload-1</UploadId></InitiateMultipartUploadResult>`);
+        }
+        if (request.method === "PUT" && url.searchParams.get("uploadId")) {
+          const bytes = new Uint8Array(await request.arrayBuffer());
+          const { createHash } = await import("node:crypto");
+          const digest = createHash("sha256").update(bytes);
+          partChecksum = digest.digest("base64");
+          if (request.headers.get("x-amz-checksum-sha256") !== partChecksum || !request.headers.has("x-freeholder-original-part-id")) return new Response(null, { status: 400 });
+          return new Response(null, { headers: { etag: '"part-etag"', "x-amz-checksum-sha256": partChecksum } });
         }
         if (request.method === "POST" && url.searchParams.get("uploadId")) {
           assembled = true;
-          return new Response("<CompleteMultipartUploadResult />");
+          return new Response(`<CompleteMultipartUploadResult><Bucket>media</Bucket><Key>${key}</Key><ETag>"assembled-etag"</ETag></CompleteMultipartUploadResult>`);
         }
         if (request.method === "GET" && url.searchParams.get("uploadId")) {
           return assembled
             ? new Response("<Error><Code>NoSuchUpload</Code></Error>", { status: 404 })
-            : new Response(`<ListPartsResult><IsTruncated>false</IsTruncated><Part><PartNumber>1</PartNumber><ETag>"part-etag"</ETag><Size>${pdf.byteLength}</Size></Part></ListPartsResult>`);
+            : new Response(`<ListPartsResult><Bucket>media</Bucket><Key>${key}</Key><UploadId>upload-1</UploadId><IsTruncated>false</IsTruncated><Part><PartNumber>1</PartNumber><ETag>"part-etag"</ETag><Size>${pdf.byteLength}</Size><ChecksumSHA256>${partChecksum}</ChecksumSHA256></Part></ListPartsResult>`);
         }
         if (request.method === "HEAD") {
           if (!assembled) return new Response(null, { status: 404 });
@@ -1242,13 +1265,14 @@ describe.runIf(hasDatabase)("the asset library", () => {
             headers: {
               "content-length": String(pdf.byteLength),
               "content-type": "application/pdf",
+              etag: '"assembled-etag"',
             },
           });
         }
         if (request.method === "GET") {
           return new Response(pdf, {
             status: request.headers.has("range") ? 206 : 200,
-            headers: { "content-type": "application/pdf" },
+            headers: { "content-type": "application/pdf", etag: '"assembled-etag"', "x-amz-meta-freeholder-original-request": originalRequest, "x-amz-meta-freeholder-original-token": originalToken },
           });
         }
         return new Response(null, { status: 500 });
@@ -1263,15 +1287,16 @@ describe.runIf(hasDatabase)("the asset library", () => {
         STAFF,
       );
       expect(reservation.strategy).toBe("direct_multipart");
-      // The fixture already exposes a provider-held part. Preserve all
-      // assembly/receipt/idempotency oracles below while refusing NEW browser
-      // PUT authority until the durable original per-part protocol exists.
-      const signing = await failure(signUploadParts.call(
+      const { createHash } = await import("node:crypto");
+      await declareUploadParts.call({ id: reservation.id, parts: [{ partNumber: 1, bytes: pdf.byteLength, sha256: createHash("sha256").update(pdf).digest("hex") }] }, STAFF);
+      const signing = await signUploadParts.call(
         { id: reservation.id, partNumbers: [1] },
         STAFF,
-      ));
-      expect(signing.code).toBe("conflict");
-      expect(signing.message).toContain("upload recovery is fully supported");
+      );
+      expect(signing.parts).toHaveLength(1);
+      const part = signing.parts[0]!;
+      const uploaded = await fetch(part.url, { method: part.method, headers: part.headers, body: pdf });
+      expect(uploaded.ok).toBe(true);
       await expect(
         uploadStatus.call({ id: reservation.id }, STAFF),
       ).resolves.toMatchObject({ partCount: 1, partSize: 8 * 1024 * 1024 });
@@ -1329,7 +1354,7 @@ describe.runIf(hasDatabase)("the asset library", () => {
     try {
       Object.assign(process.env, {
         FREEHOLDER_STORAGE: "s3",
-        S3_ENDPOINT: "https://s3.example.test",
+        S3_ENDPOINT: "https://s3.us-east-1.amazonaws.com",
         S3_REGION: "test-1",
         S3_BUCKET: "media",
         S3_ACCESS_KEY_ID: "key",
@@ -1343,8 +1368,11 @@ describe.runIf(hasDatabase)("the asset library", () => {
       vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
         const request = input instanceof Request ? input : new Request(input, init);
         const url = new URL(request.url);
+        const baseline = emptyS3Baseline(request);
+        if (baseline) return baseline;
         if (request.method === "POST" && url.searchParams.has("uploads")) {
-          return new Response("<InitiateMultipartUploadResult><UploadId>upload-2</UploadId></InitiateMultipartUploadResult>");
+          const key = decodeURIComponent(url.pathname.slice("/media/".length));
+          return new Response(`<InitiateMultipartUploadResult><Bucket>media</Bucket><Key>${key}</Key><UploadId>upload-2</UploadId></InitiateMultipartUploadResult>`);
         }
         if (request.method === "POST" && url.searchParams.get("uploadId")) {
           assembled = true;

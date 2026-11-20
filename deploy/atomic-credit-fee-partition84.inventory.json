@@ -1,0 +1,325 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "SOURCE_IMPLEMENTED_ALL_EXECUTION_UNRUN",
+  "base": "af221ea3bc9dd71d301a9dfecfd8094712ec8540",
+  "ownedTail": "deploy/atomic-credit-fee-partition84.fragment.sql",
+  "parentColumnsChanged": [],
+  "model": {
+    "export": "invoiceCreditFundingAtomicFeePartitions",
+    "table": "invoice_credit_funding_atomic_fee_partitions",
+    "primaryKey": [
+      "funding_id"
+    ],
+    "foreignKeys": [
+      {
+        "name": "credit_atomic_fee_funding_fk",
+        "columns": [
+          "funding_id"
+        ],
+        "target": "invoice_credit_funding",
+        "targetColumns": [
+          "id"
+        ],
+        "onDelete": "restrict"
+      },
+      {
+        "name": "credit_atomic_fee_payment_fk",
+        "columns": [
+          "source_payment_id"
+        ],
+        "target": "payments",
+        "targetColumns": [
+          "id"
+        ],
+        "onDelete": "restrict"
+      },
+      {
+        "name": "credit_atomic_fee_source_application_fk",
+        "columns": [
+          "source_application_id"
+        ],
+        "target": "invoice_credit_applications",
+        "targetColumns": [
+          "reservation_id"
+        ],
+        "onDelete": "restrict",
+        "nullable": true
+      },
+      {
+        "name": "credit_atomic_fee_source_invoice_fk",
+        "columns": [
+          "source_invoice_id"
+        ],
+        "target": "invoices",
+        "targetColumns": [
+          "id"
+        ],
+        "onDelete": "restrict"
+      },
+      {
+        "name": "credit_atomic_fee_note_fk",
+        "columns": [
+          "credit_note_id"
+        ],
+        "target": "credit_notes",
+        "targetColumns": [
+          "id"
+        ],
+        "onDelete": "restrict"
+      },
+      {
+        "name": "credit_atomic_fee_line_fk",
+        "columns": [
+          "credit_note_line_id"
+        ],
+        "target": "credit_note_lines",
+        "targetColumns": [
+          "id"
+        ],
+        "onDelete": "restrict"
+      },
+      {
+        "name": "credit_atomic_fee_receipt_fk",
+        "columns": [
+          "original_charge_receipt_id"
+        ],
+        "target": "subscription_provider_charge_receipts",
+        "targetColumns": [
+          "id"
+        ],
+        "onDelete": "restrict"
+      },
+      {
+        "name": "credit_atomic_fee_inspection_fk",
+        "columns": [
+          "bank_inspection_id"
+        ],
+        "target": "merchant_cash_return_inspections",
+        "targetColumns": [
+          "id"
+        ],
+        "onDelete": "restrict"
+      },
+      {
+        "name": "credit_atomic_fee_observation_fk",
+        "columns": [
+          "bank_observation_id"
+        ],
+        "target": "merchant_cash_return_observations",
+        "targetColumns": [
+          "id"
+        ],
+        "onDelete": "restrict"
+      }
+    ],
+    "checks": [
+      "credit_atomic_fee_protocol",
+      "credit_atomic_fee_fingerprints",
+      "credit_atomic_fee_economics",
+      "credit_atomic_fee_before_entries"
+    ],
+    "indexes": [
+      {
+        "name": "credit_atomic_fee_payment",
+        "columns": [
+          "source_payment_id",
+          "funding_id"
+        ]
+      },
+      {
+        "name": "credit_atomic_fee_parent_source",
+        "columns": [
+          "source_payment_id",
+          "source_application_id",
+          "funding_id"
+        ]
+      },
+      {
+        "name": "credit_atomic_fee_note",
+        "columns": [
+          "credit_note_id",
+          "credit_note_line_id",
+          "funding_id"
+        ]
+      },
+      {
+        "name": "credit_atomic_fee_receipt",
+        "columns": [
+          "original_charge_receipt_id",
+          "funding_id"
+        ]
+      },
+      {
+        "name": "credit_atomic_fee_inspection",
+        "columns": [
+          "bank_inspection_id",
+          "funding_id"
+        ]
+      }
+    ],
+    "private": true,
+    "retention": "noTTL immutable financial receipt; actual complete source and target financial ownership"
+  },
+  "newFunctions": [
+    {
+      "signature": "freeholder_atomic_credit_fee_partition(uuid,uuid,bigint)",
+      "returns": [
+        "known boolean",
+        "principal_minor bigint",
+        "original_fee_minor bigint",
+        "retired_fee_minor bigint",
+        "allocated_principal_minor bigint",
+        "allocated_nominal_fee_minor bigint",
+        "allocated_assigned_fee_minor bigint",
+        "allocated_retired_fee_minor bigint",
+        "take_nominal_fee_minor bigint",
+        "take_retired_fee_minor bigint",
+        "take_assigned_fee_minor bigint",
+        "take_collected_fee_minor bigint",
+        "take_owed_fee_minor bigint",
+        "remaining_principal_minor bigint",
+        "remaining_actual_fee_minor bigint",
+        "source_receipt_id uuid",
+        "bank_inspection_id uuid",
+        "bank_observation_id uuid",
+        "bank_namespace_revision text",
+        "evidence_fingerprint text"
+      ]
+    },
+    {
+      "signature": "freeholder_guard_credit_atomic_fee_partition()",
+      "returns": "trigger"
+    },
+    {
+      "signature": "freeholder_credit_atomic_fee_birth_guard()",
+      "returns": "trigger"
+    },
+    {
+      "signature": "freeholder_credit_atomic_fee_ready()",
+      "returns": "boolean"
+    }
+  ],
+  "successorFunctions": [
+    "freeholder_credit_fee_receipt()",
+    "freeholder_credit_fee_is_collected(uuid,text)",
+    "freeholder_guard_invoice_credit()",
+    "freeholder_subscription_proration_receipt()"
+  ],
+  "additionalSuccessorApproval": "Root approved the complete latest proration receipt successor with ONLY the invoice-wide source.refunded_minor birth gate continued for an authentic NEW B private quote/current complete sibling disposition. Validate actual NEW against the real stored quote; never query a not-yet-born proration. Own source refunded0 and all original line/period/tax/rounding/RMA/caller/loan checks remain. Preserve future effect/default branches and exact before/after reversal; readiness pins actual composed body.",
+  "privateOwnerPreimages": "Root approved NEW B-only beforeProrationProjections(originalJobId/jobClaimDigest/originalTask/state) and beforeSubscriptionProjections(pendingPlanId/PG-exact updatedAt). Capture only after original full PG hash verification; normalize only exact actual bound owner rows after genuine enqueue/task/accepted-q/new-plan checks. Actual same-TX q-planned collection/components may be removed only if absent from original beforeEntries and independently complete/valid. No new model/column/header or generic transaction exclusion.",
+  "triggers": [
+    {
+      "name": "credit_atomic_fee_partition_guard",
+      "table": "invoice_credit_funding_atomic_fee_partitions",
+      "function": "freeholder_guard_credit_atomic_fee_partition()",
+      "timing": "BEFORE",
+      "events": [
+        "INSERT",
+        "UPDATE",
+        "DELETE"
+      ],
+      "row": true,
+      "tgtype": 31,
+      "enabled": [
+        "O",
+        "A"
+      ]
+    },
+    {
+      "name": "credit_atomic_fee_funding_birth",
+      "table": "invoice_credit_funding",
+      "function": "freeholder_credit_atomic_fee_birth_guard()",
+      "timing": "AFTER",
+      "events": [
+        "INSERT"
+      ],
+      "row": true,
+      "deferrable": true,
+      "initiallyDeferred": true,
+      "tgtype": 5,
+      "enabled": [
+        "O",
+        "A"
+      ]
+    }
+  ],
+  "ordinarySignatures": [
+    "controlledAtomicCreditFeePartition(real ServiceContext,{paymentId,sourceApplicationId,takeMinor})",
+    "atomicCreditSourceResourceIds(real Tx,actualPaymentIds)",
+    "assertAtomicCreditSourcePrefix(real ServiceContext,actualPaymentIds)",
+    "atomicCreditFeePartitionWitness(real Tx,exactOwnerScope)"
+  ],
+  "actualWriter": "invoicing.fundProrationCredit generates the real funding UUID, inserts the unchanged parent first, obtains its actual full PG row SHA and inserts this immutable same-PK child in the SAME real transaction; independent deferred birth checks cannot be caught away.",
+  "scope": "Exact original source payment/receipt/note/line and actual funding/reservation/application/fee-assignment graph; source AND target invoices; profile/collection are restrictions via real frozen owners only. ONE5000 physical union. No collector service or public policy selector.",
+  "preserve": [
+    "Every old parent column/fullPG row shape and HMAC input",
+    "Valid legacy strict floor and original cumulative epoch",
+    "Own source payment refundedMinor=0 requirement",
+    "RMA whole-note reservation",
+    "Existing old ordinary/manual/source hash domains"
+  ],
+  "guardLimits": "Only exact typed source retirement calculation/collection and fully-accounted sibling-invoice refund exception; never remove global or own-payment safety predicates. Mandatory child even numeric coincidence.",
+  "rootAssembly": null,
+  "qualification": "Seven new complete SQL bodies, four original-body-preserving successors, four trigger declarations and actual B2 shared financial/archive consumers exist as SOURCE ONLY. No types/lint/tests/parser/model/PG/native/provider execution; root owns final assembly and all qualification.",
+  "beforeEntriesEncoding": "Existing controlledObservationEntries.full encoding: one actual table:ID key per physical row with explicit postgres_row/dependency_canonical/schedule_stable hash properties. No domain substitutions or duplicate-row budgeting. Actual parent funding full PG SHA remains separate.",
+  "preQuoteSiblingDispositionProposal": {
+    "status": "APPROVED_SOURCE_ONLY_HELPER_AND_NARROW_SELECTOR_INVENTORY",
+    "helper": "readAtomicCreditInvoiceDisposition(real ServiceContext,{subscriptionId,originalInvoiceId})",
+    "file": "src/modules/invoicing/atomic-credit-invoice-disposition.ts",
+    "sourceSelection": "Existing paid basis first independently derives exact original invoice/period/terms; helper independently authenticates exact collection/route/core3/subscription ownership and full invoice PG SHA",
+    "resultVariants": [
+      "ordinary (NO actual controlled_cash_atomic.v1 origin; old strict refusal remains)",
+      "review (known atomic missing/corrupt/unbounded/current-bank/caller/refund/credit ambiguity; NO fallback)",
+      "atomic_sibling_disposition.v1 (complete authentic exact whole sibling graph)"
+    ],
+    "invoiceFields": [
+      "id",
+      "postgresRowFingerprint",
+      "totalMinor",
+      "paidMinor",
+      "refundedMinor",
+      "creditedMinor",
+      "currency"
+    ],
+    "wholeFields": [
+      "originalPrincipalMinor",
+      "originalFeeMinor",
+      "wholeTargetFeeMinor",
+      "unassignedDutyMinor"
+    ],
+    "everySibling": [
+      "actual payment/receipt/batch/proof/origin UUIDs",
+      "canonical amount/refunded",
+      "immutable original Fi",
+      "actual refund request/resource/physical FIN/current bank",
+      "typed real current atomic residual fee proof",
+      "all funding/reservation/application/release/fee-assignment ancestry",
+      "explicit disposition"
+    ],
+    "dispositions": {
+      "unreturned": "own refundedMinor MUST remain0; genuine available principal and exact typed fee partition only",
+      "fully_returned": "explicit authentic zero-principal retired source, still in all evidence/current hashes",
+      "partially_returned": "explicit actual remaining principal but unavailable for new own funding under existing restriction"
+    },
+    "readOnlySQLReuse": {
+      "signature": "freeholder_atomic_credit_fee_partition(uuid,uuid,bigint)",
+      "takeMinor": 0,
+      "meaning": "actual read-only source capacity BEFORE any new funding child; actual funding amount remains strictly positive and requires child at real birth"
+    },
+    "bounds": "ONE combined5000 actual table+UUID identity/domain union; full current rows/debt/callers retained",
+    "locking": "real source resource/parent prefix BEFORE target canonical locks; independent quote/accept recompute; no old quote bank/revision cache",
+    "laterSelectorScope": [
+      "ONLY invoice-wide refundedMinor check via verified exact context",
+      "selected own payment refundedMinor=0 remains",
+      "all original line/note/RMA/currency/contact/capacity checks remain"
+    ],
+    "buyerPrivacy": "No full private fee/bank/source-context spread into buyer quote/export",
+    "newModelsBeyondApprovedChild": 0,
+    "newSQLFunctionsBeyondApprovedFour": 0,
+    "actualCashProtocol": "controlled_cash_atomic.v1",
+    "causalGetProtocolIsIndependent": "freeholder.original-cash-inventory-causal.v2; never the cash application discriminator"
+  },
+  "readinessInventory": "deploy/atomic-credit-fee-readiness84.source.json",
+  "sourceReport": "deploy/atomic-credit-fee-partition84-source-20261114.md",
+  "centralIntegrationActual": "Actual collector-free B2 adapter is composed into controlledFinancialWitness and its safe archive, plus subscription privacy table list/per-sub archives. Existing central invoice/refund/profile/parent/undo consumers therefore receive new full-PG entries through their shared adapter. Exact IDs/profile AND restriction, one5000 union, no new empty shape."
+}

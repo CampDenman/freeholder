@@ -10,7 +10,8 @@ import { z } from "zod";
 import { and, count, desc, eq, inArray, lt, ne, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import { pendingObjectIsOwned, reservePendingMediaObject } from "./object-ledger";
-import { putWithReceipt, deleteWithReceipt, discardUnwrittenProxyReservation, discardUnwrittenObjectReservation,originalStoredObject,objectKeyDigest,type CapturedStorage, type TrackedPut } from "./write-ledger";
+import { putWithReceipt, discardUnwrittenProxyReservation, discardUnwrittenObjectReservation,originalStoredObject,objectKeyDigest,type CapturedStorage, type TrackedPut } from "./write-ledger";
+import {deleteWithReceipt} from "./delete-with-receipt";
 import {mediaObjectWrites} from "./write-schema";
 import {dataRequests} from "@/core/privacy/schema";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
@@ -36,7 +37,13 @@ import {defineMediaService as defineService} from "./guarded-service";
 import {allowMediaReceiptWrites} from "./write-ledger";
 import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
 import {originalUploadContact,assertOriginalUploadWritable} from "./upload-ownership";
-import {reserveMultipart,createOriginalMultipart,originalMultipart,originalMultipartParts,lockMultipartUpload,claimMultipartComplete,completeOriginalMultipart,adoptCompletedMultipart,claimMultipartAbort,abortOriginalMultipart,retireKnownMultipart} from "./multipart-operations";
+import {declareOriginalMultipartPartBodies} from "./multipart-part-bodies";
+import {ORIGINAL_MULTIPART_PART_BYTES} from "./multipart-part-bodies-proof";
+import {claimOriginalPartIssuance,finishUnattemptedPartIssuance,issueOriginalMultipartPart} from "./multipart-part-issuance";
+import {transferDigest} from "./transfer-proof";
+import {withOriginalMultipartInvocation} from "./provider-callers";
+import {originalMultipartRetirementAdmission,sealOriginalMultipartRetirement} from "./multipart-retirement-certificate";
+import {reserveMultipart,createOriginalMultipart,originalMultipartParts,lockMultipartUpload,claimMultipartComplete,completeOriginalMultipart,adoptCompletedMultipart,claimMultipartAbort,abortOriginalMultipart,retireKnownMultipart} from "./multipart-operations";
 import {
   storageKey,
   type MultipartPart,
@@ -140,7 +147,7 @@ const completeUploadResult = z.union([
 
 const UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
-export const MULTIPART_PART_BYTES = 8 * 1024 * 1024;
+export const MULTIPART_PART_BYTES = ORIGINAL_MULTIPART_PART_BYTES;
 const MAX_MULTIPART_PARTS = 10_000;
 const LEGACY_MAX_BYTES = 2_147_483_647;
 const ALT_TEXT_PROMPT_VERSION = "accessible-image-v1";
@@ -919,9 +926,12 @@ const beginUploadApply = defineService({
     await checkCaptureUpload(ctx.tx, ctx.actor, input.provenance);
     const uploadedBy=input.provenance.captureToken?`capture:${input.provenance.captureToken}`:actorString(ctx.actor);
     const ownerContactId=await originalUploadContact(ctx.tx,uploadedBy);
+    await assertOriginalUploadWritable(ctx.tx,ownerContactId,uploadedBy);
+    const originalReservationId=randomUUID();
     const [session] = await ctx.tx
       .insert(mediaUploads)
       .values({
+        originalReservationId,
         strategy: input.strategy,
         storageKey: input.key,
         filename: input.filename,
@@ -936,6 +946,7 @@ const beginUploadApply = defineService({
       })
       .returning();
     await ctx.tx.insert(mediaObjects).values({
+      reservationId:originalReservationId,
       key: input.key,
       uploadId: session!.id,
       role: "staged",
@@ -969,7 +980,7 @@ export const beginUpload = defineOrchestratedService({
   writeClass: "write",
   input: uploadIntent,
   output: beginUploadOutput,
-  handler: async (input, actor) => {
+  handler: async (input, actor) => withOriginalMultipartInvocation(async()=>{
     await verifyCaptureUpload.call(
       { captureToken: input.provenance.captureToken, captureSessionId: input.provenance.captureSessionId },
       actor,
@@ -1014,7 +1025,7 @@ export const beginUpload = defineOrchestratedService({
     if(reserved.operationId)await createOriginalMultipart(reserved.id,reserved.operationId);
     const{operationId:_,...result}=reserved;
     return result;
-  },
+  }),
 });
 
 async function uploadSession(tx: Tx, id: string) {
@@ -1072,6 +1083,7 @@ const uploadStatusOutput = z.object({
       partNumber: z.number().int(),
       etag: z.string(),
       bytes: z.number().optional(),
+      checksumSha256:z.string().regex(/^[A-Za-z0-9+/]{43}=$/).optional(),
     }),
   ),
   assetId: uuid.nullable(),
@@ -1149,6 +1161,21 @@ export const uploadStatus = defineOrchestratedService({
   },
 });
 
+export const declareUploadParts = defineService({
+  name:"media.declareUploadParts",
+  summary:"Bind the complete selected file's part sizes and checksums to its original upload.",
+  kind:"mutation",permission:"public",writeClass:"write",auditInputFields:["id"],
+  input:z.object({id:uuid,parts:z.array(z.object({partNumber:z.number().int().min(1).max(MAX_MULTIPART_PARTS),bytes:z.number().int().positive().max(MULTIPART_PART_BYTES),sha256:z.string().regex(/^[a-f0-9]{64}$/)})).min(1).max(MAX_MULTIPART_PARTS)}),
+  output:z.object({declarationId:uuid,digest:z.string().regex(/^[a-f0-9]{64}$/),partCount:z.number().int().positive()}),
+  handler:async(input,ctx)=>{
+    const session=await uploadSession(ctx.tx,input.id);if(!session||session.strategy!=="direct_multipart")throw new ServiceError("not_found","That direct upload is not here.");
+    requireUploadAccess(ctx.actor,session.uploadedBy);
+    const manifest=await declareOriginalMultipartPartBodies(ctx,input.id,input.parts);
+    ctx.setSubject("mediaUpload",input.id);
+    return{declarationId:manifest.id,digest:transferDigest(manifest),partCount:manifest.parts.length};
+  },
+});
+
 const signUploadClaim = defineService({
   name: "media.signUploadClaim",
   summary: "Mark a direct upload as accepting parts before signing provider URLs.",
@@ -1165,8 +1192,10 @@ const signUploadClaim = defineService({
     providerUploadId: z.string(),
     expiresAt: timestamp,
     partNumbers: z.array(z.number().int()),
+    issuances:z.array(z.object({operationId:uuid,partNumber:z.number().int()})),
   }),
   handler: async (input, ctx) => {
+    await assertDurableMultipartPartIssuance(ctx.tx);
     const {upload:session,resource}=await lockMultipartUpload(ctx.tx,input.id);
     if (!session || session.strategy !== "direct_multipart") {
       throw new ServiceError("not_found", "That direct upload is not here.");
@@ -1189,6 +1218,9 @@ const signUploadClaim = defineService({
       throw new ServiceError("validation", "A requested upload part is outside the file.");
     }
     await assertDurableMultipartPartIssuance(ctx.tx);
+    // A metadata-only upload birth never bypasses the exact resource key fence.
+    await(await import("./original-key-tombstone")).assertOriginalKeyCreator(ctx.tx,{namespace:resource.namespace,key:resource.key,role:"multipart_part"});
+    const issuances:Array<{operationId:string;partNumber:number}>=[];for(const partNumber of partNumbers)issuances.push(await claimOriginalPartIssuance(ctx,session.id,partNumber));
     if (session.state === "created") {
       await ctx.tx
         .update(mediaUploads)
@@ -1201,6 +1233,7 @@ const signUploadClaim = defineService({
       providerUploadId: session.providerUploadId,
       expiresAt: session.expiresAt,
       partNumbers,
+      issuances,
     };
   },
 });
@@ -1221,29 +1254,22 @@ export const signUploadParts = defineOrchestratedService({
         partNumber: z.number().int(),
         url: z.string(),
         method: z.literal("PUT"),
+        headers:z.record(z.string(),z.string()),
       }),
     ),
     expiresAt: timestamp,
   }),
-  handler: async (input, actor) => {
+  handler: async (input, actor) => withOriginalMultipartInvocation(async()=>{
     const claimed = await signUploadClaim.call(input, actor);
-    await db().transaction(assertDurableMultipartPartIssuance);
-    const captured=await originalMultipart(input.id),multipart=captured.store.directMultipart;
-    if (!multipart) {
-      throw new ServiceError("conflict", "Direct uploads are unavailable.");
-    }
-    const signed = await Promise.all(
-      claimed.partNumbers.map(async (partNumber) => ({
-        partNumber,
-        ...(await multipart.signPart(
-          claimed.storageKey,
-          claimed.providerUploadId,
-          partNumber,
-        )),
-      })),
-    );
-    return { parts: signed, expiresAt: claimed.expiresAt };
-  },
+    try{await db().transaction(async tx=>{await assertDurableMultipartPartIssuance(tx);const{resource}=await lockMultipartUpload(tx,input.id);await(await import("./original-key-tombstone")).assertOriginalKeyCreator(tx,{namespace:resource.namespace,key:resource.key,role:"multipart_part"});});}
+    catch(error){await Promise.allSettled(claimed.issuances.map(issuance=>finishUnattemptedPartIssuance(issuance.operationId)));throw error;}
+    // Every genuine local signer must settle before the owning invocation
+    // closes, including siblings when one attempt fails. No orphan promises.
+    const results=await Promise.allSettled(claimed.issuances.map(issuance=>issueOriginalMultipartPart(input.id,issuance.operationId,actor))),signed:Array<Awaited<ReturnType<typeof issueOriginalMultipartPart>>>=[],failures:unknown[]=[];
+    for(const result of results)if(result.status==="fulfilled")signed.push(result.value);else failures.push(result.reason);
+    if(failures.length)throw new AggregateError(failures,"Original upload link attempts are retained. Keep the upload for recovery before trying again.");
+    return { parts: signed, expiresAt: new Date(Math.min(...signed.map(part=>part.expiresAt.getTime()))) };
+  }),
 });
 
 const failDirectUpload = defineService({
@@ -1444,7 +1470,7 @@ export const completeUpload = defineOrchestratedService({
     altText: z.string().max(500).optional(),
   }),
   output: completeUploadResult,
-  handler: async (input, actor) => {
+  handler: async (input, actor) => withOriginalMultipartInvocation(async()=>{
     const source = await completeUploadSource.call(
       { id: input.id, parts: input.parts },
       actor,
@@ -1553,7 +1579,7 @@ export const completeUpload = defineOrchestratedService({
       }
       throw error;
     }
-  },
+  }),
 });
 
 export const registerStoredOriginal = defineOrchestratedService({
@@ -1688,11 +1714,12 @@ const abortUploadApply = defineService({
   permission: "public",
   external: false,
   writeClass: "write",
-  input: z.object({ id: z.string().uuid(), storageKey: z.string().min(1) }),
+  input: z.object({ id: z.string().uuid(), storageKey: z.string().min(1), retirementAdmission:originalMultipartRetirementAdmission.optional() }),
   output: okResult,
   handler: async (input, ctx) => {
     const remaining = await ctx.tx.select({ key: mediaObjects.key }).from(mediaObjects).where(eq(mediaObjects.key, input.storageKey)).limit(1);
     if (remaining.length) throw new ServiceError("conflict", "The upload is stopped, but its original storage cleanup still needs recovery.");
+    if(input.retirementAdmission){if(input.retirementAdmission.uploadId!==input.id||input.retirementAdmission.keyDigest!==objectKeyDigest(input.storageKey))throw new ServiceError("conflict","Keep the exact original upload retirement receipt for review.");await ctx.callAsSystem(sealOriginalMultipartRetirement,input.retirementAdmission);}
     ctx.setSubject("mediaUpload", input.id);
     return { ok: true };
   },
@@ -1706,17 +1733,17 @@ export const abortUpload = defineOrchestratedService({
   writeClass: "write",
   input: z.object({ id: z.string().uuid() }),
   output: okResult,
-  handler: async (input, actor) => {
+  handler: async (input, actor) => withOriginalMultipartInvocation(async()=>{
     const claimed = await abortUploadClaim.call(input, actor);
     if (claimed.alreadyTerminal) return { ok: true };
-    if(claimed.operationId){await abortOriginalMultipart(input.id,claimed.operationId);return abortUploadApply.call({id:input.id,storageKey:claimed.storageKey},actor);}
+    if(claimed.operationId){const retirementAdmission=await abortOriginalMultipart(input.id,claimed.operationId);return abortUploadApply.call({id:input.id,storageKey:claimed.storageKey,retirementAdmission},actor);}
     if (claimed.providerUploadId) throw new ServiceError("conflict", "Confirm this multipart upload's original storage resource before aborting it.");
     if (!await discardUnwrittenProxyReservation(input.id, claimed.storageKey) && !await deleteWithReceipt(claimed.storageKey)) throw new ServiceError("conflict", "The upload is stopped, but its original storage operation remains unresolved.");
     return abortUploadApply.call(
       { id: input.id, storageKey: claimed.storageKey },
       actor,
     );
-  },
+  }),
 });
 
 export const listAssets = defineService({
@@ -3397,23 +3424,14 @@ export async function cleanupOrphanedMedia(now = new Date()): Promise<{
     if (await pendingObjectIsOwned(object.key, now)) continue;
     if (await deleteWithReceipt(object.key)) orphanedObjects += 1;
   }
-  const terminalCutoff = new Date(now.getTime() - TRASH_RETENTION_MS);
-  const pruned = await db().transaction(async tx=>{
-    await allowMediaReceiptWrites(tx);
-    return tx.delete(mediaUploads)
-    .where(
-      and(
-        inArray(mediaUploads.state, ["complete", "failed", "aborted", "expired"]),
-        lt(mediaUploads.updatedAt, terminalCutoff),
-        sql`not exists(select 1 from media_multipart_resources resource where resource.upload_id=${mediaUploads.id} and resource.retired_at is null)`,
-        sql`not exists(select 1 from media_object_writes receipt where receipt.key_digest=encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(${mediaUploads.storageKey},'UTF8')),'hex') and receipt.state in('unverified','started','unknown'))`,
-      ),
-    )
-    .returning({ id: mediaUploads.id });});
+  // Thirty-day session pruning now removes only redundant metadata after
+  // real custody/retirement proof; its durable UUID record remains. Unknown
+  // legacy locators are retained as explicit recovery debt, never TTL absence.
+  const prunedSessions=await db().transaction(async tx=>(await import("./original-upload-retention")).reduceTerminalUploadMetadata(tx,now));
   return {
     expiredUploads,
     orphanedObjects,
-    prunedSessions: pruned.length,
+    prunedSessions,
   };
 }
 
@@ -3427,6 +3445,7 @@ export default [
   reserveProxyObject,
   uploadStatus,
   uploadStatusSource,
+  declareUploadParts,
   signUploadParts,
   signUploadClaim,
   completeUpload,

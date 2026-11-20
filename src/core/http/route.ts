@@ -14,6 +14,7 @@ import { requireCsrf } from "@/core/http/csrf";
 import { errorResponse, json, type ResponseParts } from "@/core/http/respond";
 import type { Service } from "@/core/service";
 import { DEFAULT_JSON_BODY_LIMIT, readBoundedText } from "@/core/http/body";
+import { previewCredentialRefusal } from "@/core/preview/route-gate";
 
 export interface Presented extends ResponseParts {
   status?: number;
@@ -59,6 +60,8 @@ export function serviceRoute<In extends z.ZodType, Out>(
     // Resolved before anything else, because it decides both what the service
     // will allow and whether a refusal reads as 401 or 403.
     const actor = await actorFromRequest(request);
+    const previewRefusal = previewCredentialRefusal(request, actor);
+    if (previewRefusal) return previewRefusal;
     try {
       // Before the service, and before the body is even parsed: a forged
       // request must not reach business logic at all.

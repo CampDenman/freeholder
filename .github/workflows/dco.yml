@@ -1,0 +1,51 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+#
+# Developer Certificate of Origin, checked with git.
+#
+# This exists because the Probot DCO app cannot evaluate a pull request with
+# more than 250 commits. GitHub's REST API caps the commit list there, the
+# app's GraphQL fallback does not complete, and it reports `failure` with
+# "the complete pull request commit list could not be retrieved" — a message
+# that is indistinguishable from a missing sign-off while being its opposite.
+# Nothing in this repository can fix that, and a large integration branch hits
+# it every time.
+#
+# The job is named `DCO (git)` and NOT `DCO` on purpose: two checks reporting
+# the same context name would be ambiguous in branch protection. Switching the
+# required context from `DCO` to `DCO (git)` is a repository-settings change,
+# deliberately separate from merging this workflow, so the new check can be
+# observed passing before anything depends on it.
+name: DCO (git)
+
+on:
+  pull_request:
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dco-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  dco:
+    name: DCO (git)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The whole point is reading every commit, so a shallow clone would
+          # reintroduce exactly the blindness this replaces.
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check every commit is signed off
+        env:
+          # An explicit immutable range for each event, for the same reason the
+          # secret scan takes one: merge_group infers nothing useful, and a
+          # silent fallback would scan unrelated history.
+          DCO_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          DCO_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+        run: node scripts/dco-check.mjs

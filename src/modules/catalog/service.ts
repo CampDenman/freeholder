@@ -3,7 +3,10 @@
 // Transactional product lifecycle shared by admin, HTTP and MCP (C5.09).
 
 import { hiddenListings } from "./listing-gate";
+import bookingCommercialSourceServices from "./booking-commercial-source";
 import marketServices from "./market";
+import orderCommercialServices from "./order-commercial";
+import {quoteMerchantCheckout,quoteMerchantCheckoutForBuyer} from "./merchant-checkout-quote";
 import { and, asc, desc, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
@@ -1045,11 +1048,19 @@ registerSearchSource({
 });
 
 import publicBookingServices from "./public-booking";
+import {legacyReturnBankRefundOwner} from "./legacy-return-bank-owner";
+import {originalMerchantReturnFeeSource} from "./merchant-return-fee-source";
 import customerReturnServices from "./customer-returns";
 export {myOrderReturns,requestMyReturn} from "./customer-returns";
 
 export default [
+  originalMerchantReturnFeeSource,
+  legacyReturnBankRefundOwner,
+  ...bookingCommercialSourceServices,
   ...marketServices,
+  ...orderCommercialServices,
+  quoteMerchantCheckout,
+  quoteMerchantCheckoutForBuyer,
   ...publicBookingServices,
   ...customerReturnServices,
   ...demoServices,
@@ -1082,4 +1093,5 @@ export default [
   ...storefrontServices,
 ];
 
-export { onReturnRefundSucceeded } from "./fulfillment";
+export { recoverReturnBankRefunds,replaceReturnBankRefunds } from "./legacy-return-bank-recovery";
+export { onReturnRefundSucceeded, onReturnBankRefundStateChanged } from "./fulfillment";

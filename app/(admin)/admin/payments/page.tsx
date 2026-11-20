@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Human payment operations over the exact services used by API and MCP.
 
+import { invoiceOutstanding } from "@/modules/invoicing/invoice-balance";
 import { randomUUID } from "node:crypto";
 import { CreditCard, Warning } from "@phosphor-icons/react/dist/ssr";
 import { minorToDecimal } from "@/adapters/payments/currency";
 import { isHostedPaymentProvider } from "@/adapters/payments/providers";
 import { hasModuleAccess } from "@/core/service";
 import { listInvoices } from "@/modules/invoicing/invoice-service";
+import { listCommercialRecordedPayments } from "@/modules/invoicing/commercial-attestations";
 import {
   listPaymentDisputes,
   listPaymentProviders,
@@ -37,7 +39,7 @@ export default async function PaymentsPage({
   const errorCode = ["validation", "conflict", "not_found", "permission", "rate_limited"].includes(query.error ?? "")
     ? query.error!
     : "failed";
-  const [providers, invoices, succeeded, methods, disputes, reconciliation, payouts, t] = await Promise.all([
+  const [providers, invoices, succeeded, methods, disputes, reconciliation, payouts, recordedCommercial, t] = await Promise.all([
     listPaymentProviders.call({ country: "US", currency: "USD", recurring: false }, actor),
     listInvoices.call({ limit: 300 }, actor),
     listPayments.call({ status: "succeeded", limit: 500 }, actor),
@@ -45,6 +47,7 @@ export default async function PaymentsPage({
     listPaymentDisputes.call({ limit: 200 }, actor),
     reconcilePaymentProviders.call({ limit: 200 }, actor),
     listProviderPayouts.call({ limit: 100 }, actor),
+    listCommercialRecordedPayments.call({ limit: 100 }, actor),
     getT(),
   ]);
   const canManage = hasModuleAccess(actor, "invoicing", "manage");
@@ -74,6 +77,10 @@ export default async function PaymentsPage({
         </Callout>
       ) : null}
 
+      <Card><CardHeader title={t("commercialRecorded.title")} /><CardBody><div className="grid gap-3">
+        <p className="text-sm text-ink-muted">{t("commercialRecorded.notice")}</p>
+        {!recordedCommercial.length ? <p>{t("commercialRecorded.empty")}</p> : recordedCommercial.map(payment => <p key={payment.paymentId}><a className="text-accent underline" href={`/admin/payments/${payment.paymentId}/recorded`}>{payment.invoiceNumber} · {money(payment.amountMinor, payment.currency)}</a> · {t("commercialRecorded.remaining", { amount: money(payment.feeOwedMinor - payment.feeRecordedMinor, payment.currency) })}</p>)}
+      </div></CardBody></Card>
       <Card>
         <CardHeader title={t("payments.providers")} />
         <CardBody>
@@ -104,7 +111,7 @@ export default async function PaymentsPage({
                   <input type="hidden" name="idempotencyKey" value={`admin-offline-${randomUUID()}`} />
                   <Field label={t("payments.invoice")} htmlFor="offline-invoice">
                     <Select id="offline-invoice" name="invoiceId" required>
-                      {openInvoices.map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.number} · {money(invoice.totalMinor - invoice.paidMinor, invoice.currency)}</option>)}
+                      {openInvoices.map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.number} · {money(invoiceOutstanding(invoice), invoice.currency)}</option>)}
                     </Select>
                   </Field>
                   <Field label={t("payments.method")} htmlFor="offline-method">

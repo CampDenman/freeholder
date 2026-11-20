@@ -1,0 +1,21 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "blog_taxonomy_closure27.v1",
+  "checklist": ["C2.27"],
+  "status": "C2.27 closed for the stated taxonomy scope with current native, Chromium, hosted taxonomy/sitemap/redirect and F04-F12 evidence; scale/source cutover remains separate",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "d706f14ce4aaa7ee63c71446b42962f71da67c4aa47d7790ed053ea9e7b60bea" }
+  ],
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "d706f14ce4aaa7ee63c71446b42962f71da67c4aa47d7790ed053ea9e7b60bea",
+      "beforeSha256": "3712529fd2f36f9d08ea81bcfde038bda2074822c32dd7f4f6dd26b615f19057",
+      "continue": true,
+      "edits": [
+        { "before": "- [ ] **C2.27** Blog categories and tags: hierarchical categories, flat tags,", "after": "- [x] **C2.27** Blog categories and tags: hierarchical categories, flat tags,", "occurrences": 1 },
+        { "before": "  Scale and source-specific qualification remain open; this is not stable\n  or production acceptance.", "after": "  Scale and source-specific qualification remain open; this is not stable\n  or production acceptance.\n  *(Closed 2026-11-15 for the stated taxonomy scope. Current native blog controls\n  PASS27/27 and the real Chromium category-create/assign/publish/move journey\n  PASSes with both-theme Axe. The hosted run above proves parent/child archives,\n  sitemap entries and one literal301. **F04** `/admin/blog/categories`,\n  `/admin/blog/tags` and public archives. **F05** `cms.listTerms`/`saveTerm`/\n  `deleteTerm` use the shared scoped projections. **F07** published-only archive,\n  draft/privacy and redirect-isolation controls. **F09** the qualification/limits\n  document above. **F12** `tests/core/blog-structure-comments.test.ts`,\n  `tests/core/blog-playground.test.ts` and `tests/browser/blog-structure.spec.ts`.\n  Scale and source-specific cutover remain explicitly outside this closure.)*", "occurrences": 1 }
+      ]
+    }
+  ]
+}

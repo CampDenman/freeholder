@@ -1,0 +1,38 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "atomic_credit_source_fee90.v1",
+  "checklist": ["C12.38", "C9.33", "C11.05"],
+  "status": "FORWARD SOURCE CONTINUATION; zero-sized allocation state remains not_due while source guards compare current source-level evidence; requires genuine payment acceptance",
+  "artifacts": [
+    { "path": "src/modules/invoicing/credit-fee-contract.ts", "sha256": "c5120a3b6d6d470af6d015455ca454d228a606bb95d469506af1e609f76c04a7" },
+    { "path": "src/modules/invoicing/atomic-credit-fee-partition.ts", "sha256": "7d461858be401aabeffd4b792e60310c2e33ae94d6544c820cf824d3de3b01f1" },
+    { "path": "src/modules/invoicing/credit-application-service.ts", "sha256": "544473100c903a4c8efca061938817e6cfbd2ffd118cd8208ce7d75f63395fb3" }
+  ],
+  "testContinuations": [
+    {
+      "path": "src/modules/invoicing/credit-fee-contract.ts",
+      "afterSha256": "c5120a3b6d6d470af6d015455ca454d228a606bb95d469506af1e609f76c04a7",
+      "beforeSha256": "b50aebdf90daf7be9ab9a6f783c1c6b2906171efaa687fdf69c64e5062d5d8d8",
+      "edits": [
+        { "before": " collectionState: feeCollectionState,", "after": " collectionState: feeCollectionState, sourceCollectionState: feeCollectionState.optional(),", "occurrences": 1 }
+      ]
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-fee-partition.ts",
+      "afterSha256": "7d461858be401aabeffd4b792e60310c2e33ae94d6544c820cf824d3de3b01f1",
+      "beforeSha256": "508109572dde27c255ed74f19a1d663122a22ab4e2bc41effdd19559a9e91b05",
+      "edits": [
+        { "before": "collectionState:plan.takeAssignedFeeMinor===0?\"not_due\" as const:plan.takeOwedFeeMinor===0?\"verified_collected\" as const:\"owed\" as const,unexpectedFee:false", "after": "collectionState:plan.takeAssignedFeeMinor===0?\"not_due\" as const:plan.takeOwedFeeMinor===0?\"verified_collected\" as const:\"owed\" as const,\n   sourceCollectionState:plan.originalFeeMinor===0?\"not_due\" as const:plan.currentOwedAssignedFeeMinor>0||plan.actualCollectedFeeMinor===0?\"owed\" as const:\"verified_collected\" as const,unexpectedFee:false", "occurrences": 1 }
+      ]
+    },
+    {
+      "path": "src/modules/invoicing/credit-application-service.ts",
+      "afterSha256": "194e28aac0951fef59dc0a74460ecb19f8db26b267a2063074fe7382b13d387d",
+      "beforeSha256": "a9a8d807b6285a7f56b6a5d15b267a9801d7425c7e165e6b963ae1a4374276bf",
+      "edits": [
+        { "before": "source.feeCollectionState !== live.collectionState", "after": "source.feeCollectionState !== (live.sourceCollectionState ?? live.collectionState)", "occurrences": 1 },
+        { "before": "identity.reservation.feeCollectionState !== liveFee.collectionState", "after": "identity.reservation.feeCollectionState !== (liveFee.sourceCollectionState ?? liveFee.collectionState)", "occurrences": 1 }
+      ]
+    }
+  ]
+}

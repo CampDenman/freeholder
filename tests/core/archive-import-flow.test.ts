@@ -24,6 +24,7 @@ import { pages } from "@/modules/cms/schema";
 import { commitImport, publishImport, reconcileImport, reviewImportConflicts, rollbackImport, startImport } from "@/core/import/service";
 import { beginSourceUpload, previewFromUpload, uploadSourceChunk } from "@/core/import/source-upload";
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+import { replaceFixtureBytes } from "../helpers/raw-storage";
 
 const ZIP = new Uint8Array(readFileSync("tests/fixtures/static-archive/site.zip"));
 async function stageBytes(bytes: Uint8Array, expected: { pages: number; media: number }, origin = "https://archive.example/") {
@@ -102,7 +103,10 @@ describe.runIf(hasDatabase)("static archive import studio (C3.22)", { timeout: 6
   it("refuses changed original ZIP chunks without writing CMS drafts or imported assets", async () => {
     const source = await stage();
     const changed = new Uint8Array(ZIP); changed[changed.length - 1] = (changed.at(-1) ?? 0) ^ 1;
-    await storage().put(source.key, changed, "application/octet-stream");
+    // Fixture corruption of bytes already at rest: the managed store refuses an
+    // unattributed put by design, so seed through the sanctioned low-level
+    // provider. What this case asserts is that commitImport refuses the change.
+    await replaceFixtureBytes(source.key, changed);
     expect((await failure(commitImport.call({ id: source.id }, OWNER))).code).toBe("conflict");
     expect(await db().select().from(assets)).toHaveLength(0);
     expect(await db().select().from(pages).where(eq(pages.slug, "about/team"))).toHaveLength(0);

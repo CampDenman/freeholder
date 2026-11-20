@@ -1,0 +1,113 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "path": "tests/core/migrate-boundary.test.ts",
+  "predecessorSha256": "9dbdfb114118d5daa60149575f0d306be23d46d1ee8dffe511d26120783d5df4",
+  "successorSha256": "90076ad93e6c2d9659969aa02752a19dbcaa3308c5ea836ce532d3a6aeab2019",
+  "metadata": {
+    "path": "db/migrations/meta/controlled-safe-response-boundary.json",
+    "predecessorSha256": "d97e585b0d547a34f42c4ed1603c84119c9df1f76caab6d0109c08210fade445",
+    "successorSha256": "4d0e47ee564e8853ad1110328629db5cb95dc24e5694f3e549805b6d48023254",
+    "edits": [
+      {
+        "before": "\"predecessor85Sha256\": null",
+        "after": "\"predecessor85Sha256\": \"8c914cf178bad249a8d60d332f9c5e3b3fc92af0c2d0ecc46bdc7b648e87c2cb\""
+      },
+      {
+        "before": "\"whole86Sha256\": null",
+        "after": "\"whole86Sha256\": \"ca148e48396b47189397953e16358bac2356e0375be356e72032236cca0658c2\""
+      },
+      {
+        "before": "\"prefix0To85Sha256\": null",
+        "after": "\"prefix0To85Sha256\": \"e3effea01f92abfe406ed010e9f8097572fadb1dd529fbc6ef7874c2f0781d23\""
+      },
+      {
+        "before": "\"firstStatementSha256\": \"14b90f4109f06e5457ddaa0b0c0210516092f0e2e6d8965d067eca7c3370b8d4\"",
+        "after": "\"firstStatementSha256\": \"be98ff6d34b55b22adec262f4e3833cc653ab268e4767d9530d2b98c7835919f\""
+      }
+    ]
+  },
+  "pgBoundary": {
+    "path": "tests/modules/migrate-boundary86.test.ts",
+    "predecessorSha256": "ae40f3264b0ef79b93ff937b79d77f4b4822ab666f84b27472e7abbbd1993cf8",
+    "successorSha256": "f91983bef2f75dc51b07339e6bff6c81ab4fa8070217afb632f53ceab178c21a",
+    "edits": [
+      {
+        "before": "drizzle(client)._.session, { migrationsFolder: f.folder }",
+        "after": "drizzle(client)._.session as Parameters<PgDialect[\"migrate\"]>[1], { migrationsFolder: f.folder }"
+      },
+      {
+        "before": "env: { PATH: process.env.PATH }, encoding: \"utf8\"",
+        "after": "env: { PATH: process.env.PATH, NODE_ENV: \"test\" }, encoding: \"utf8\""
+      },
+      {
+        "before": "  expect(Buffer.byteLength(guard)).toBe(2038); expect(sha(guard)).toBe(SAFE_RESPONSE_BOUNDARY.firstStatementSha256);\n",
+        "after": "  expect(Buffer.byteLength(guard)).toBe(2599); expect(sha(guard)).toBe(SAFE_RESPONSE_BOUNDARY.firstStatementSha256);\n"
+      },
+      {
+        "before": "  it(\"refuses another actual target-database client before any probe or row 86\", async () => {\n    const target = await database(\"other-client\"), f = sourceFixture(); const before = await stagePrefix(target, f);\n",
+        "after": "  // These two replace a single test that refused ANY other client backend, by\n  // censusing pg_stat_activity. That census could not deliver what it claimed\n  // -- a backend may arrive the moment after it passes -- and it broke every\n  // packaged deploy, because Freeholder migrates in-process at boot while the\n  // web server is already answering readiness probes, so the migrating\n  // instance's own pool was always \"another client\". ACCESS EXCLUSIVE NOWAIT\n  // is the control that holds, and these assert both of its edges.\n  it(\"ignores an idle target-database client, which is what the migrating instance's own pool is\", async () => {\n    const target = await database(\"idle-client\"), f = sourceFixture(); await stagePrefix(target, f);\n"
+      },
+      {
+        "before": "    try { await other`select pg_backend_pid()`; await rejection(run(target, f), \"55006\"); }\n",
+        "after": "    try { await other`select pg_backend_pid()`; await run(target, f); }\n"
+      },
+      {
+        "before": "",
+        "after": "    expect(await observe(target)).toHaveLength(87);\n  });\n  it(\"refuses a client that actually holds a lock on the controlled tables\", async () => {\n    const target = await database(\"locked-tables\"), f = sourceFixture(); const before = await stagePrefix(target, f);\n    // The holder announces the lock from inside its own transaction. Polling\n    // pg_locks instead would be a race: it is cluster-wide, so a relation OID\n    // can match a same-named table in another database on the same server, and\n    // the rollout then runs before this lock is granted.\n    const holder = target.connect();\n    let release: (() => void) | undefined, acquired: (() => void) | undefined;\n    const held = new Promise<void>(resolve => { release = resolve; });\n    const ready = new Promise<void>(resolve => { acquired = resolve; });\n    const holding = holder.begin(async tx => {\n      await tx`lock table subscription_controlled_calls in access share mode`;\n      acquired?.(); await held;\n    });\n    try {\n      await Promise.race([ready, holding.then(() => { throw new Error(\"The lock holder finished before it could hold anything.\"); })]);\n      await rejection(run(target, f), \"55P03\");\n    } finally {\n      release?.(); await holding.catch(() => undefined); await holder.end();\n    }\n"
+      },
+      {
+        "before": "  it(\"refuses a real bootstrap waiting on the same session lock and cancels/drains it before release\", async () => {\n",
+        "after": "  it(\"completes the rollout while a real second bootstrap waits on the same session lock, then cancels/drains it\", async () => {\n"
+      },
+      {
+        "before": "      await rejection(runMigrationsOnDedicatedSession(first, { migrationsFolder: f.folder }), \"55006\");\n",
+        "after": "      // The census used to refuse right here, purely because a second\n      // bootstrap was connected and waiting. Proceeding is the correct\n      // behaviour: the advisory lock already stops the waiter from running any\n      // migration until this session releases it, and ACCESS EXCLUSIVE refuses\n      // an actual conflict. Refusing instead gave a boot loop, not safety.\n      await runMigrationsOnDedicatedSession(first, { migrationsFolder: f.folder });\n      const applied = await journal(first);\n      expect(applied).toHaveLength(87);\n      expect(applied.slice(0, 86)).toEqual(before);\n"
+      },
+      {
+        "before": "      await second.end({ timeout: 1 }); await first.end();\n    }\n    expect(await observe(target)).toEqual(before);\n  });\n});\n",
+        "after": "      await second.end({ timeout: 1 }); await first.end();\n    }\n    // Exactly one row 86: the cancelled waiter applied nothing of its own.\n    expect(await observe(target)).toHaveLength(87);\n  });\n});\n"
+      }
+    ]
+  },
+  "migrationCore": {
+    "path": "tests/core/migrate.test.ts",
+    "predecessorSha256": "07b8a91a890f0f7d532c953d94bd520d84e05a81111150f795f8b6686670643c",
+    "successorSha256": "6ef32a40ec1d08f07ba742f9bb5147bac53cabaecbb550b5854fd1299adfc5a0",
+    "edits": [
+      {
+        "before": "import { beforeEach, describe, expect, it, vi } from \"vitest\";",
+        "after": "import type * as NodeFs from \"node:fs\";\nimport { beforeEach, describe, expect, it, vi } from \"vitest\";"
+      },
+      {
+        "before": "importOriginal<typeof import(\"node:fs\")>()",
+        "after": "importOriginal<typeof NodeFs>()"
+      }
+    ]
+  },
+  "edits": [
+    {
+      "before": "refuses unassembled final hashes instead of inventing source identity",
+      "after": "refuses synthetic NULL hashes and computes the assembled production identity"
+    },
+    {
+      "before": "    const actual: unknown = JSON.parse(readFileSync(\"db/migrations/meta/controlled-safe-response-boundary.json\", \"utf8\"));\n    expect(actual).toMatchObject({ predecessor85Sha256: null, whole86Sha256: null, prefix0To85Sha256: null });",
+      "after": "    const migrations = readMigrationFiles({ migrationsFolder: \"db/migrations\" });\n    const journal = z.object({ entries: z.array(z.object({ idx: z.number(), version: z.string(), tag: z.string(), when: z.number(), breakpoints: z.boolean() })) }).parse(JSON.parse(readFileSync(\"db/migrations/meta/_journal.json\", \"utf8\")));\n    const actual: unknown = JSON.parse(readFileSync(\"db/migrations/meta/controlled-safe-response-boundary.json\", \"utf8\"));\n    expect(actual).toMatchObject({ predecessor85Sha256: migrations[85]?.hash, whole86Sha256: migrations[86]?.hash, prefix0To85Sha256: migrationPrefixFingerprint(journal.entries, migrations) });"
+    },
+    {
+      "before": "    const env = { PATH: process.env.PATH };",
+      "after": "    const env = { PATH: process.env.PATH, NODE_ENV: \"test\" as const };"
+    },
+    {
+      "before": "{ env: { PATH: process.env.PATH }, encoding: \"utf8\" }",
+      "after": "{ env: { PATH: process.env.PATH, NODE_ENV: \"test\" }, encoding: \"utf8\" }"
+    },
+    {
+      "before": "  const current = readFileSync(path);",
+      "after": "  let current = readFileSync(path);\n  if ([\"db/migrations/meta/controlled-safe-response-boundary.json\", \"tests/modules/migrate-boundary86.test.ts\", \"tests/core/migrate.test.ts\"].includes(path)) {\n    const container = z.record(z.string(), z.unknown()).parse(JSON.parse(readFileSync(\"deploy/controlled-safe-response-boundary-continuation87.source.json\", \"utf8\")));\n    const key = path === \"tests/modules/migrate-boundary86.test.ts\" ? \"pgBoundary\" : path === \"tests/core/migrate.test.ts\" ? \"migrationCore\" : \"metadata\";\n    const continuation = z.object({ path: z.literal(path), predecessorSha256: z.string().regex(/^[a-f0-9]{64}$/), successorSha256: z.string().regex(/^[a-f0-9]{64}$/), edits: z.array(z.object({ before: z.string(), after: z.string() }).strict()) }).strict().parse(container[key]);\n    expect(sha(current)).toBe(continuation.successorSha256);\n    let source = current.toString(\"utf8\");\n    for (const edit of [...continuation.edits].reverse()) {\n      expect(source.split(edit.after)).toHaveLength(2);\n      source = source.replace(edit.after, () => edit.before);\n    }\n    expect(sha(source)).toBe(continuation.predecessorSha256);\n    if (path === \"db/migrations/meta/controlled-safe-response-boundary.json\") return Buffer.from(source);\n    current = Buffer.from(source);\n  }"
+    },
+    {
+      "before": "  expect(sha(current)).toBe(entry.afterSha256);",
+      "after": "  if (path === \"tests/core/migrate-boundary.test.ts\") {\n    const continuation = z.object({ copyright: z.string(), path: z.literal(path), predecessorSha256: z.literal(entry.afterSha256), successorSha256: z.string().regex(/^[a-f0-9]{64}$/), metadata: z.unknown(), pgBoundary: z.unknown(), migrationCore: z.unknown(), edits: z.array(z.object({ before: z.string(), after: z.string() }).strict()) }).strict().parse(JSON.parse(readFileSync(\"deploy/controlled-safe-response-boundary-continuation87.source.json\", \"utf8\")));\n    expect(sha(current)).toBe(continuation.successorSha256);\n    let source = current.toString(\"utf8\");\n    for (const edit of [...continuation.edits].reverse()) {\n      expect(source.split(edit.after)).toHaveLength(2);\n      source = source.replace(edit.after, () => edit.before);\n    }\n    current = Buffer.from(source);\n  }\n  expect(sha(current)).toBe(entry.afterSha256);"
+    }
+  ]
+}

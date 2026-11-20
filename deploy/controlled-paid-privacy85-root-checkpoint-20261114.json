@@ -1,0 +1,121 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C1.08",
+    "C9.33",
+    "C12.38",
+    "C11.08"
+  ],
+  "status": "SOURCE_SCHEMA_CURRENT_SDK_ALL_FIVE_PRIVACY_NATIVE_CASES_PASS",
+  "sourceHead": "ee7b4a39e3f1f9d3b0ea833374c4511d49e640ff",
+  "frozenLeaf": "269f1e9f3451bd655196d473068918340774ce9c",
+  "assemblyManifest": "deploy/controlled-paid-privacy85-root-assembly.manifest.json",
+  "source": {
+    "path": "/tmp/freeholder-current-full86-privacy160-source-v89-20261114-result.json",
+    "sha256": "a471df5b3f64b9be43c251cf347d0f02d803d8b6d4a56173f7172535c1d30a26",
+    "passed": true,
+    "actualAssertions": 1416,
+    "completeSelectedFiles": 225,
+    "explicitDatabaseSkips": 487,
+    "fullTypesAffectedLintAndMetadataPassed": true
+  },
+  "ordinary": {
+    "path": "/tmp/freeholder-current-full86-normal-v50-result-20261113.json",
+    "sha256": "e7ba570261c97d14925fda0ef6d9986d46fd5ed9435940b15be5d5ef2bfb3383",
+    "passed": true,
+    "database": "freeholder_current_full86_privacy160_normal_v50_test_20261114",
+    "journalEntries": 86,
+    "active": []
+  },
+  "strictSchema": {
+    "path": "/tmp/freeholder-current-full86-parity160-v61-result-20261113.json",
+    "sha256": "d20bfc0c726dc8aed28f5f2964b3eadc35303f950dddfdd27fbdd2d33748f7bd",
+    "passed": true,
+    "models": 160,
+    "guards": 362,
+    "completeOwnedFunctionBodies": 394,
+    "queries": 4074,
+    "explainExpressions": 2456,
+    "manifest": "/tmp/freeholder-current-full86-parity160-v61-manifest-20261113.json",
+    "manifestSha256": "9b82bd4fcbb0ad58a1ae7f94faf31c0a4f378fe446b0680b16bb5490a037a8ae"
+  },
+  "currentSdk": {
+    "path": "/tmp/freeholder-current-full86-sdk-verification-v31-20261114-result.json",
+    "sha256": "6c3979d2b017514bff28065d0531550e8f3f566a80ecf62bc405cffa9ecf4113",
+    "passed": true,
+    "actualAssertions": 8,
+    "generationUpdate": false,
+    "generatedSdkSha256": "03ef130ab3280be047fc51f3fc51f80e621d1abd0ccbc324d085f563d0572fc9",
+    "generatedSdkUnchanged": true,
+    "all160WholeRowsJournalsSequenceUnchanged": true,
+    "privateNamesHidden": 8
+  },
+  "privacyNatives": {
+    "path": "/tmp/freeholder-current-full86-paid-privacy-native-v2-20261114-result.json",
+    "sha256": "05bd807965680b5f2463e4c38a1fa5269b5b8861f8b9f5e46a73798c28499ad9",
+    "passed": true,
+    "actualCases": 5,
+    "failed": 0,
+    "filtered": 0,
+    "seconds": 237.29308605007827,
+    "originalWholeFrozenNativeUnchanged": true,
+    "nativeReport": {
+      "path": "/tmp/freeholder-current-full86-paid-privacy-native-v2-20261114.json",
+      "sha256": "27b8cdea9d5b32ec3901972ae718003fa13a73a79209a09dab7b8bc29b836f5d"
+    },
+    "independentAfter": {
+      "path": "/tmp/freeholder-current-full86-paid-privacy-native-v2-20261114-after.json",
+      "sha256": "45c0aa59f23d8ea806d6f53cc53717ec0f6fb2f5faf6d08322133bf808cc9ef8"
+    },
+    "allPublicTablesSnapshotted": 596,
+    "active": [],
+    "caseNames": [
+      "actual original-owner paid-access privacy fence retains real fully paid cash but refuses new access and the original event retry after actual verified buyer erasure",
+      "actual original-owner paid-access privacy fence retains real fully paid cash but refuses new access and the original event retry after actual verified merchant erasure",
+      "actual original-owner paid-access privacy fence refuses actual verification while a real paid-effect shared identity transaction is active",
+      "actual original-owner paid-access privacy fence refuses a real concurrent effect during exclusive verification and then refuses access after that verified request commits",
+      "actual original-owner paid-access privacy fence refuses direct SQL restriction onset and request/retention ownership rebinding without the actual exclusive identity prefix"
+    ],
+    "lastCaseProjection": {
+      "paidMinor": 4200,
+      "refundedMinor": 0,
+      "payments": 1,
+      "newAccessReceipts": 0,
+      "verifiedErasureRequests": 1,
+      "holds": 1
+    }
+  },
+  "sourcePreservation": {
+    "focused": {
+      "path": "/tmp/freeholder-current-full86-privacy160-composed-pins-focused-v1-20261114.json",
+      "sha256": "1ce26a3f364e48a91ad8e6d0f41a87d17664043b3d1e7508849d5f7cd7fb1932"
+    },
+    "actualAssertions": 15,
+    "oldUndoAndCartlessManifestsUnchanged": true,
+    "originalWholePaidAndFeeNativesUnchanged": true,
+    "exactTwoContactLineReversal": "deploy/controlled-paid-privacy85-undo-contract.manifest.json",
+    "exactTwoHandlerLineReversal": "deploy/controlled-paid-privacy85-cartless-contract.manifest.json",
+    "preservedFailedSourceGates": [
+      {
+        "path": "/tmp/freeholder-current-full86-privacy160-source-v87-20261114-result.json",
+        "sha256": "834c9864d91ab9a475659234aa272f12613dc0d18c9ebe5fe9484a4b11321d55"
+      },
+      {
+        "path": "/tmp/freeholder-current-full86-privacy160-source-v88-20261114-result.json",
+        "sha256": "8fbee8e63b367b3e540004dcffafaf022de68dbe8cfdd703ec562d7a0058466f"
+      }
+    ]
+  },
+  "acceptance": {
+    "noChecklistClosures": true,
+    "feeRecoveryNativeStillOpen": true,
+    "mediaCapabilitiesAbsent": true,
+    "actualMediaNativesUnrun": true,
+    "providerAccounts": false,
+    "stable": false,
+    "announcement": false,
+    "independentSecurityReview": "Tony assigned; pending",
+    "ownerCompletionSignature": "pending"
+  },
+  "remaining": "Actual controlled original cash GET/closure causal repair, original full fee positive/negative, held auxiliary fee/credit/proration/public completion/media and every unchecked full-spec/provider/platform/build/browser/CI/recovery/security/signature gate remain required. This evidence closes no C row."
+}

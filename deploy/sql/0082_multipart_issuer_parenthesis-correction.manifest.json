@@ -1,0 +1,23 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "scope": "C1.12/C11.08 syntax-only materialization correction; no predicate/guard/capability waiver",
+  "beforeHead": "bcf3610a2b42be3d7ca7bb8150b35acca47ff7de",
+  "sourceFrozenCommit": "655c77f700f9edd79b6707ff65138d2ca9cb71ad",
+  "beforeOwnedSha256": "6845a84eb50f1f3a85fb32426a46fc76d107a3e2835d26d1aecec358e9fa0ef2",
+  "beforeOwnedBytes": 365657,
+  "afterOwnedSha256": "adb4a3083d71d62350bf0c8edb0e398acffdc42a043cb804ec84227ca5c4bdb1",
+  "afterOwnedBytes": 365656,
+  "unchangedPrefixBytes": 277201,
+  "unchangedPrefixSha256": "ad46c99bc54afb1ad6f79d13a391ec203a94fdd570a602c85b04cb2ee6e2ee89",
+  "functionName": "freeholder_media_multipart_issued_authorities_closed",
+  "functionBeforeSha256": "cd2705a7ec01e9bc121841866ec182ccd5d8c215499611fd4c9ae8bf29192def",
+  "functionAfterSha256": "7e7ca2d2501f7307f6cdfd87aedd736cd31d665f4c708e9cff4395ef70ab037b",
+  "functionBefore": "CREATE FUNCTION freeholder_media_multipart_issued_authorities_closed(original_namespace text) RETURNS boolean LANGUAGE sql STABLE AS $$\n SELECT NOT EXISTS(\n  SELECT 1 FROM media_multipart_operations operation JOIN media_multipart_resources resource ON resource.id=operation.resource_id\n  WHERE resource.storage_namespace=original_namespace AND operation.operation_kind='sign' AND NOT(\n   operation.state='not_applied' AND operation.writer_finished_at IS NOT NULL AND EXISTS(SELECT 1 FROM media_storage_transfer_calls caller WHERE caller.multipart_operation_id=operation.id AND caller.kind='multipart_sign' AND caller.state='returned' AND caller.returned_at=operation.writer_finished_at AND caller.result_digest=freeholder_media_transfer_fact_digest('{\"notAttempted\":true}'::jsonb)\n    AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=caller.id AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage'='not_attempted')))))\n )\n$$;",
+  "functionAfter": "CREATE FUNCTION freeholder_media_multipart_issued_authorities_closed(original_namespace text) RETURNS boolean LANGUAGE sql STABLE AS $$\n SELECT NOT EXISTS(\n  SELECT 1 FROM media_multipart_operations operation JOIN media_multipart_resources resource ON resource.id=operation.resource_id\n  WHERE resource.storage_namespace=original_namespace AND operation.operation_kind='sign' AND NOT(\n   operation.state='not_applied' AND operation.writer_finished_at IS NOT NULL AND EXISTS(SELECT 1 FROM media_storage_transfer_calls caller WHERE caller.multipart_operation_id=operation.id AND caller.kind='multipart_sign' AND caller.state='returned' AND caller.returned_at=operation.writer_finished_at AND caller.result_digest=freeholder_media_transfer_fact_digest('{\"notAttempted\":true}'::jsonb)\n    AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=caller.id AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage'='not_attempted'))))\n )\n$$;",
+  "delta": "Remove exactly one unmatched closing parenthesis after nested not-attempted observation EXISTS. All five matched pairs and every predicate remain.",
+  "failedDatabase": "freeholder_current_full86_financial154_normal_v19_test_20261113",
+  "failedResult": "/tmp/freeholder-current-full86-normal-v19-result-20261113.json",
+  "failedResultSha256": "541cee2c867c5b2e58ffb421046c5d634abda1e33429e69dde7b1138afd82b00",
+  "failedDatabasePreserved": true,
+  "newExecution": "PENDING_FRESH_DATABASE_ONLY"
+}

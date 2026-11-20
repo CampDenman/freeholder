@@ -1,0 +1,17 @@
+// Copyright (C) 2026 Tony Aly
+// SPDX-License-Identifier: Apache-2.0
+// Pure controls for real-finish/ACK classification, not provider execution.
+import {describe,expect,it} from "vitest";
+import {originalDeleteContinuation,type EarlierOriginalDelete} from "@/core/media/original-delete-continuation";
+import {transferDigest} from "@/core/media/transfer-proof";
+const id="00000000-0000-4000-8000-000000000001",requestId="00000000-0000-4000-8000-000000000002",instance="00000000-0000-4000-8000-000000000003",namespace="a".repeat(64),key="private/original.bin",returnedAt=new Date("2026-11-13T00:00:00Z"),runtimeIdentity={kind:"node"as const,instance,pid:123};
+function acknowledgedFailure():EarlierOriginalDelete{const descriptor={kind:"object.delete"as const,binding:{kind:"s3"as const,namespace,location:{bucket:"fictional-private"}},key,expectedRevision:{kind:"etag"as const,namespace,key,value:'"actual-original"'}};return{id,state:"unknown",returnedAt,resultDigest:transferDigest({failed:true}),observedAcceptedAt:returnedAt,stoppedAt:null,stopReceiptId:null,runtimeIdentity,requests:[{id:requestId,callId:id,state:"returned",returnedAt,runtimeIdentity:{...runtimeIdentity},descriptor,descriptorDigest:transferDigest(descriptor)}],facts:[{requestId,stage:"response",status:204},{requestId,stage:"accepted",status:204}]};}
+describe("finished acknowledged original DELETE with failed local application",()=>{
+ it("allows verification only and preserves the first failed return and actual ACK",()=>{const input=[acknowledgedFailure()],before=structuredClone(input);expect(originalDeleteContinuation(input)).toBe("verification_only");expect(input).toEqual(before);});
+ it("refuses a missing logical or physical actual finish despite a successful provider ACK",()=>{for(const which of ["logical","physical"]){const input=acknowledgedFailure();if(which==="logical")input.returnedAt=null;else input.requests[0]!.returnedAt=null;expect(()=>originalDeleteContinuation([input])).toThrow("actual finish");}});
+ it("refuses error or absent HTTP status as the new failed-ACK recovery authority",()=>{for(const status of [500,null,undefined]){const input=acknowledgedFailure();input.facts=[{requestId,stage:"accepted",status}];expect(()=>originalDeleteContinuation([input])).toThrow();}});
+ it("refuses another physical runtime even if its bytes/key and ACK look equal",()=>{const input=acknowledgedFailure();input.requests[0]!.runtimeIdentity={kind:"node",instance:requestId,pid:123};expect(()=>originalDeleteContinuation([input])).toThrow();});
+ it("refuses to reinterpret a previously stopped/reviewed late caller through this first-failure path",()=>{for(const change of [{stoppedAt:returnedAt},{stopReceiptId:requestId}]){const input=acknowledgedFailure();Object.assign(input,change);expect(()=>originalDeleteContinuation([input])).toThrow();}});
+ it("refuses an arbitrary failure result or a missing actual acceptance fact",()=>{const input=acknowledgedFailure();input.resultDigest=transferDigest({notApplied:true});expect(()=>originalDeleteContinuation([input])).toThrow();const other=acknowledgedFailure();other.facts=[{requestId,stage:"response",status:204}];expect(()=>originalDeleteContinuation([other])).toThrow();});
+ it("refuses multiple acknowledged physical dispatches instead of replaying or selecting one",()=>{const input=acknowledgedFailure(),other=acknowledgedFailure();other.id=requestId;other.requests[0]!.callId=requestId;expect(()=>originalDeleteContinuation([input,other])).toThrow("Multiple actual");});
+});

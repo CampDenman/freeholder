@@ -27,6 +27,33 @@ import { env } from "@/core/env";
 import { TIER1_TARGETS, type Tier1Target } from "@/core/portability/archive";
 import { localUpdateTarget, type UpdateTarget } from "./apply";
 
+/**
+ * The container repository an image-swap rollback must pin to (§39.8, C10.10).
+ *
+ * The safety property this enforces is the **digest**, never the registry: a
+ * rollback has to name bytes that cannot be moved underneath it. The registry
+ * was hardcoded to `ghcr.io/campdenman/freeholder`, which did not make anything
+ * safer and did make rollback impossible for any instance serving its own
+ * images from a mirror or its own forge — the deployments most likely to need
+ * one. The digest shape below is unchanged.
+ */
+export const DEFAULT_IMAGE_REPOSITORY = "ghcr.io/campdenman/freeholder";
+
+export function imageRepository(value = env().FREEHOLDER_IMAGE_REPOSITORY): string {
+  return value ?? DEFAULT_IMAGE_REPOSITORY;
+}
+
+/** `<configured repository>@sha256:<64 lowercase hex>`, and nothing else. */
+export function isImmutableImageDigest(
+  candidate: string | undefined,
+  repository = imageRepository(),
+): boolean {
+  if (!candidate) return false;
+  const [named, ...rest] = candidate.split("@sha256:");
+  if (rest.length !== 1) return false;
+  return named === repository && /^[a-f0-9]{64}$/.test(rest[0]!);
+}
+
 export const UPDATE_STRATEGIES = ["image-swap", "deploy-hook", "source-pull"] as const;
 export type UpdateStrategy = (typeof UPDATE_STRATEGIES)[number];
 
@@ -326,8 +353,12 @@ export function recipeUpdateTarget(input: {
     },
     async rollbackCutover() {
       if (TARGET_STRATEGY[input.target] === "image-swap" &&
-          !/^ghcr\.io\/campdenman\/freeholder@sha256:[a-f0-9]{64}$/.test(input.previousImage ?? "")) {
-        throw new TargetActionError(input.target, "rollback", "A previous immutable Freeholder image digest is required.");
+          !isImmutableImageDigest(input.previousImage)) {
+        throw new TargetActionError(
+          input.target,
+          "rollback",
+          `A previous immutable Freeholder image digest is required (${imageRepository()}@sha256:<64 hex>).`,
+        );
       }
       const command = input.operations.rollback;
       if (!command) {

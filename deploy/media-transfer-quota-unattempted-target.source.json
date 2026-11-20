@@ -1,0 +1,39 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_transfer_quota_unattempted_target.v1",
+  "checklist": ["C1.12", "C10.32", "C11.08"],
+  "status": "The genuine not-attempted target releases only its original token and its actual retry obtains a distinct settled token; only late-original remains open in this group",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "2ef36b9cfeeae4a1b009c074909056ebb6b367494aaebcddf3e0382beb6e6574" },
+    { "path": "tests/fixtures/media-transfer-quota-role.config.ts", "sha256": "6e0f1cb372e1292f9a74c602eee2d8acc9aa501f8e6b85193b00c710467e39ef" },
+    { "path": "tests/fixtures/media-transfer-quota-role.probe.ts", "sha256": "ddb0320da2f13530cd7edb3ec976071c7e6b0259d6a9ab1092aba696e833442d" },
+    { "path": "tests/core/media-transfer-quota-role-lifecycle.test.ts", "sha256": "bfa9a8f4700405036319098652c79cb8c488bcbbf8e6f96c08e12b794f05934e" }
+  ],
+  "controls": {
+    "database": "media_quota_role_unattempted_retry_20261116",
+    "producer": { "passed": 1, "failed": 0 },
+    "native": { "passed": 1, "failed": 0, "selectedSkips": 8 },
+    "original": "Actual admitted caller retains notAttempted with a finished call, no accepted observation and no provider PUT",
+    "release": "The original pending token reaches exact zero/release proof",
+    "retry": "Actual same-object copy creates a new caller and distinct token, then settles exact provider bytes",
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false,
+    "productCodeChanged": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "2ef36b9cfeeae4a1b009c074909056ebb6b367494aaebcddf3e0382beb6e6574",
+      "beforeSha256": "47f8d62f067ef804a8af357dcd52b21e49efc402c60b99c43c96893ae2dd450a",
+      "continue": true,
+      "edits": [
+        {
+          "before": "late-original cohorts remain open; no C-item closes.\n\n\nSource-only continuation, 2026-11-14 (C1.12/C11.08): the idle multipart",
+          "after": "late-original cohorts remain open; no C-item closes.\n\nUnattempted-target quota qualification2026-11-16 (C1.12/C10.32/C11.08): a\ngenuine admitted caller records its actual notAttempted finish without provider I/O.\nThe native control releases only that original token, then performs a real same-object\ncopy whose new caller has a distinct token and exact settled bytes. Producer/native\ncontrols pass1/1 each; TypeScript/lint pass. See\n`deploy/media-transfer-quota-unattempted-target.source.json`. Only the late-original\ncohort remains open in this group; no provider or checklist acceptance follows.\n\n\nSource-only continuation, 2026-11-14 (C1.12/C11.08): the idle multipart",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

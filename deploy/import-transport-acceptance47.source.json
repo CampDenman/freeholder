@@ -1,0 +1,35 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "import_transport_acceptance47.v1",
+  "checklist": ["C3.22", "C3.46", "C3.47"],
+  "status": "Prepared 501-entry transport controls qualified locally on current combined source; deployed, source-cutover and owner acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "395a00ffac895bd0776156cb6db0604da5f90d3790a47c45bbb93f66c7e51bea" },
+    { "path": "tests/core/import-transport-acceptance.test.ts", "sha256": "239e305dd42e5a69930ad909b1892576ebf028a21e078fb63239010d42c88318" },
+    { "path": "tests/helpers/import-transport-host.ts", "sha256": "2c705343b3a2e2ab4d8a28b555d70958bee2de8808f97865b64555834c3fd0af" },
+    { "path": "deploy/import-transport-acceptance-2026-11-13.md", "sha256": "5c2974ca66b1682fefdfbe2e2af56dd5fcb044c8d85f79e3ab8cc44b94ce704d" },
+    { "path": "packages/sdk/src/generated.ts", "sha256": "03ef130ab3280be047fc51f3fc51f80e621d1abd0ccbc324d085f563d0572fc9" }
+  ],
+  "controls": {
+    "wxr501": { "database": "import_transport_wxr_20261115", "passed": true },
+    "refusals": { "database": "import_transport_refusal_20261115", "passed": true, "businessWrites": false },
+    "rest501": { "database": "import_transport_rest_20261115", "passed": true, "privateOriginalResponses": 8 },
+    "aggregate": { "database": "import_transport_all_20261115", "passed": 3, "failed": 0, "durationSeconds": 117.16 },
+    "sdkWrappers": ["imports.advanceCrawl", "imports.crawlProgress"]
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "395a00ffac895bd0776156cb6db0604da5f90d3790a47c45bbb93f66c7e51bea",
+      "beforeSha256": "e4247c65bec095f7af855d7207383071850f29ba9f2994bbdc975a5e440ff8f1",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  remain UNRUN; no C-item/provider/stable acceptance follows. See\n  `deploy/import-transport-acceptance-2026-11-13.md`.\n  This splits a required delivery portion from C3.22; both remain open until\n",
+          "after": "  remain UNRUN; no C-item/provider/stable acceptance follows. See\n  `deploy/import-transport-acceptance-2026-11-13.md`.\n  *(Transport qualification 2026-11-15: the current combined migration93 source\n  now passes each prepared leaf independently and all three together on fresh\n  PostgreSQL, 3/3 in 117.16 seconds. Real incoming TCP, generated typed SDK and\n  MCP cover the exact501 WXR upload/resume/review/draft/publish/rollback, the\n  scoped/uploader/helper/revocation refusals with no business writes, and501\n  actual REST records with eight private original responses and exact rollback.\n  The combined generated SDK contains both crawl wrappers. No unexpected failure\n  occurred. This is not a deployed Next server, official MCP client, packed-SDK,\n  source-cutover or provider/owner acceptance. C3.47 remains open.)*\n  This splits a required delivery portion from C3.22; both remain open until\n",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

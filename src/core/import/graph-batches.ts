@@ -7,7 +7,8 @@ import { z } from "zod";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { importRuns, importSourceBatches, importSourceEntries, importSourceGraphs, importSourceMedia } from "@/core/plugins/schema";
 import { actorString, defineService, ServiceError, type Actor } from "@/core/service";
-import { assertCurrentImportAuthority } from "./authority";
+import { assertCurrentImportAuthority, importLeaseOwner } from "./authority";
+import { markImportCrawlWriter } from "./crawl-writer";
 import { markImportGraphWriter } from "./graph-writer";
 import { importGraphVersionSchema, type ImportGraphVersion } from "./graph-version";
 import { withinImportBatch, type ImportBatchContext } from "./batch-context";
@@ -108,7 +109,7 @@ const stageGraphBatch = defineService({
   },
 });
 
-const acceptGraphBatch = defineService({
+export const acceptGraphBatch = defineService({
   name: "imports.acceptGraphBatch", orchestratedBy: "imports.commit", summary: "Acknowledge the accepted CMS receipt and advance the graph exactly once.",
   kind: "mutation", permission: "scoped", external: false, auditInputFields: ["id"],
   input: z.object({ id: z.uuid(), context: contextSchema }), output: z.custom<Run>(),
@@ -119,7 +120,8 @@ const acceptGraphBatch = defineService({
     const [root] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     const [graph] = await ctx.tx.select().from(importSourceGraphs).where(eq(importSourceGraphs.id, input.context.graphId)).limit(1).for("update");
     const [child] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.context.childId)).limit(1).for("update");
-    if (!root || root.status !== "previewed" || !graph || graph.state !== "indexed" || graph.runId !== root.id || graph.generation !== input.context.generation || graph.planDigest !== input.context.planDigest || graph.leaseToken !== input.context.leaseToken || !graph.leaseUntil || graph.leaseUntil.getTime() <= Date.now() || graph.leaseActor !== actorString(ctx.actor) || !child || child.status !== "committed" || (input.context.kind === "content" && graph.commitOrdinal !== input.context.startOrdinal)) throw new ServiceError("conflict", "The accepted bounded batch no longer matches this graph phase.");
+    if (!root || root.status !== "previewed" || !graph || graph.state !== "indexed" || graph.runId !== root.id || graph.generation !== input.context.generation || graph.planDigest !== input.context.planDigest || graph.leaseToken !== input.context.leaseToken || !graph.leaseUntil || graph.leaseUntil.getTime() <= Date.now() || (graph.leaseActor !== actorString(ctx.actor) && graph.leaseActor !== await importLeaseOwner(ctx)) || !child || child.status !== "committed" || (input.context.kind === "content" && graph.commitOrdinal !== input.context.startOrdinal)) throw new ServiceError("conflict", "The accepted bounded batch no longer matches this graph phase.");
+    if (object(root.checkpoint).sourceCrawl) await markImportCrawlWriter(ctx.tx);
     const commitOrdinal = input.context.kind === "content" ? input.context.endOrdinal : graph.commitOrdinal;
     const [content] = await ctx.tx.select({ id: importSourceEntries.id }).from(importSourceEntries).where(and(eq(importSourceEntries.graphId, graph.id), gte(importSourceEntries.ordinal, commitOrdinal), inArray(importSourceEntries.kind, ["page", "post"]))).limit(1);
     const [media] = await ctx.tx.select({ id: importSourceMedia.id }).from(importSourceMedia).where(and(eq(importSourceMedia.graphId, graph.id), isNull(importSourceMedia.assetId))).limit(1);

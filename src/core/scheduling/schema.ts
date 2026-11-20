@@ -301,6 +301,7 @@ export const bookings = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     publicRequestKey: uuid("public_request_key"),
+    marketPolicyVersion: integer("market_policy_version").notNull().default(1),
     contactId: uuid("contact_id")
       .notNull()
       .references(() => contacts.id, { onDelete: "restrict" }),
@@ -394,6 +395,7 @@ export const bookings = pgTable(
     uniqueIndex("bookings_reschedule_token_idx")
       .on(t.rescheduleToken)
       .where(sql`${t.rescheduleToken} is not null`),
+    check("bookings_market_policy_version", sql`${t.marketPolicyVersion} in (0,1)`),
     check("bookings_order", sql`${t.endsAt} > ${t.startsAt}`),
     check("bookings_capacity_positive", sql`${t.capacityUsed} > 0`),
     // The exclusion constraint itself is written in the migration: Drizzle has
@@ -616,3 +618,12 @@ export const externalBusyBlocks = pgTable(
     check("external_busy_blocks_order", sql`${t.endsAt} > ${t.startsAt}`),
   ],
 );
+
+/** Minimal immutable source ownership, independent of optional member commerce. */
+export const bookingCommercialSources = pgTable("booking_commercial_sources", {
+  bookingId: uuid("booking_id").primaryKey().references(() => bookings.id, { onDelete: "restrict" }),
+  serviceOfferingId: uuid("service_offering_id").notNull(),
+  productId: uuid("product_id").notNull(),
+  sellerUserId: uuid("seller_user_id"),
+  createdAt: createdAtColumn(),
+});

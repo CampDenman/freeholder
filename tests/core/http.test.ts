@@ -3,8 +3,14 @@
 // The HTTP edge: the one place identity enters from outside, and the one place
 // a ServiceError becomes a status code. Before this existed the whole platform
 // was reachable only from tests.
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+
+vi.mock("@/core/db", () => ({
+  db: () => ({
+    transaction: async <Out>(run: (tx: object) => Promise<Out>): Promise<Out> => run({}),
+  }),
+}));
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import {
   clearedSessionCookie,

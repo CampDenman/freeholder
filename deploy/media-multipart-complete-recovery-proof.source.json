@@ -1,0 +1,32 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_multipart_complete_recovery_proof.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Exact unknown original multipart COMPLETE proof controls pass; no host stop, provider terminal authority, business acceptance or independent review is claimed",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "17b626a3c8488e4a0db1c82a989e55012846c87cfcf307fcb79eb6511d9151c1" },
+    { "path": "tests/core/media-multipart-complete-recovery-proof.test.ts", "sha256": "512d3ba159dbdb880fecfc9cd309421ddd6a514f3b221c0ce5235d3acd5c6ca7" }
+  ],
+  "controls": {
+    "final": { "passed": 13, "failed": 0, "durationSeconds": 0.731 },
+    "coverage": ["portable finishes accepted without Linux or new original ACK", "independent stop supplies local closure only and preserves NULL FINs", "unfinished caller without valid stop refused", "other runtime/namespace refused", "missing, duplicate, overwrite and wrong-session COMPLETE refused", "missing page/body digest and post-dispatch verification refused", "extra mutation, rewritten manifest and foreign page identity refused", "wrong-boot stop and post-fence COMPLETE refused", "actual original nonce/parts and two agreeing positive inventories required", "other CREATE nonce or missing part certificate refused", "absence, retained session and foreign historical version refused", "changed policy and incomplete byte budget refused", "first actual COMPLETE revision cannot be replaced by later equal-body generation"],
+    "runtimeChanges": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "17b626a3c8488e4a0db1c82a989e55012846c87cfcf307fcb79eb6511d9151c1",
+      "beforeSha256": "289d09f845d64a97657b75e4f589a9f0c1b921bab498a35e3bc828de751c294d",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  retirement or executor claim follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  retirement or executor claim follows.\n  Unknown-COMPLETE proof qualification2026-11-16: all13 controls pass. Exact\n  original nonce, selected parts, byte budget, physical timing and independent\n  closure are required; duplicate/overwrite requests, foreign pages, changed\n  policy, absence and later equal-body generations are refused without inventing\n  ACK/FIN or terminal fields. Focused lint passes. See\n  `deploy/media-multipart-complete-recovery-proof.source.json`. No host stop,\n  provider terminal authority, business acceptance or independent review follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

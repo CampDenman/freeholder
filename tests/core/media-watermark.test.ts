@@ -28,8 +28,7 @@ import {
 import { buildWatermarked } from "@/core/media/watermark";
 import { backfillWatermarks } from "@/core/media/service";
 import { assets, mediaObjects } from "@/core/media/schema";
-import { allowMediaReceiptWrites } from "@/core/media/write-ledger";
-import { storage } from "@/adapters/storage";
+import { allowMediaReceiptWrites, putWithReceipt } from "@/core/media/write-ledger";
 import { db } from "@/core/db";
 import { ready } from "@/core/runtime";
 import { getService } from "@/core/service";
@@ -207,7 +206,7 @@ describe.runIf(hasDatabase)("backfilling marks onto an existing library", { time
 
   async function storedImage(filename: string, body: Uint8Array<ArrayBuffer>) {
     const key = `test/${crypto.randomUUID()}.jpg`;
-    await storage().put(key, body, "image/jpeg");
+    await putWithReceipt({ key, body, contentType: "image/jpeg", role: "original" }, { kind: "system" });
     const [created] = await db()
       .insert(assets)
       .values({

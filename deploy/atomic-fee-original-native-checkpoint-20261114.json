@@ -1,0 +1,81 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C12.38",
+    "C1.08",
+    "C11.10"
+  ],
+  "sourceHead": "53cfd327c9c1e398b5c702dee887440370a7d6de",
+  "sourceActualPassed": 1575,
+  "sourceCompleteFiles": 250,
+  "sourceExplicitDatabaseSkips": 540,
+  "traditionalPositiveOriginalWholeNativePassed": true,
+  "traditionalCounterOriginalWholeNativePassed": true,
+  "counterV5AggregateSnapshotPassed": false,
+  "counterV5SnapshotFailure": "Copied positive postcheck expected one preflight; the genuine original recovery GET correctly produces two. First result preserved. Corrected readonly v6 postcheck proves exact6 call/ancestry and all596/j86/sequence invariant; actual6 caller HMACs independently authenticated. No native or oracle changed.",
+  "auxiliaryOriginalNativePassed": false,
+  "auxiliaryActualOwnTxDiagnostic": {
+    "actual_call_id": "ebd335b6-bc9f-45b5-a7a0-d3373edcd30f",
+    "kind": "fee",
+    "actual_nonce_matches": true,
+    "no_terminal_or_post_facts": true,
+    "actual_parent_count": 1,
+    "actual_generic_bank_rows": 0,
+    "actual_inventory_equals_latest_bank": 1,
+    "actual_target_matches": 1,
+    "actual_resources": [
+      {
+        "known": true,
+        "ledger": "inventory",
+        "pending": true,
+        "amountMinor": 0
+      }
+    ],
+    "actual_unfinished_namespace_callers": 1
+  },
+  "evidenceFiles": [
+    {
+      "path": "/tmp/freeholder-current-full86-causal-media161-source-v103-20261114-result.json",
+      "sha256": "db90ca6c1ba754c8ca434e381a9f8819a1c8b696c8bfcddfd4291ebc9198b056"
+    },
+    {
+      "path": "/tmp/freeholder-current-full86-fee161-residual-native-v12-20261114-result.json",
+      "sha256": "4514b1678c55a8e951957cf91d41d8bec0031ce7b3b7a5e8962793abc6531fdf"
+    },
+    {
+      "path": "/tmp/freeholder-current-full86-fee161-counter-native-v5-20261114-result.json",
+      "sha256": "92f586dc67a67e59aa6c0a7a32fb12dfc66b70e436b08f1ec86749e4795d4b72"
+    },
+    {
+      "path": "/tmp/freeholder-current-full86-fee161-counter-native-v6-20261114-after.json",
+      "sha256": "274e2f111f9e034b3cf01273c71399552e2a06041f2cff1b6d83fb864e2cb49a"
+    },
+    {
+      "path": "/tmp/freeholder-current-full86-native-v63-counter-auth-v1-20261114-result.json",
+      "sha256": "f1e1477f4959a6351daa096b3ccc8a81e9c344b29782c17398e8a5dd0d51efae"
+    },
+    {
+      "path": "/tmp/freeholder-current-full86-atomic-auxiliary161-positive-native-v1-20261114-result.json",
+      "sha256": "cbb899b442b669c3dac3eb30e20ea25c413ccbf4eb08dd1e16834743c62666b4"
+    },
+    {
+      "path": "/tmp/freeholder-current-full86-atomic-auxiliary161-positive-native-v2-20261114-result.json",
+      "sha256": "3f5a6e17bae9db223816d8ca0639eef31d2de20883ae3eb45ec434ae0a4b04f1"
+    },
+    {
+      "path": "/tmp/freeholder-current-full86-atomic-auxiliary161-positive-native-v3-20261114-result.json",
+      "sha256": "f9b0963aa978e66c4acccb82fd6d0fd75b075b439cfd31d5e0a708983beef5c8"
+    },
+    {
+      "path": "/tmp/freeholder-current-full86-atomic-auxiliary161-positive-native-v3-20261114-sql.jsonl",
+      "sha256": "7b378d0f85d730537b69ec775b01df816a81c553410a4c7f2063c682269f1804"
+    },
+    {
+      "path": "/tmp/freeholder-current-full86-native-v64-auxiliary-raw-v1-20261114-result.json",
+      "sha256": "a16ee683755a2875f8d3845a5dd37ad64c125425a1b0f8fa200ae9b046b258ad"
+    }
+  ],
+  "failedDatabasesPreserved": true,
+  "providerAcceptance": false,
+  "stableAcceptance": false
+}

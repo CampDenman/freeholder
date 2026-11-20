@@ -35,7 +35,6 @@ import { navigationLinkSchema } from "@/modules/cms/navigation-schema";
 import { removeNavigation, type NavigationLink } from "@/modules/cms/navigation-tree";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { assertPublicHttpUrl, DEFAULT_IMPORTER_LIMITS, robotsDisallow } from "./contract";
-import { crawlPublicSource, type CrawlKind } from "./crawl";
 import { assertSourceStageable, assertNoPendingSourceUpload } from "./source-lifecycle";
 import { assertLegacyReaderSafety, bindReaderSources, publicImportRun, stripReaderCopies } from "./privacy";
 import { archivePlanSchema, archivePreviewDigest, archiveSourcePath, staticArchivePlan } from "./archive-plan";
@@ -551,7 +550,7 @@ const commitSource = defineService({
   permission: "scoped",
   external: false,
   input: z.object({ id: z.string().uuid() }),
-  output: z.object({ media: z.array(mediaToFetch), delayMs: z.number().int().nonnegative(), previewDigest: z.string(), archive: archiveCommitSourceSchema.optional(), generic: genericPlanSchema.optional(), sourceGraph: z.boolean().default(false), completed: runRow.optional() }),
+  output: z.object({ media: z.array(mediaToFetch), delayMs: z.number().int().nonnegative(), previewDigest: z.string(), archive: archiveCommitSourceSchema.optional(), generic: genericPlanSchema.optional(), sourceGraph: z.boolean().default(false), httpSourceGraph: z.boolean().default(false), completed: runRow.optional() }),
   handler: async (input, ctx) => {
     await lockImportBatchParent(ctx, input.id);
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
@@ -559,7 +558,7 @@ const commitSource = defineService({
     assertImportBatchAccess(run);
     const previewDigest = archivePreviewDigest(run.preview);
     if (["committed", "reconciled", "published"].includes(run.status)) return { media: [], delayMs: 0, previewDigest, completed: run };
-    if (checkpointOf(run.checkpoint).sourceGraph) return { media: [], delayMs: 0, previewDigest, sourceGraph: true };
+    if (checkpointOf(run.checkpoint).sourceGraph) return { media: [], delayMs: 0, previewDigest, sourceGraph: true, httpSourceGraph: Boolean(checkpointOf(run.checkpoint).sourceCrawl) };
     assertNoPendingSourceUpload(run);
     if (run.status !== "previewed") {
       throw new ServiceError("conflict", "Preview the import before committing it.");
@@ -1277,6 +1276,10 @@ export const commitImport = defineOrchestratedService({
     if (source.completed) return publicImportRun(source.completed);
     if (source.sourceGraph) {
       if (!input.graph) throw new ServiceError("conflict", "This import uses resumable source phases. Review it in a current client before committing.");
+      if (source.httpSourceGraph) {
+        const { advanceCrawlGraphCommit } = await import("./crawl-graph-batches");
+        return advanceCrawlGraphCommit(input.id, input.graph, actor);
+      }
       return advanceGraphCommit(input.id, input.graph, actor);
     }
     if (input.graph) throw new ServiceError("conflict", "This import no longer matches the requested source graph.");
@@ -1856,82 +1859,19 @@ export const previewFromSource = defineService({
 });
 
 
-/** The digest is a compare-and-swap token, never an authorization grant. */
-function sourceRevision(run: unknown): string {
-  return createHash("sha256").update(JSON.stringify(run)).digest("hex");
-}
-
-const crawlSource = defineService({
-  name: "imports.crawlSource",
-  orchestratedBy: "imports.previewFromUrl",
-  summary: "Read an unchanged stageable import before public-source discovery.",
-  kind: "query",
-  permission: "scoped",
-  external: false,
-  input: z.object({ id: uuid, url: z.string().url() }),
-  output: z.object({ id: uuid, revision: z.string(), kind: z.string(), origin: z.string(), url: z.string(), approvedMediaOrigins: approvedMediaOriginsSchema }),
-  handler: async (input, ctx) => {
-    const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
-    if (!run) throw new ServiceError("not_found", "No such import run.");
-    assertSourceStageable(run);
-    if (!["wordpress-rest", "sitemap", "rss", "atom", "html"].includes(run.kind ?? "")) throw new ServiceError("validation", "Upload this source as an export file instead.");
-    if (!run.origin) throw new ServiceError("conflict", "This import has no approved source origin.");
-    let url: URL;
-    try { url = assertPublicHttpUrl(input.url); } catch { throw new ServiceError("validation", "Use a public HTTP or HTTPS source URL without credentials."); }
-    if (url.origin !== new URL(run.origin).origin) throw new ServiceError("validation", "The source URL must belong to this import's origin.");
-    return { id: run.id, revision: sourceRevision(run), kind: run.kind!, origin: run.origin, url: url.href, approvedMediaOrigins: approvedMediaOrigins(run.checkpoint) };
-  },
-});
-
-const applyCrawl = defineService({
-  name: "imports.applyCrawl",
-  auditInputFields: ["id", "revision", "counts"],
-  orchestratedBy: "imports.previewFromUrl",
-  summary: "Stage discovery only while the source run still matches its read snapshot.",
-  kind: "mutation",
-  permission: "scoped",
-  external: false,
-  input: z.object({ id: uuid, revision: z.string(), preview: z.record(z.string(), z.unknown()).optional(), counts: z.record(z.string(), z.number()).optional(), report: z.record(z.string(), z.unknown()).optional(), error: z.string().max(2000).optional() }),
-  output: runRow,
-  handler: async (input, ctx) => {
-    const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
-    if (!run) throw new ServiceError("not_found", "No such import run.");
-    assertSourceStageable(run);
-    if (sourceRevision(run) !== input.revision) throw new ServiceError("conflict", "This import changed during discovery. Reload it before trying again.");
-    const [result] = await ctx.tx.update(importRuns).set(input.error
-      ? { status: "failed", error: input.error }
-      : { status: "previewed", preview: await bindReaderSources(ctx.tx, input.preview!, run, ctx.actor), counts: input.counts!, error: null, checkpoint: { ...checkpointOf(run.checkpoint), crawl: input.report } }
-    ).where(eq(importRuns.id, input.id)).returning();
-    ctx.setSubject("import_run", run.id);
-    return publicImportRun(result!);
-  },
-});
-
 export const previewFromUrl = defineOrchestratedService({
   name: "imports.previewFromUrl",
-  summary: "Crawl a public WordPress API, sitemap, feed or HTML site into a staged preview. Nothing is published.",
+  summary: "Start saving a public WordPress API, sitemap, feed or HTML source. Continue through imports.advanceCrawl before reviewing. Nothing is published.",
   kind: "mutation",
   permission: "scoped",
   rateLimit: { limit: 10, windowSeconds: 3600, subject: input => input.id, message: "This import has read its source repeatedly. Wait before trying again." },
   input: z.object({ id: uuid, url: z.string().url().max(2048) }),
   output: runRow,
   handler: async (input, actor) => {
-    const source = await crawlSource.call(input, actor);
-    let staged: StagedPreview;
-    let report: Record<string, unknown>;
-    try {
-      const discovered = await crawlPublicSource(source.kind as CrawlKind, source.url);
-      staged = discovered.wordpress
-        ? stageWordpressExport(wordpressExportFromRest(discovered.wordpress, source.origin), source.origin)
-        : stageGenericPages(discovered.pages, source.origin, discovered.robotsTxt, source.approvedMediaOrigins);
-      staged.counts = { ...staged.counts, crawlBlocked: discovered.report.blocked.length, crawlRequests: discovered.report.requests, crawlBytes: discovered.report.bytes };
-      report = { sourceUrl: discovered.sourceUrl, ...discovered.report };
-    } catch (error) {
-      // Transport errors contain no response body, provider secret or arbitrary source text.
-      const message = error instanceof SyntaxError ? "The source did not return valid UTF-8 JSON." : error instanceof Error ? error.message.slice(0, 2000) : "The source could not be read.";
-      return applyCrawl.call({ id: input.id, revision: source.revision, error: message }, actor);
-    }
-    return applyCrawl.call({ id: input.id, revision: source.revision, ...staged, report }, actor);
+    // Actual source admission commits before any original HTTP phase begins.
+    // Continue through imports.advanceCrawl; each call rechecks current grants.
+    const { initializeCrawl } = await import("./crawl-capture");
+    return initializeCrawl.call(input, actor);
   },
 });
 
@@ -1980,8 +1920,6 @@ export default [
   startImport,
   previewImport,
   previewFromSource,
-  crawlSource,
-  applyCrawl,
   previewFromUrl,
   mapImport,
   reviewImportConflicts,

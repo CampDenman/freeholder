@@ -1,0 +1,10 @@
+{
+  "$comment": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "base": "56f63b4717a29d225e3c3e0437f9ddb45054d810",
+  "sourceOnly": true,
+  "productPolicySha256Unchanged": "c0d975005debcf93e48cb6889c350442dfca57f6014ec621ed7f084520a404f7",
+  "original66ControlPrefixSha256Unchanged": "205336ef1b15d125f5b9a047eae11e882cc7f9e1ee9ce3ba1d41562bd7b9ac5f",
+  "testSha256": "33187aea8efca34c6f6e11649496c1108e04d47e4d249032a9d39cca2fd79a82",
+  "assertion": "ALL4 actual page facts retained; exactly3 reviewed financial page kinds require genuine cohort resolution; empty preflight stays outside debt and has no fabricated resolution.",
+  "execution": "UNRUN; no CPU/PG/root writes"
+}

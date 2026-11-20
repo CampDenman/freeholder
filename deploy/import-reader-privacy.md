@@ -511,3 +511,24 @@ exclusions,31.63 seconds for contracts). The independent frozen offline install
 completed in696ms. All source processes exited before protected PR publication.
 The source/schema/API/locale boundary above is unchanged; complete item, actual
 provider, cutover and stable signatures remain pending.
+
+
+## Canonical original-upload hold composition
+
+The current-main migration-80 composition retains the protected REST/ZIP and
+reader-recovery implementation, including exact original-source restoration and
+physical read-key resolution. It overlays the separately qualified canonical
+retention callback: actual first-hold source/generation members are captured
+inside the existing hold transaction, including an empty capture, before one
+normalized completion receipt. Renewals and fulfillment never recapture later
+uploads. Current cleanup uses canonical membership and its caller's actual
+transaction; checkpoint nonces remain an older-reader projection.
+
+The earlier exact local-v8 snapshot passed the unchanged pending-hold oracle,
+four additional hold boundaries, and actual older-source creation/cleanup
+refusals. Those are preserved scoped proofs, not qualification of this newly
+composed current-main tree. See
+`deploy/import-upload-pending-hold-source-2026-11-12.md` for their precise source
+identities and limits. The fresh composition still requires its own source and
+native checks. No stable, provider, cutover or independent-review closure is
+claimed here.

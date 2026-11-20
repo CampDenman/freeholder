@@ -1,0 +1,33 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_multipart_known_create_proof.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Known first-ACK original CREATE proof controls pass; fictional inputs establish no actual host stop or provider acceptance",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "57a9dba9fee243cc89fdb29e5829da930036b94ba51f289f0736ff26743619bf" },
+    { "path": "tests/core/media-multipart-known-create-proof.test.ts", "sha256": "e1c58c8856daaa59e0e2253d8a8f05f7bf5211167dadc5c1b749929718d9c418" }
+  ],
+  "controls": {
+    "final": { "passed": 8, "failed": 0, "durationSeconds": 0.721 },
+    "coverage": ["real portable finishes accepted without Linux or first-proof mutation", "unknown first ACK refused despite same-key current session", "changed UploadId and contradictory positive facts refused", "active caller refused despite empty inventories or written stop claims", "both complete pre-CREATE baseline passes and all actual frames required", "exact independent stop accepted without filling original NULL FINs", "other session, retained object/version and policy disagreement refused", "exact immutable review, empty inspection and original physical identity required"],
+    "runtimeChanges": false,
+    "actualHostStop": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "57a9dba9fee243cc89fdb29e5829da930036b94ba51f289f0736ff26743619bf",
+      "beforeSha256": "e419c2600ace123fa82e1662aeb3afbfc58cdcc053e602b08d30b86310cd5e79",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  No session assignment, FIN or remote terminal acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  No session assignment, FIN or remote terminal acceptance follows.\n  Known-CREATE proof qualification2026-11-16: all8 controls pass. Portable actual\n  finishes require no Linux path; unknown first ACK, changed UploadId, active\n  callers, incomplete pre-CREATE baselines, foreign stops, retained debris and\n  altered review/read/physical identities are refused without filling NULL FINs.\n  Focused lint passes. See `deploy/media-multipart-known-create-proof.source.json`.\n  Fictional proof inputs establish no actual host stop or provider acceptance.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

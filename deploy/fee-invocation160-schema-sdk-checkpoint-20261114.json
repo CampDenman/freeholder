@@ -1,0 +1,59 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "qualifiedBackendSource": "5e609ff2ed02d241b3b8ae908e03e3f596db746e",
+  "status": "SOURCE160_FINALSCHEMA_AND_SDK16_PASS; GENERATEDSDK_TYPES_AND_NATIVE_PENDING",
+  "sourceAssertions": 1412,
+  "completeSelectedFiles": 223,
+  "explicitDatabaseSkips": 482,
+  "ordinaryMigrations": 86,
+  "affectedModels": 160,
+  "installedGuards": 359,
+  "completeFunctionBodies": 389,
+  "strictQueries": 4066,
+  "strictExpressions": 2456,
+  "proofs": {
+    "sourceV85": {
+      "path": "/tmp/freeholder-current-full86-financial160-source-v85-20261114-result.json",
+      "sha256": "058a6914daa7a98cdc106b17e8ecdce68ce46d48e81ed9a3a2dbf114da5c9d49",
+      "passed": true
+    },
+    "normalV45": {
+      "path": "/tmp/freeholder-current-full86-normal-v45-result-20261113.json",
+      "sha256": "462c3d1f8d4bfb6d73567ab80ff540883c36a1c087ed1cb95121eee17f2384c0",
+      "passed": true
+    },
+    "strictV56": {
+      "path": "/tmp/freeholder-current-full86-parity160-v56-result-20261113.json",
+      "sha256": "6d9e3be1e7e78091437ac87905a385eb05831080e9be3d5e7b89d35bfdc5f7d1",
+      "passed": true
+    },
+    "sdkV28Completion": {
+      "path": "/tmp/freeholder-current-full86-sdk-generation-v28-completion-20261114-result.json",
+      "sha256": "82cc7ccf573badcf2da625f1e7378c82a61d9ea44a0d304e3b3be313a9cf4eed",
+      "passed": true
+    },
+    "sdkV26HarnessFailure": {
+      "path": "/tmp/freeholder-current-full86-sdk-generation-v26-20261114-harness-failure.json",
+      "sha256": "fb150605bd8e6341bf321586dc47f3b2e5b503c550edeab1911f1dfc0be062cf",
+      "passed": false
+    },
+    "sdkV27HarnessFailure": {
+      "path": "/tmp/freeholder-current-full86-sdk-generation-v27-completion-20261114-harness-failure.json",
+      "sha256": "e333ba7abaea3ed31d6d8ecce315f46585742958f1e80c08bf584765ddf34641",
+      "passed": false
+    }
+  },
+  "generatedSdkSha256": "03ef130ab3280be047fc51f3fc51f80e621d1abd0ccbc324d085f563d0572fc9",
+  "exactAddedPublicNames": [
+    "invoicing.merchantFeeInvocationRecoveryList",
+    "invoicing.merchantFeeInvocationStopPlan",
+    "invoicing.refreshAtomicFeeBankEvidence",
+    "invoicing.reviewAtomicFeeReconciliation",
+    "invoicing.reviewMerchantFeeInvocationStopped"
+  ],
+  "privatePhasesHidden": 8,
+  "sourceDelta": "Only actual generator output with5newpublic methods, no other backend/schema changes; full types/lint/metadata required before business native",
+  "businessNativeAcceptance": false,
+  "providerAcceptance": false,
+  "stableAcceptance": false
+}

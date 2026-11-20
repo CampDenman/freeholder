@@ -6,7 +6,7 @@ import { and, eq, gte, lt, sql } from "drizzle-orm";
 import type { z } from "zod";
 import { importRuns, importSourceEntries, importSourceGraphs, importSourceMedia } from "@/core/plugins/schema";
 import { actorString, ServiceError, type Service, type ServiceContext } from "@/core/service";
-import { assertCurrentImportAuthority } from "./authority";
+import { assertCurrentImportAuthority, importLeaseOwner } from "./authority";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { markImportGraphWriter } from "./graph-writer";
 import { markReaderOwnershipWriter } from "./reader-ownership-key";
@@ -43,7 +43,7 @@ export async function lockImportBatchParent(ctx: ServiceContext, childId: string
   await markImportGraphWriter(ctx.tx);
   const [root] = await ctx.tx.select({ id: importRuns.id, status: importRuns.status }).from(importRuns).where(eq(importRuns.id, context.rootId)).limit(1).for("update");
   const [graph] = await ctx.tx.select({ leaseToken: importSourceGraphs.leaseToken, leaseActor: importSourceGraphs.leaseActor, leaseUntil: importSourceGraphs.leaseUntil, state: importSourceGraphs.state, planDigest: importSourceGraphs.planDigest }).from(importSourceGraphs).where(and(eq(importSourceGraphs.id, context.graphId), eq(importSourceGraphs.runId, context.rootId), eq(importSourceGraphs.generation, context.generation))).limit(1).for("update");
-  if (!root || root.status === "rolled_back" || !graph || graph.planDigest !== context.planDigest || (graph.state === "invalidated" && context.operation !== "imports.rollback") || graph.leaseToken !== context.leaseToken || graph.leaseActor !== actorString(ctx.actor) || !graph.leaseUntil || graph.leaseUntil.getTime() <= Date.now()) throw new ServiceError("conflict", "The original import batch was cancelled, replaced or lost its lease.");
+  if (!root || root.status === "rolled_back" || !graph || graph.planDigest !== context.planDigest || (graph.state === "invalidated" && context.operation !== "imports.rollback") || graph.leaseToken !== context.leaseToken || (graph.leaseActor !== actorString(ctx.actor) && graph.leaseActor !== await importLeaseOwner(ctx)) || !graph.leaseUntil || graph.leaseUntil.getTime() <= Date.now()) throw new ServiceError("conflict", "The original import batch was cancelled, replaced or lost its lease.");
   guardedContexts.add(ctx);
 }
 

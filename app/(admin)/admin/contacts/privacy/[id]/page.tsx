@@ -40,7 +40,7 @@ export default async function PrivacyRequestPage({
   }
   const [t, business] = await Promise.all([getT(), currentBusiness()]);
   const { request, exceptions, artifact } = detail;
-  const scopeLabel=(scope:string)=>scope==="members.merchantIdentity"?t("privacy.retention.merchantIdentity"):scope==="media.storageOperations"?t("privacy.retention.mediaStorageOperations"):scope==="media.multipartOperations"?t("privacy.retention.mediaMultipartOperations"):scope;
+  const scopeLabel=(scope:string)=>scope==="commerce.merchantTax"?t("privacy.retention.merchantTax"):scope==="catalog.orderCommercial"?t("privacy.retention.orderCommercial"):scope==="members.merchantIdentity"?t("privacy.retention.merchantIdentity"):scope==="media.storageOperations"?t("privacy.retention.mediaStorageOperations"):scope==="media.multipartOperations"?t("privacy.retention.mediaMultipartOperations"):scope;
   // Translate known system receipts for display; preserve stored evidence and owner text.
   const verification = request.verificationMethod === "identity verified before erasure"
     ? t("privacy.system.identityBeforeErasure") : request.verificationMethod;

@@ -93,10 +93,15 @@ export async function purgeAgedContactRows(
  * asserted in `tests/core/c11-14-retention.test.ts`.
  */
 export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
+  merchant_tax_profiles: "Original tax business and retained financial proof; holds and explicit minimization use commerce.merchantTax, never an age-based purge.",
+  booking_market_policies: "Original accepted member commercial policy and private contact owner; controlled by shared booking/money and privacy services.",
+  booking_merchant_scopes: "Private original booking account and tax destination witness; personal copies minimized by original buyer and merchant rights, never content-search data.",
+  order_commercial_parties: "Original order business and tax authority; catalog.orderCommercial honors named holds and minimizes identity, never an age-based purge.",
   invoice_market_policies: "Immutable issued-invoice terms; personal identity erasure and named holds use members.merchantIdentity, not an age-based policy purge.",
   invoice_merchant_allocations: "Immutable original invoice money and seller ownership; retained financial facts and contact merge use members.merchantIdentity, never an age-based purge.",
   subscription_market_policies: "Immutable agreement terms; personal identity erasure and named holds use members.merchantIdentity, not an age-based policy purge.",
-  media_uploads:"Original reservations survive unresolved physical work; guarded lifecycle and subject erasure own retirement.",
+  media_storage_transfer_subjects: "Original transfer ownership has no generic TTL; shared contact merge, named holds and exact original privacy minimization govern it.",
+  media_uploads:"Keep minimal immutable upload/reservation UUID proof. The 30-day terminal policy reduces redundant intake PII only after actual ordinary proxy custody/retirement; verified erasure needs exact first scope and physical proof. Unknown/held necessary evidence remains explicit review debt; no age-based byte erasure.",
   media_objects:"Original object ownership survives unknown writes; guarded physical cleanup and privacy jobs remove it.",
   media_multipart_resources:"Original multipart resources survive timers; explicit original-provider retirement and subject erasure own cleanup.",
   media_object_writes: "Original physical-operation and retired-key receipts are not a TTL store. Privacy minimizes personal fields only after settled original cleanup; unresolved work keeps its erasure receipt pending.",

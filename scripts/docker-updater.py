@@ -32,6 +32,13 @@ import urllib.request
 
 IMAGE = "ghcr.io/campdenman/freeholder"
 DIGEST = re.compile(r"^sha256:[a-f0-9]{64}$")
+# A repository only: registry/path, never a tag or a digest. The digest is
+# supplied per update and validated separately.
+REPOSITORY = re.compile(r"^[a-z0-9]+([._-][a-z0-9]+)*(\.[a-z0-9]+([._-][a-z0-9]+)*)*(:[0-9]+)?(/[a-z0-9]+([._-][a-z0-9]+)*)+$")
+# A self-published installation must supply all three or none. Two of three
+# would mean an image nobody signed, or a signature nobody could trace to a
+# source revision, and either is worse than the upstream default.
+PUBLISHER_FIELDS = ("image", "cosign_key", "compare_api")
 TERMINAL = {"completed", "rolled_back", "failed", "unchanged"}
 
 
@@ -75,13 +82,52 @@ def load_config(path):
         raise Refused("Automatic scheduling requires a boolean and a UTC hour from 0 to 23.")
     if type(config.get("allow_schema_changes", False)) is not bool:
         raise Refused("allow_schema_changes requires a boolean.")
+    validate_publisher(config.get("publisher"))
     return config
+
+
+def validate_publisher(publisher):
+    """C10.31: an installation that publishes and signs its own images.
+
+    Absent, the executor trusts exactly what it always has: the upstream
+    repository, the publish workflow's keyless identity and GitHub's compare
+    endpoint. Present, it trusts one cosign public key and one compare API
+    named by root — and nothing else. There is deliberately no way to express
+    "verify less": the block either names a complete alternative chain or is
+    refused, because a partially configured publisher is an unsigned image.
+    """
+    if publisher is None:
+        return
+    if not isinstance(publisher, dict):
+        raise Refused("publisher must be an object naming image, cosign_key and compare_api.")
+    missing = [field for field in PUBLISHER_FIELDS if not isinstance(publisher.get(field), str) or not publisher[field].strip()]
+    if missing:
+        raise Refused("A self-publishing installation must name " + ", ".join(PUBLISHER_FIELDS) + ".")
+    if not REPOSITORY.fullmatch(publisher["image"]):
+        raise Refused("publisher.image must be a repository with no tag or digest.")
+    if not publisher["compare_api"].startswith("https://"):
+        raise Refused("publisher.compare_api must be an https endpoint.")
+    key = Path(publisher["cosign_key"])
+    if not key.is_absolute():
+        raise Refused("publisher.cosign_key must be an absolute path.")
+    try:
+        status = key.stat()
+    except OSError as error:
+        raise Refused("publisher.cosign_key is not readable.") from error
+    # The key decides which images may run. Anyone who can rewrite it can
+    # authorize anything, so it is held to the same standard as this config.
+    if status.st_uid != 0 or status.st_mode & 0o022:
+        raise Refused("publisher.cosign_key must be root-owned and not writable by other users.")
 
 
 class Executor:
     def __init__(self, config, run=command):
         self.config = config
         self.run = run
+        self.publisher = config.get("publisher")
+        # One repository for the whole run: the digest the app may request is
+        # meaningless without the repository it is a digest *of*.
+        self.image = self.publisher["image"] if self.publisher else IMAGE
         self.directory = Path(config["directory"]).resolve()
         self.state = Path(config["state_directory"]).resolve()
         self.state.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -115,19 +161,28 @@ class Executor:
         atomic_json(self.release / "status.json", self.record)
 
     def verify(self, digest):
+        reference = self.image + "@" + validate_digest(digest)
+        if self.publisher:
+            # A private installation signs its own images, so there is no
+            # third-party identity to assert — the trust is one public key that
+            # only root can replace. Keyless identity flags are not passed as
+            # well: two accepted chains would mean either could admit an image.
+            self.run(["cosign", "verify", reference,
+                      "--key", self.publisher["cosign_key"]], timeout=180)
+            return
         # The promotion workflow verifies CI provenance before signing. Require
         # its exact main-branch identity, not merely any signature by this repo.
-        self.run(["cosign", "verify", IMAGE + "@" + validate_digest(digest),
+        self.run(["cosign", "verify", reference,
                   "--certificate-identity", "https://github.com/CampDenman/freeholder/.github/workflows/publish-image.yml@refs/heads/main",
                   "--certificate-oidc-issuer", "https://token.actions.githubusercontent.com"], timeout=180)
 
     def resolve_candidate(self):
         tag = "edge" if self.config.get("channel") == "edge" else "latest"
-        self.run(["docker", "pull", IMAGE + ":" + tag], timeout=600)
-        digests = json.loads(self.run(["docker", "image", "inspect", IMAGE + ":" + tag,
+        self.run(["docker", "pull", self.image + ":" + tag], timeout=600)
+        digests = json.loads(self.run(["docker", "image", "inspect", self.image + ":" + tag,
                                       "--format", "{{json .RepoDigests}}"] ))
         for ref in digests:
-            if ref.startswith(IMAGE + "@"):
+            if ref.startswith(self.image + "@"):
                 return validate_digest(ref.split("@", 1)[1])
         raise Refused("Registry did not supply the expected immutable image identity.")
 
@@ -146,6 +201,9 @@ class Executor:
             revisions.append(revision)
         if revisions[0] == revisions[1]:
             return
+        if self.publisher:
+            self.verify_forward_on_forge(*revisions)
+            return
         request = urllib.request.Request(
             "https://api.github.com/repos/CampDenman/freeholder/compare/" + "...".join(revisions) + "?per_page=1",
             headers={"Accept": "application/vnd.github+json", "User-Agent": "Freeholder-host-updater",
@@ -156,6 +214,37 @@ class Executor:
         except Exception as error:
             raise Refused("Cannot verify upstream commit ancestry. No deployment was changed.") from error
         if evidence.get("status") != "ahead" or evidence.get("merge_base_commit", {}).get("sha") != revisions[0]:
+            raise Refused("Candidate is not a forward update. A stale channel tag must not downgrade this installation.")
+
+    def verify_forward_on_forge(self, previous, candidate):
+        """Forgejo's compare is NOT GitHub's, and reusing the GitHub reading is a trap.
+
+        Forgejo returns `{total_commits, commits, files}` with no `status` and
+        no `merge_base_commit`, so the upstream test above reads `status` as
+        None, refuses every candidate, and looks like a broken signature rather
+        than a shape mismatch. What it does return is exactly
+        `git rev-list --count base..head` — verified against this repository in
+        both directions on 2026-11-18.
+
+        So ancestry is proved the other way round: ask for the commits reachable
+        from `previous` but not from `candidate`. Zero means `previous` is an
+        ancestor of `candidate`, which with the inequality already established
+        by the caller is a strict forward update. A divergent candidate and a
+        downgrade both leave commits on that side and are refused.
+        """
+        endpoint = self.publisher["compare_api"].rstrip("/") + "/" + candidate + "..." + previous
+        request = urllib.request.Request(endpoint, headers={
+            "Accept": "application/json", "User-Agent": "Freeholder-host-updater"})
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                evidence = json.loads(response.read(2 * 1024 * 1024))
+        except Exception as error:
+            raise Refused("Cannot verify commit ancestry on the configured forge. No deployment was changed.") from error
+        behind = evidence.get("total_commits")
+        # An absent or non-integer count is an unrecognised payload, not a zero.
+        if not isinstance(behind, int) or isinstance(behind, bool):
+            raise Refused("The configured forge did not report a usable commit comparison.")
+        if behind != 0:
             raise Refused("Candidate is not a forward update. A stale channel tag must not downgrade this installation.")
 
     def inventory(self):
@@ -185,7 +274,7 @@ class Executor:
             raise Refused("The existing app must be running.")
         image_id = self.run(["docker", "inspect", container, "--format", "{{.Image}}"] ).strip()
         refs = json.loads(self.run(["docker", "image", "inspect", image_id, "--format", "{{json .RepoDigests}}"] ))
-        previous = next((ref for ref in refs if ref.startswith(IMAGE + "@")), None)
+        previous = next((ref for ref in refs if ref.startswith(self.image + "@")), None)
         if not previous:
             raise Refused("The current image has no immutable registry identity.")
         self.database_user = database.get("environment", {}).get("POSTGRES_USER", "postgres")
@@ -268,7 +357,7 @@ class Executor:
             before = self.database_signature(database)
             self.run(["docker", "run", "-d", "--name", app, "--network", network,
                       "--memory", "1g", "--cpus", "1", "--pids-limit", "256",
-                      "--env-file", str(app_env), IMAGE + "@" + digest])
+                      "--env-file", str(app_env), self.image + "@" + digest])
             evidence = self.healthy(app)
             self.smoke(app)
             self.run(["docker", "stop", "-t", "40", app], timeout=60)
@@ -310,7 +399,7 @@ class Executor:
         self.compose("exec", "-T", "caddy", "caddy", "reload", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile")
 
     def pin(self, reference):
-        if not reference.startswith(IMAGE + "@"):
+        if not reference.startswith(self.image + "@"):
             raise Refused("Unsupported image repository.")
         validate_digest(reference.split("@", 1)[1])
         path = self.directory / ".env"
@@ -336,13 +425,13 @@ class Executor:
             try:
                 previous, postgres_image = self.inventory()
                 digest = validate_digest(digest) if digest else self.resolve_candidate()
-                self.stage("verifying", previousImage=previous, image=IMAGE + "@" + digest)
-                if previous == IMAGE + "@" + digest:
+                self.stage("verifying", previousImage=previous, image=self.image + "@" + digest)
+                if previous == self.image + "@" + digest:
                     self.stage("unchanged")
                     return self.record
                 self.verify(digest)
-                self.run(["docker", "pull", IMAGE + "@" + digest], timeout=600)
-                self.verify_forward_update(previous, IMAGE + "@" + digest)
+                self.run(["docker", "pull", self.image + "@" + digest], timeout=600)
+                self.verify_forward_update(previous, self.image + "@" + digest)
                 for filename in (".env", "compose.yml", "Caddyfile"):
                     shutil.copyfile(self.directory / filename, self.release / filename)
                     (self.release / filename).chmod(0o600)
@@ -358,7 +447,7 @@ class Executor:
                 self.compose("stop", "-t", "45", "app", timeout=60)
                 production_backup = self.snapshot("production.dump")
                 self.stage("deploying")
-                self.pin(IMAGE + "@" + digest)
+                self.pin(self.image + "@" + digest)
                 switched = True
                 self.compose("up", "-d", "--no-deps", "app", timeout=120)
                 migrated = True # The candidate migrates at boot; a rollback must now restore the database.

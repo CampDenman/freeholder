@@ -1,0 +1,33 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_namespace_origin_admission.v1",
+  "checklist": ["C3.44", "C10.32", "C11.08"],
+  "status": "Twenty-nine DigitalOcean namespace-origin and image-admission controls pass with fictional transport; real account, signed image, installed runtime and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "8a68e093cbbb0490c184f7731b0253c943407c1db095aeb71c7866ecd20cb533" },
+    { "path": "tests/core/media-origin-image-admission.test.ts", "sha256": "df90247523e6ea9bb37f5d98e02e99c9d494c51205e7e2b47e6f2a52abd73513" },
+    { "path": "tests/core/media-quota-namespace-origin.test.ts", "sha256": "68de59c721a45447259522a0843ba6cb7e0a7fd368a05d3b10f1bb0cb57e2c05" }
+  ],
+  "controls": {
+    "final": { "files": 2, "passed": 29, "failed": 0, "durationSeconds": 1.01 },
+    "coverage": ["unpredictable one-shot bucket admission, actual response/FIN and separate signed installation", "existing bucket, missing request ID and lost reply remain original debt without replay", "installation, verifier, namespace and bucket rebinding refused", "strict image source profile, pinned manifest/config and safe CDN credential isolation", "unknown account or unsupported image refused before key, bucket or server creation"],
+    "focusedLint": "passed",
+    "testOraclesChanged": false,
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "8a68e093cbbb0490c184f7731b0253c943407c1db095aeb71c7866ecd20cb533",
+      "beforeSha256": "9bbfdce2baf2049d1605d822f0f85e697801474ce16e58482dbf718bf2972fc5",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  Issued URLs, old-binary recovery, current provider acceptance and C closure stay open.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  Issued URLs, old-binary recovery, current provider acceptance and C closure stay open.\n  Namespace-origin/image-admission qualification2026-11-16 (C3.44/C10.32/C11.08):\n  all29 fictional-transport controls pass. DigitalOcean origin creation is one-shot,\n  unpredictably named and separately signed to its installed namespace; existing,\n  missing-request-ID and lost-reply results remain debt without another PUT. Strict\n  source/image/profile validation, safe CDN redirects and actual account/image refusal\n  occur before provider mutations. Focused lint passes. See\n  `deploy/media-namespace-origin-admission.source.json`. No real account, compatible\n  published image, installed runtime, launch or checklist acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

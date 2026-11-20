@@ -1,0 +1,617 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "SOURCE_ONLY_IMPLEMENTATION_PREPARED_UNRUN",
+  "parent": "6e87db53547bc1f91a814b36ba0e96a315775b20",
+  "newModels": [],
+  "ownedTail": "deploy/atomic-auxiliary-fee84.fragment.sql",
+  "factKinds": {
+    "atomic_fee_target": "freeholder.original-cash-atomic-fee-target.v1",
+    "atomic_fee_closure": "freeholder.original-cash-atomic-fee-closure.v1"
+  },
+  "checks": [
+    {
+      "table": "original_cash_recovery_facts",
+      "name": "original_cash_recovery_facts_kind",
+      "change": "Retain all thirteen existing literal kinds and append only atomic_fee_target and atomic_fee_closure."
+    }
+  ],
+  "indexes": [
+    {
+      "table": "original_cash_recovery_facts",
+      "name": "original_cash_atomic_fee_target",
+      "unique": true,
+      "keys": [
+        "recovery_id",
+        "(evidence->>'targetKey')"
+      ],
+      "where": "kind='atomic_fee_target'"
+    },
+    {
+      "table": "original_cash_recovery_facts",
+      "name": "original_cash_atomic_fee_closure",
+      "unique": true,
+      "keys": [
+        "recovery_id",
+        "(evidence->>'targetFactId')",
+        "(evidence->>'revision')"
+      ],
+      "where": "kind='atomic_fee_closure'"
+    }
+  ],
+  "newFunctions": [
+    "freeholder_atomic_fee_return_resources(uuid)",
+    "freeholder_atomic_auxiliary_fee_target_valid(jsonb)",
+    "freeholder_atomic_auxiliary_fee_operation_valid(jsonb)",
+    "freeholder_atomic_auxiliary_fee_closure_valid(jsonb)",
+    "freeholder_atomic_auxiliary_fee_ready()"
+  ],
+  "successorFunctions": [
+    "freeholder_guard_original_cash_recovery()",
+    "freeholder_controlled_atomic_refund_targets(uuid)",
+    "freeholder_controlled_atomic_refund_fee_state(uuid)",
+    "freeholder_merchant_fee_invocations_ready()"
+  ],
+  "unchangedFunctions": [
+    "freeholder_guard_original_cash_old_fee_dispatch()"
+  ],
+  "newTriggers": [],
+  "existingGuard": {
+    "name": "original_cash_recovery_guard",
+    "tables": [
+      "original_cash_recoveries",
+      "original_cash_recovery_operations",
+      "original_cash_recovery_facts",
+      "original_cash_recovery_closures"
+    ],
+    "change": "Keep full previous body; add an exact validated atomic fact/fee-operation branch after its existing immutable insert/owner/original namespace checks. Historical full/partial paths stay byte-exact."
+  },
+  "privateServices": [
+    "invoicing.retainAtomicAuxiliaryFeeTarget",
+    "invoicing.claimAtomicAuxiliaryFeeReturn",
+    "invoicing.finalizeAtomicAuxiliaryFeeReturn"
+  ],
+  "physicalReturnIdentity": [
+    "original platform",
+    "original fee",
+    "actual physical fee refund UUID/reference"
+  ],
+  "physicalConflictRule": "Repeated observations of one actual resource under the same original operation may confirm it; a second operation or the other ledger cannot own it. Unknown callers and unbound raw facts remain debt.",
+  "capability": "No admission before full installed successor bodies, both exact indexes, validated fact-kind CHECK and existing enabled four-table immutable guard match signed source. No free session allowed flag.",
+  "hashPins": "Actual source statement/body hashes; PostgreSQL representation and qualification UNRUN.",
+  "qualification": "UNRUN; final body hashes only when implementation freezes; no root SQL/journal/database changes.",
+  "readinessSuccessorLimit": "Entire signed160 readiness body retained; ONLY the two actual atomic target/fee-state body SHA literals change. New A readiness pins its full exact successor and executes it; target prerequisite calls A readiness without executing target recursively.",
+  "rootPrefix": {
+    "bytes": 624213,
+    "sha256": "9b6144a71e1a898406f048a441df6178c89a8de0f8073fa3557191525a57f901"
+  },
+  "functions": [
+    {
+      "name": "freeholder_atomic_fee_return_resources",
+      "signature": "freeholder_atomic_fee_return_resources(uuid)",
+      "declaration": "\nRETURNS TABLE(known boolean,pending boolean,ledger text,payment_id uuid,receipt_id uuid,operation_id uuid,provider_ref text,application_fee_ref text,amount_minor bigint,currency text,evidence_fingerprint text)\nLANGUAGE plpgsql STABLE ",
+      "statementSha256": "e3a3e809d7849f3930d863ce5e47e3f026ac1c39b18361f71d0f681ec99081a0",
+      "bodySha256": "cfbe55472bfece3e7ba5d67ba7e5b8285481b3cc946ed69c50a21e333e634b34"
+    },
+    {
+      "name": "freeholder_atomic_auxiliary_fee_target_valid",
+      "signature": "freeholder_atomic_auxiliary_fee_target_valid(jsonb)",
+      "declaration": " RETURNS boolean LANGUAGE plpgsql STABLE ",
+      "statementSha256": "6adf6dc291349d15572078fad6caf057591a5ee9e872d055cd4aa12eb27c28be",
+      "bodySha256": "9c00662eaf2303b5eb83c03cf7101fb827caaddeb3966bc0eef2e0776af70828"
+    },
+    {
+      "name": "freeholder_atomic_auxiliary_fee_operation_valid",
+      "signature": "freeholder_atomic_auxiliary_fee_operation_valid(jsonb)",
+      "declaration": " RETURNS boolean LANGUAGE plpgsql STABLE ",
+      "statementSha256": "7ed35e43ffc2ac852d93bf67e1b1eb23f40eac1bb5c1f362e5e4fb3a0a26fd60",
+      "bodySha256": "4fef21d307faa1396cbca7865ddbb868d80005a9779c208563379493cd3bbf8b"
+    },
+    {
+      "name": "freeholder_atomic_auxiliary_fee_closure_valid",
+      "signature": "freeholder_atomic_auxiliary_fee_closure_valid(jsonb)",
+      "declaration": " RETURNS boolean LANGUAGE plpgsql STABLE ",
+      "statementSha256": "fc61d29495b151419fc2dce789f29771d14284be0ed37a482f4cc1e6f7064075",
+      "bodySha256": "10ed65903fc91e3d149cd073a70fe362ef1403269f6a4c0744a983cf3b643394"
+    },
+    {
+      "name": "freeholder_guard_original_cash_recovery",
+      "signature": "freeholder_guard_original_cash_recovery()",
+      "declaration": " RETURNS trigger LANGUAGE plpgsql ",
+      "statementSha256": "089c783e2bc50d9ee63decc90fa6d7435776070d991758d614043b00777e8bdf",
+      "bodySha256": "1971de37dfc39be8ca4178ee86c9684e699c92e875b1de35f5d4d4b3d83758fc"
+    },
+    {
+      "name": "freeholder_controlled_atomic_refund_targets",
+      "signature": "freeholder_controlled_atomic_refund_targets(uuid)",
+      "declaration": "\nRETURNS TABLE(known boolean,payment_id uuid,receipt_id uuid,batch_id uuid,receipt_proof_id uuid,\n amount_minor float8,refunded_minor float8,original_fee_minor float8,original_fee_ref text,actual_fee_returned_minor float8,target_retained_fee_minor float8,\n principal_minor float8,fee_minor float8,revision text) LANGUAGE plpgsql STABLE ",
+      "statementSha256": "047c9327806ef2cfb75a24bada66e78b45cf2c918acf3cce4894377923349de8",
+      "bodySha256": "3674003607c940ea38100ad9f2ea6c38f848c0023a9db38acb9cc0f9f20bd9f8"
+    },
+    {
+      "name": "freeholder_controlled_atomic_refund_fee_state",
+      "signature": "freeholder_controlled_atomic_refund_fee_state(uuid)",
+      "declaration": "\nRETURNS TABLE(known boolean,actual_retained_fee_minor float8,reconciled boolean,receipt_id uuid,inspection_id uuid,observation_id uuid,bank_namespace_revision text)\nLANGUAGE plpgsql STABLE ",
+      "statementSha256": "e093b2f701a12c0a79294f367de7aa2cb41defceb46a4827e4eb410b2eb442f8",
+      "bodySha256": "7564bec682b47fba4517097002e7c1e92da6aca21f4a7c678ddb080da08a4f3d"
+    },
+    {
+      "name": "freeholder_atomic_auxiliary_fee_ready",
+      "signature": "freeholder_atomic_auxiliary_fee_ready()",
+      "declaration": " RETURNS boolean LANGUAGE sql STABLE ",
+      "statementSha256": "1456f1e9a0c79cee034769528e69753676eacad45fb452db72b5320c0ac2b695",
+      "bodySha256": "b1c62d3e6346a34c2b86e03edc9e7bc35c08762926275d790de2d03fa43a016d"
+    },
+    {
+      "name": "freeholder_merchant_fee_invocations_ready",
+      "signature": "freeholder_merchant_fee_invocations_ready()",
+      "declaration": " RETURNS boolean LANGUAGE sql STABLE ",
+      "statementSha256": "88004f768851f57a423e235461d180939ce28eb14ecd5cbdd0b6649ce32a07aa",
+      "bodySha256": "a96a6480d97e9589b1afa5e0cd3232b169c89bc55e9620379d0996ef4e70956f"
+    }
+  ],
+  "tail": {
+    "path": "deploy/atomic-auxiliary-fee84.fragment.sql",
+    "sha256": "ee68ae91ef0d1a52166fe0cd7fc3dab63b14d05e1b95b7eb7ed118bcc5785c58",
+    "bytes": 74684
+  },
+  "fullBodyPreservation": [
+    {
+      "name": "freeholder_guard_original_cash_recovery",
+      "beforeStatement": "CREATE OR REPLACE FUNCTION freeholder_guard_original_cash_recovery() RETURNS trigger LANGUAGE plpgsql AS $$\nDECLARE original original_cash_recoveries; operation original_cash_recovery_operations; owner_id uuid; body jsonb;\nBEGIN\n IF TG_OP<>'INSERT' OR current_setting('freeholder.original_cash_recovery_v1',true) IS DISTINCT FROM '1' OR current_setting('freeholder.original_cash_recovery_v2',true) IS DISTINCT FROM '1' THEN\n  RAISE EXCEPTION 'Original cash-return evidence is immutable and requires the shared authenticated phases' USING ERRCODE='55000';\n END IF;\n body:=to_jsonb(NEW);\n IF TG_TABLE_NAME='original_cash_recoveries' THEN\n  original:=NEW; owner_id:=NEW.id;\n  IF (NEW.owner->'cash'->>'paymentId') IS DISTINCT FROM NEW.payment_id::text\n   OR (NEW.owner->'cash'->>'subscriptionChargeReceiptId') IS DISTINCT FROM NEW.subscription_charge_receipt_id::text\n   OR (NEW.owner->>'authorizedBy') !~ '^user:[0-9a-f-]{36}$'\n   OR (NEW.owner->'cash'->>'providerPlatformAccountId') !~ '^acct_[A-Za-z0-9]+$'\n   OR (NEW.owner->'cash'->>'providerRef') !~ '^pi_[A-Za-z0-9_]+$'\n   OR (NEW.owner->'cash'->>'amountMinor')::numeric NOT BETWEEN 1 AND 9007199254740991 THEN\n   RAISE EXCEPTION 'Original cash-return ownership must retain its actual financial source' USING ERRCODE='23514';\n  END IF;\n ELSE\n  owner_id:=NEW.recovery_id; SELECT * INTO original FROM original_cash_recoveries WHERE id=owner_id;\n  IF original.id IS NULL THEN RAISE EXCEPTION 'Restore the original cash-return owner' USING ERRCODE='23514'; END IF;\n END IF;\n PERFORM pg_advisory_xact_lock(hashtext('subscription-cash:'||(original.owner->'cash'->>'providerPlatformAccountId')||':'||coalesce(original.owner->'cash'->>'chargeAccountId','')||':'||(original.owner->'cash'->>'providerRef')));\n IF TG_TABLE_NAME='original_cash_recovery_operations' THEN\n  IF NEW.request ? 'targetFactId' AND NOT EXISTS(SELECT 1 FROM original_cash_recovery_facts f WHERE f.id=(NEW.request->>'targetFactId')::uuid AND f.recovery_id=owner_id AND f.kind='partial_target') THEN RAISE EXCEPTION 'A partial auxiliary creation requires its exact original immutable target' USING ERRCODE='23514'; END IF;\n  IF jsonb_typeof(NEW.caller)<>'object' OR NEW.caller->>'id' IS NULL OR NEW.request IS NULL THEN\n   RAISE EXCEPTION 'A physical cash-return caller needs its actual retained identity and request' USING ERRCODE='23514';\n  END IF;\n  IF EXISTS(SELECT 1 FROM original_cash_recovery_operations o WHERE o.recovery_id=owner_id\n   AND NOT EXISTS(SELECT 1 FROM original_cash_recovery_facts f WHERE f.operation_id=o.id AND\n    (f.kind='finish' AND f.evidence->>'callerInstanceId'=o.caller->>'id' OR f.kind='stop' AND f.evidence->>'operationDigest'=o.digest))) THEN\n   RAISE EXCEPTION 'Finish or review the exact original physical caller before another operation' USING ERRCODE='23514';\n  END IF;\n ELSIF TG_TABLE_NAME='original_cash_recovery_facts' THEN\n  IF NEW.operation_id IS NOT NULL THEN\n   SELECT * INTO operation FROM original_cash_recovery_operations WHERE id=NEW.operation_id;\n   IF operation.recovery_id IS DISTINCT FROM owner_id THEN RAISE EXCEPTION 'A cash fact cannot move between original owners' USING ERRCODE='23514'; END IF;\n   IF NEW.kind='finish' AND (NEW.evidence->>'callerInstanceId' IS DISTINCT FROM operation.caller->>'id' OR NEW.evidence->>'outcome' NOT IN('returned','threw')) THEN\n    RAISE EXCEPTION 'Retain the exact original wrapper finish independently of its bank result' USING ERRCODE='23514';\n   END IF;\n   IF NEW.kind='stop' AND NEW.evidence->>'operationDigest' IS DISTINCT FROM operation.digest THEN\n    RAISE EXCEPTION 'A hosting review must name its exact original operation' USING ERRCODE='23514';\n   END IF;\n  ELSIF NEW.kind NOT IN('legacy_fee_stop','customer_request','partial_target','partial_closure','unassigned_refund_review') THEN\n   RAISE EXCEPTION 'A raw financial callback requires its actual admitted physical caller' USING ERRCODE='23514';\n  END IF;\n  IF NEW.kind='partial_target' AND ((original.owner->'cash'->>'applied')::boolean IS DISTINCT FROM true OR NEW.evidence->>'protocol' IS DISTINCT FROM 'freeholder.original-cash-partial-target.v1' OR NEW.evidence->>'targetKey' !~ '^[a-f0-9]{64}$' OR jsonb_typeof(NEW.evidence->'originalCreditIds') IS DISTINCT FROM 'array') THEN\n   RAISE EXCEPTION 'A partial target requires its exact original applied principal and issued-credit witnesses' USING ERRCODE='23514';\n  END IF;\n  IF NEW.kind='partial_closure' AND NOT EXISTS(SELECT 1 FROM original_cash_recovery_facts f WHERE f.id=(NEW.evidence->>'targetFactId')::uuid AND f.recovery_id=owner_id AND f.kind='partial_target' AND f.evidence->>'targetKey'=NEW.evidence->>'targetKey' AND f.evidence->>'sourceDigest'=NEW.evidence->>'sourceDigest') THEN\n   RAISE EXCEPTION 'A partial closure must retain its exact original target, never a full-cash debt waiver' USING ERRCODE='23514';\n  END IF;\n ELSIF TG_TABLE_NAME='original_cash_recovery_closures' THEN\n  SELECT * INTO operation FROM original_cash_recovery_operations WHERE id=NEW.operation_id;\n  IF operation.recovery_id IS DISTINCT FROM owner_id OR operation.kind<>'inspection'\n   OR NOT EXISTS(SELECT 1 FROM original_cash_recovery_facts f WHERE f.operation_id=operation.id AND f.kind='finish' AND f.evidence->>'outcome'='returned' AND f.evidence->>'callerInstanceId'=operation.caller->>'id') THEN\n   RAISE EXCEPTION 'A cash-return closure requires a real returned complete original read' USING ERRCODE='23514';\n  END IF;\n  IF (original.owner->'cash'->>'applied')::boolean=false AND NOT EXISTS(SELECT 1 FROM merchant_unapplied_charge_resolutions r WHERE r.id=NEW.unapplied_return_receipt_id\n   AND r.provider_platform_account_id=original.owner->'cash'->>'providerPlatformAccountId' AND r.charge_account_id IS NOT DISTINCT FROM original.owner->'cash'->>'chargeAccountId'\n   AND r.original_payment_ref=original.owner->'cash'->>'providerRef') THEN\n   RAISE EXCEPTION 'Unapplied cash requires its real original return disposition without a fabricated payment' USING ERRCODE='23514';\n  END IF;\n END IF;\n RETURN NEW;\nEND $$;",
+      "beforeBodySha256": "4ec28f00a6dc169f7d4eefe515ebbbd8716b3b39845937ae2085f93173c27637",
+      "afterBodySha256": "1971de37dfc39be8ca4178ee86c9684e699c92e875b1de35f5d4d4b3d83758fc",
+      "changes": [
+        {
+          "before": "",
+          "after": "IF TG_TABLE_NAME='original_cash_recovery_facts' AND body->>'kind' IN('atomic_fee_target','atomic_fee_closure') THEN\n  PERFORM freeholder_merchant_fee_require_prefix((body->'evidence'->>'paymentId')::uuid);\n ELSIF TG_TABLE_NAME='original_cash_recovery_operations' AND body->'request'->>'atomicFeeProtocol'='freeholder.original-cash-atomic-fee-operation.v1' THEN\n  PERFORM freeholder_merchant_fee_require_prefix((SELECT target.evidence->>'paymentId' FROM original_cash_recovery_facts target WHERE target.id=(body->'request'->>'targetFactId')::uuid AND target.kind='atomic_fee_target')::uuid);\n END IF;\n ",
+          "beforeStart": 1416,
+          "afterStart": 1416
+        },
+        {
+          "before": "",
+          "after": "\n IF TG_TABLE_NAME='original_cash_recovery_facts' AND body->>'kind' IN('atomic_fee_target','atomic_fee_closure') THEN\n  IF(body->>'kind'='atomic_fee_target' AND NOT freeholder_atomic_auxiliary_fee_target_valid(to_jsonb(NEW)))\n   OR(body->>'kind'='atomic_fee_closure' AND NOT freeholder_atomic_auxiliary_fee_closure_valid(to_jsonb(NEW))) THEN\n   RAISE EXCEPTION 'Retain only the exact original atomic fee target or actual returned-bank closure' USING ERRCODE='23514';END IF;\n  RETURN NEW;\n ELSIF TG_TABLE_NAME='original_cash_recovery_operations' AND body->'request'->>'atomicFeeProtocol'='freeholder.original-cash-atomic-fee-operation.v1' THEN\n  IF NOT freeholder_atomic_auxiliary_fee_operation_valid(to_jsonb(NEW)) THEN RAISE EXCEPTION 'The original atomic auxiliary fee needs its exact current target and real source caller' USING ERRCODE='23514';END IF;\n  RETURN NEW;\n END IF;\n",
+          "beforeStart": 1643,
+          "afterStart": 2244
+        }
+      ]
+    },
+    {
+      "name": "freeholder_merchant_fee_invocations_ready",
+      "beforeStatement": "CREATE FUNCTION freeholder_merchant_fee_invocations_ready() RETURNS boolean LANGUAGE sql STABLE AS $$\n SELECT coalesce(\n  EXISTS(SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('freeholder_controlled_atomic_refund_targets(uuid)') AND p.provolatile='s' AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')='95d51ff17ef45231f6a8e02e7bbfa439d7e44d4df19daf3f01763127c4a37328')\n  AND EXISTS(SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('freeholder_controlled_atomic_refund_fee_state(uuid)') AND p.provolatile='s' AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')='892452a4eef08256f57f2d1d0c7bb492be539a87e34dd932022269c967cfd750')\n  AND EXISTS(SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('freeholder_original_line_fee_target_before_atomic_refund(uuid)') AND p.provolatile='s' AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')='af210d88b54994b428c1753d77b0a08433c1bbf99b981cb6e8a667fbf3eeecf2')\n  AND EXISTS(SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('freeholder_original_line_fee_target(uuid)') AND p.provolatile='s' AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')='483772f438020df8859f9f8902d9c7446b371a206faf8321b2a2cbdc0ce45eeb')\n  AND EXISTS(SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('freeholder_agreement_fee_current(uuid)') AND p.provolatile='s' AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')='20a4424932e49d6c5b2dd57357f04850d2a5d183360a3f3499c4dc57b0c5752e')\n  AND EXISTS(SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('guard_merchant_fee_refund()') AND p.provolatile='v' AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')='4d4d92c8fd172c9a46418a7ef7315118e09251324e5ffaa40b89ac4be1ff9fb9')\n  AND EXISTS(SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('freeholder_merchant_fee_require_prefix(uuid)') AND p.provolatile='s' AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')='0f301ca4e56a7c2437bc71e4ada88363192a9a6d7c622c703b030a5a8ca5f93c')\n  AND EXISTS(SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('freeholder_merchant_fee_invocation_guard()') AND p.provolatile='v' AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')='f3b31e8db5cf6858a21fa0b30cf2c9beb7b6497b33ebcbaf6fdd61583c99b54d')\n  AND EXISTS(SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('freeholder_merchant_fee_source_ready(uuid,uuid)') AND p.provolatile='s' AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')='87eb65b5cfb2bc7ef5db85e79d4c3e7d4b6ca9ea1eac9fc6a0d243316e6a7b56')\n  AND EXISTS(SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('freeholder_merchant_fee_post_ready(uuid)') AND p.provolatile='s' AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')='2f5dc99c4ca929929a9467ecbbb221f2787b7c91be430fed6f642c77cb28f6c1')\n  AND EXISTS(SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('freeholder_merchant_fee_preflight_owned(uuid)') AND p.provolatile='s' AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')='fc0bc6c1e344d085337315b4abf966ab2d03663577ca8e98253bc63895233abd')\n  AND EXISTS(SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('freeholder_merchant_fee_preflight_ready(uuid)') AND p.provolatile='s' AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')='bde7a25cccf486aa012ba744415cb0015b8266e34aa060955e36ff534166461f')\n  AND EXISTS(SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('freeholder_merchant_fee_result_owned(uuid,text)') AND p.provolatile='s' AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')='95fbbd9f094622245740e4a437e31a79c3a8934a5fe215972ee3c72260149699')\n  AND EXISTS(SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('freeholder_merchant_fee_birth_guard()') AND p.provolatile='v' AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')='32d551973c0a224908af2ea21bce08a7ad961c7a1bfb5020788d35fa632ee54f')\n  AND EXISTS(SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('freeholder_guard_original_cash_old_fee_dispatch()') AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')='360ceca348dd283873a08ab37e9b4a56e178946900c35aa1fb7b5738256423b2')\n  AND freeholder_controlled_subscription_route_ready()\n  AND EXISTS(SELECT 1 FROM pg_trigger t WHERE t.tgrelid='merchant_fee_refund_invocations'::regclass AND t.tgname='merchant_fee_invocation_guard' AND t.tgfoid=to_regprocedure('freeholder_merchant_fee_invocation_guard()') AND t.tgenabled IN('O','A') AND t.tgtype=31 AND NOT t.tgisinternal)\n  AND EXISTS(SELECT 1 FROM pg_trigger t WHERE t.tgrelid='merchant_fee_refunds'::regclass AND t.tgname='merchant_fee_birth_guard' AND t.tgfoid=to_regprocedure('freeholder_merchant_fee_birth_guard()') AND t.tgenabled IN('O','A') AND t.tgtype=5 AND t.tgdeferrable AND t.tginitdeferred AND NOT t.tgisinternal)\n  AND EXISTS(SELECT 1 FROM pg_trigger t WHERE t.tgrelid='merchant_fee_refunds'::regclass AND t.tgname='merchant_fee_refund_guard' AND t.tgfoid=to_regprocedure('guard_merchant_fee_refund()') AND t.tgenabled IN('O','A') AND t.tgtype=31 AND NOT t.tgisinternal)\n  AND EXISTS(SELECT 1 FROM pg_trigger t WHERE t.tgrelid='merchant_fee_refunds'::regclass AND t.tgname='original_cash_old_fee_dispatch' AND t.tgfoid=to_regprocedure('freeholder_guard_original_cash_old_fee_dispatch()') AND t.tgenabled IN('O','A') AND t.tgtype=23 AND NOT t.tgisinternal)\n  AND (SELECT count(*) FROM pg_constraint c WHERE c.conrelid='merchant_fee_refund_invocations'::regclass AND c.convalidated AND c.conname IN('merchant_fee_refund_invocations_pkey','merchant_fee_invocations_operation_fk','merchant_fee_invocations_payment_fk','merchant_fee_invocations_receipt_fk','merchant_fee_invocations_kind','merchant_fee_invocations_owner','merchant_fee_invocations_source','merchant_fee_invocations_header','merchant_fee_invocations_proofs'))=9\n  AND EXISTS(SELECT 1 FROM pg_index i JOIN pg_class idx ON idx.oid=i.indexrelid WHERE i.indrelid='merchant_fee_refund_invocations'::regclass AND idx.relname='merchant_fee_invocations_ordinal' AND i.indisvalid AND i.indisready AND i.indisunique=true AND i.indkey::text='2 4 6' AND i.indexprs IS NULL AND i.indpred IS NULL)\n  AND EXISTS(SELECT 1 FROM pg_index i JOIN pg_class idx ON idx.oid=i.indexrelid WHERE i.indrelid='merchant_fee_refund_invocations'::regclass AND idx.relname='merchant_fee_invocations_post' AND i.indisvalid AND i.indisready AND i.indisunique=true AND i.indkey::text='5' AND i.indexprs IS NULL AND pg_get_expr(i.indpred,i.indrelid)='(kind = ''post''::text)')\n  AND EXISTS(SELECT 1 FROM pg_index i JOIN pg_class idx ON idx.oid=i.indexrelid WHERE i.indrelid='merchant_fee_refund_invocations'::regclass AND idx.relname='merchant_fee_invocations_operation' AND i.indisvalid AND i.indisready AND i.indisunique=false AND i.indkey::text='5 17' AND i.indexprs IS NULL AND i.indpred IS NULL)\n  AND EXISTS(SELECT 1 FROM pg_index i JOIN pg_class idx ON idx.oid=i.indexrelid WHERE i.indrelid='merchant_fee_refund_invocations'::regclass AND idx.relname='merchant_fee_invocations_receipt' AND i.indisvalid AND i.indisready AND i.indisunique=false AND i.indkey::text='3 6' AND i.indexprs IS NULL AND i.indpred IS NULL)\n  AND EXISTS(SELECT 1 FROM pg_index i JOIN pg_class idx ON idx.oid=i.indexrelid WHERE i.indrelid='merchant_fee_refund_invocations'::regclass AND idx.relname='merchant_fee_invocations_preflight' AND i.indisvalid AND i.indisready AND i.indisunique=true AND i.indkey::text='0' AND pg_get_expr(i.indexprs,i.indrelid)='(request ->> ''parentFeeInvocationId''::text)' AND pg_get_expr(i.indpred,i.indrelid)='((kind = ''source_inspect''::text) AND ((request ->> ''readKind''::text) = ''fee_preflight''::text))'),false);\n$$;",
+      "beforeBodySha256": "f699a31ed86422fed7c390ff06f7df5ae4a0340299fe12a08b29c6b6fc7b8e41",
+      "afterBodySha256": "a96a6480d97e9589b1afa5e0cd3232b169c89bc55e9620379d0996ef4e70956f",
+      "changes": [
+        {
+          "before": "",
+          "after": "3674003607c",
+          "beforeStart": 210,
+          "afterStart": 210
+        },
+        {
+          "before": "5",
+          "after": "40ea38100a",
+          "beforeStart": 211,
+          "afterStart": 222
+        },
+        {
+          "before": "51",
+          "after": "9",
+          "beforeStart": 213,
+          "afterStart": 233
+        },
+        {
+          "before": "",
+          "after": "2ea6c38",
+          "beforeStart": 216,
+          "afterStart": 235
+        },
+        {
+          "before": "17ef",
+          "after": "8",
+          "beforeStart": 217,
+          "afterStart": 243
+        },
+        {
+          "before": "5",
+          "after": "8c00",
+          "beforeStart": 222,
+          "afterStart": 245
+        },
+        {
+          "before": "1f6",
+          "after": "",
+          "beforeStart": 225,
+          "afterStart": 251
+        },
+        {
+          "before": "8e02e7bbfa43",
+          "after": "",
+          "beforeStart": 229,
+          "afterStart": 252
+        },
+        {
+          "before": "7e44",
+          "after": "b38acb9cc0f9f20b",
+          "beforeStart": 243,
+          "afterStart": 254
+        },
+        {
+          "before": "4d",
+          "after": "9",
+          "beforeStart": 248,
+          "afterStart": 271
+        },
+        {
+          "before": "19daf3f01763127c4a3732",
+          "after": "",
+          "beforeStart": 251,
+          "afterStart": 273
+        },
+        {
+          "before": "",
+          "after": "7564bec6",
+          "beforeStart": 474,
+          "afterStart": 474
+        },
+        {
+          "before": "",
+          "after": "2b47fba4517097002e7c1e",
+          "beforeStart": 475,
+          "afterStart": 483
+        },
+        {
+          "before": "",
+          "after": "da6aca21f",
+          "beforeStart": 477,
+          "afterStart": 507
+        },
+        {
+          "before": "52",
+          "after": "a7c678ddb080da08",
+          "beforeStart": 478,
+          "afterStart": 517
+        },
+        {
+          "before": "ee",
+          "after": "",
+          "beforeStart": 482,
+          "afterStart": 535
+        },
+        {
+          "before": "08256f57f2",
+          "after": "3",
+          "beforeStart": 485,
+          "afterStart": 536
+        },
+        {
+          "before": "1d0c7bb492be539a87e34dd932022269c967cfd750",
+          "after": "",
+          "beforeStart": 496,
+          "afterStart": 538
+        }
+      ]
+    },
+    {
+      "name": "freeholder_controlled_atomic_refund_targets",
+      "beforeStatement": "CREATE FUNCTION freeholder_controlled_atomic_refund_targets(target_invoice uuid)\nRETURNS TABLE(known boolean,payment_id uuid,receipt_id uuid,batch_id uuid,receipt_proof_id uuid,\n amount_minor float8,refunded_minor float8,original_fee_minor float8,original_fee_ref text,actual_fee_returned_minor float8,target_retained_fee_minor float8,\n principal_minor float8,fee_minor float8,revision text) LANGUAGE plpgsql STABLE AS $$\nDECLARE invoice_row invoices%ROWTYPE;policy_row invoice_market_policies%ROWTYPE;\n collection_row subscription_controlled_collections%ROWTYPE;quote_row subscription_controlled_quotes%ROWTYPE;\n resource_row subscription_controlled_resources%ROWTYPE;item record;inventory jsonb;cash_total numeric;fee_total numeric;\n remaining_cash numeric;retained_fee numeric;whole_target numeric;residual numeric;take numeric;original_target numeric;already_returned numeric;budget bigint;\nBEGIN\n SELECT * INTO invoice_row FROM invoices WHERE id=target_invoice;\n SELECT * INTO policy_row FROM invoice_market_policies WHERE invoice_id=target_invoice;\n SELECT * INTO collection_row FROM subscription_controlled_collections WHERE invoice_id=target_invoice;\n SELECT * INTO quote_row FROM subscription_controlled_quotes WHERE id=collection_row.quote_id;\n SELECT * INTO resource_row FROM subscription_controlled_resources WHERE id=quote_row.resource_id;\n -- No noncash source is guessed into this physical cash epoch. A credited or\n -- incomplete target remains debt until its genuine credit disposition exists.\n IF invoice_row.id IS NULL OR invoice_row.total_minor<=0 OR invoice_row.total_minor>9007199254740991\n  OR invoice_row.credited_minor<>0 OR invoice_row.source_type IS DISTINCT FROM 'subscription'\n  OR invoice_row.source_id IS DISTINCT FROM quote_row.canonical_source_id OR policy_row.model IS DISTINCT FROM 'seller_merchant'\n  OR policy_row.collection_version<>0 OR policy_row.fee_minor<0 OR policy_row.fee_minor>invoice_row.total_minor\n  OR collection_row.id IS NULL OR resource_row.id IS NULL OR collection_row.invoice_id IS DISTINCT FROM invoice_row.id\n  OR NOT EXISTS(SELECT 1 FROM controlled_cash_application_batches b WHERE b.invoice_id=invoice_row.id AND b.protocol='controlled_cash_atomic.v1') THEN RETURN;END IF;\n SELECT (SELECT count(*) FROM payments WHERE invoice_id=target_invoice)\n  +(SELECT count(*) FROM refunds f JOIN payments p ON p.id=f.payment_id WHERE p.invoice_id=target_invoice)\n  +(SELECT count(*) FROM merchant_refund_requests q JOIN payments p ON p.id=q.payment_id WHERE p.invoice_id=target_invoice)\n  +(SELECT count(*) FROM controlled_cash_application_batches WHERE invoice_id=target_invoice)\n  +(SELECT count(*) FROM controlled_cash_application_receipts rp JOIN controlled_cash_application_batches b ON b.id=rp.batch_id WHERE b.invoice_id=target_invoice)\n  +(SELECT count(*)*6 FROM payments WHERE invoice_id=target_invoice)+3\n  +(SELECT count(*) FROM merchant_fee_refunds f JOIN payments p ON p.id=f.payment_id WHERE p.invoice_id=target_invoice)\n  +(SELECT count(*) FROM merchant_fee_observations ack JOIN merchant_fee_refunds f ON f.id=ack.operation_id JOIN payments p ON p.id=f.payment_id WHERE p.invoice_id=target_invoice)\n  +(SELECT count(*) FROM controlled_cash_application_links l JOIN payments p ON p.id=l.payment_id WHERE p.invoice_id=target_invoice) INTO budget;\n IF budget>5000 OR NOT EXISTS(SELECT 1 FROM payments WHERE invoice_id=target_invoice) THEN RETURN;END IF;\n IF EXISTS(SELECT 1 FROM payments p\n  LEFT JOIN controlled_cash_application_links l ON l.payment_id=p.id\n  LEFT JOIN controlled_cash_application_receipts rp ON rp.id=l.receipt_proof_id\n  LEFT JOIN controlled_cash_application_batches b ON b.id=l.batch_id\n  LEFT JOIN merchant_agreement_payment_routes route_row ON route_row.payment_id=p.id\n  LEFT JOIN subscription_provider_charge_receipts cash_row ON cash_row.id=l.receipt_id\n  LEFT JOIN subscription_controlled_charge_origins origin_row ON origin_row.receipt_id=cash_row.id\n  LEFT JOIN merchant_cash_return_observations initial_bank ON initial_bank.id=rp.bank_observation_id and initial_bank.inspection_id=rp.bank_inspection_id\n  LEFT JOIN merchant_cash_return_inspections initial_inspection ON initial_inspection.id=rp.bank_inspection_id\n  LEFT JOIN merchant_cash_return_inspection_finishes initial_finish ON initial_finish.inspection_id=initial_inspection.id\n  WHERE p.invoice_id=target_invoice AND(p.status<>'succeeded' OR p.provider<>'stripe' OR p.method<>'provider_schedule'\n   OR p.amount_minor<=0 OR p.refunded_minor<0 OR p.refunded_minor>p.amount_minor OR p.currency<>invoice_row.currency\n   OR l.receipt_id IS NULL OR rp.id IS NULL OR b.id IS NULL OR route_row.payment_id IS NULL OR cash_row.id IS NULL OR origin_row.receipt_id IS NULL\n   OR b.protocol NOT IN('controlled_net_gross.v1','controlled_cash_atomic.v1') OR b.admission_transaction_id=txid_current()::text OR b.collection_id<>collection_row.id OR b.quote_id<>quote_row.id\n   OR b.resource_id<>resource_row.id OR b.subscription_id<>resource_row.subscription_id OR b.invoice_id<>invoice_row.id OR b.terms_id<>collection_row.terms_id\n   OR b.accepted_quote_digest<>collection_row.accepted_quote_digest OR b.canonical_target_digest<>collection_row.canonical_target_digest OR b.currency<>invoice_row.currency\n   OR l.batch_id<>rp.batch_id OR l.receipt_id<>rp.receipt_id OR rp.batch_id<>b.id\n   OR rp.amount_minor<>p.amount_minor OR rp.currency<>p.currency OR rp.payment_idempotency_key<>p.idempotency_key OR rp.payment_request_hash<>p.request_hash\n   OR cash_row.subscription_id<>resource_row.subscription_id OR cash_row.amount_minor<>p.amount_minor OR cash_row.currency<>p.currency\n   OR origin_row.resource_id<>resource_row.id OR origin_row.operation_id<>rp.origin_operation_id OR origin_row.call_id<>rp.origin_call_id OR origin_row.fact_id<>rp.origin_fact_id\n   OR route_row.original_charge_receipt_id IS DISTINCT FROM l.receipt_id OR route_row.subscription_id<>resource_row.subscription_id\n   OR route_row.provider_platform_account_id<>(resource_row.original_scope->>'providerPlatformAccountId') OR route_row.charge_account_id IS DISTINCT FROM (resource_row.original_scope->>'providerAccountId')\n   OR route_row.provider_invoice_ref IS DISTINCT FROM cash_row.provider_invoice_ref OR route_row.provider_payment_intent_ref IS DISTINCT FROM cash_row.provider_payment_intent_ref\n   OR p.provider_ref IS DISTINCT FROM cash_row.provider_payment_intent_ref OR route_row.application_fee_minor<>rp.fee_minor\n   OR rp.fee_minor<0 OR rp.fee_minor>rp.amount_minor\n   OR initial_bank.id IS NULL OR initial_inspection.id IS NULL OR initial_finish.inspection_id IS NULL\n   OR NOT EXISTS(SELECT 1 FROM jsonb_array_elements(b.before_entries) frozen WHERE frozen->>'table'='merchant_cash_return_observations' AND frozen->>'id'=initial_bank.id::text AND frozen->>'hashDomain'='postgres_row'\n    AND frozen->>'fingerprint'=encode(sha256(convert_to(to_jsonb(initial_bank)::text,'UTF8')),'hex'))\n   OR initial_inspection.subscription_charge_receipt_id IS DISTINCT FROM cash_row.id OR initial_finish.outcome IS DISTINCT FROM 'returned'\n   OR initial_finish.caller_instance_id IS DISTINCT FROM rp.bank_finish_caller_id OR initial_finish.caller_instance_id::text IS DISTINCT FROM initial_inspection.caller->>'id'\n   OR initial_bank.evidence->>'paymentProviderRef' IS DISTINCT FROM cash_row.provider_payment_intent_ref\n   OR initial_bank.evidence->>'providerChargeRef' IS DISTINCT FROM cash_row.provider_charge_ref\n   OR initial_bank.evidence->>'providerPlatformAccountId' IS DISTINCT FROM cash_row.provider_platform_account_id\n   OR initial_bank.evidence->>'chargeAccountId' IS DISTINCT FROM cash_row.charge_account_id\n   OR initial_bank.evidence->>'providerApiVersion' IS DISTINCT FROM cash_row.provider_api_version OR initial_bank.evidence->>'amountMinor' IS DISTINCT FROM p.amount_minor::text\n   OR initial_bank.evidence->>'currency' IS DISTINCT FROM cash_row.currency OR initial_bank.evidence->>'feeFieldObserved' IS DISTINCT FROM 'true'\n   OR(rp.fee_minor=0 AND(initial_bank.evidence->'fee' IS DISTINCT FROM 'null'::jsonb OR cash_row.application_fee_ref IS NOT NULL))\n   OR(rp.fee_minor>0 AND(initial_bank.evidence->'fee'->>'providerRef' IS NULL\n    OR initial_bank.evidence->'fee'->>'amountMinor' IS DISTINCT FROM rp.fee_minor::text OR initial_bank.evidence->'fee'->>'refundedMinor' IS DISTINCT FROM '0'\n    OR initial_bank.evidence->'fee'->>'currency' IS DISTINCT FROM cash_row.currency OR initial_bank.evidence->'fee'->>'originatingChargeRef' IS DISTINCT FROM cash_row.provider_charge_ref\n    OR initial_bank.evidence->'fee'->>'accountId' IS DISTINCT FROM route_row.recipient_account_id\n    OR(cash_row.application_fee_ref IS NOT NULL AND cash_row.application_fee_ref IS DISTINCT FROM initial_bank.evidence->'fee'->>'providerRef')))\n   OR b.digest!~'^[a-f0-9]{64}$' OR b.authentication!~'^[a-f0-9]{64}$' OR rp.digest!~'^[a-f0-9]{64}$' OR rp.authentication!~'^[a-f0-9]{64}$')) THEN RETURN;END IF;\n -- Every immutable promised receipt has its actual once-only generated local\n -- payment. A partially staged or foreign batch is never a refund authority.\n IF EXISTS(SELECT 1 FROM controlled_cash_application_batches b WHERE b.invoice_id=target_invoice AND(\n  jsonb_array_length(b.requested_receipt_ids)<>(SELECT count(*) FROM controlled_cash_application_receipts rp WHERE rp.batch_id=b.id)\n  OR EXISTS(SELECT 1 FROM controlled_cash_application_receipts rp LEFT JOIN controlled_cash_application_links l ON l.receipt_proof_id=rp.id\n   LEFT JOIN payments p ON p.id=l.payment_id WHERE rp.batch_id=b.id AND(l.receipt_id IS NULL OR l.batch_id<>b.id OR l.receipt_id<>rp.receipt_id OR p.invoice_id IS DISTINCT FROM target_invoice\n    OR NOT b.requested_receipt_ids @> jsonb_build_array(rp.receipt_id::text)))\n  OR b.expected_cash_minor<>(SELECT coalesce(sum(rp.amount_minor),0) FROM controlled_cash_application_receipts rp WHERE rp.batch_id=b.id)\n  OR b.expected_fee_minor<>(SELECT coalesce(sum(rp.fee_minor),0) FROM controlled_cash_application_receipts rp WHERE rp.batch_id=b.id))) THEN RETURN;END IF;\n IF EXISTS(SELECT 1 FROM refunds f JOIN payments p ON p.id=f.payment_id LEFT JOIN merchant_refund_requests q ON q.refund_id=f.id\n  WHERE p.invoice_id=target_invoice AND(f.status IN('created','processing') OR f.failure_code='provider_already_refunded'\n   OR(f.status='succeeded' AND(q.id IS NULL OR q.purpose<>'invoice_refund' OR q.payment_id<>p.id OR f.invoice_id<>invoice_row.id OR q.amount_minor<>f.amount_minor\n    OR f.currency<>p.currency OR q.currency<>f.currency OR q.idempotency_key<>f.idempotency_key OR q.original_payment_ref<>p.provider_ref\n    OR q.provider_platform_account_id<>(resource_row.original_scope->>'providerPlatformAccountId') OR q.charge_account_id IS DISTINCT FROM (resource_row.original_scope->>'providerAccountId')\n    OR NOT freeholder_original_refund_resolved(q.id,'succeeded',f.provider_ref)))))\n  OR EXISTS(SELECT 1 FROM payments p WHERE p.invoice_id=target_invoice AND p.refunded_minor<>(SELECT coalesce(sum(f.amount_minor),0) FROM refunds f WHERE f.payment_id=p.id AND f.status='succeeded')) THEN RETURN;END IF;\n -- Actual accepted fee returns are irreversible physical facts. Require the\n -- exact original resource and ACK before using them as an allocation ceiling.\n IF EXISTS(SELECT 1 FROM merchant_fee_refunds f JOIN payments p ON p.id=f.payment_id\n  JOIN merchant_agreement_payment_routes route_row ON route_row.payment_id=p.id JOIN subscription_provider_charge_receipts receipt_row ON receipt_row.id=route_row.original_charge_receipt_id\n  JOIN controlled_cash_application_links initial_link ON initial_link.payment_id=p.id JOIN controlled_cash_application_receipts initial_proof ON initial_proof.id=initial_link.receipt_proof_id\n  JOIN merchant_cash_return_observations initial_bank ON initial_bank.id=initial_proof.bank_observation_id\n  WHERE p.invoice_id=target_invoice AND f.status='accepted' AND(f.provider_platform_account_id<>route_row.provider_platform_account_id\n   OR f.original_charge_receipt_id IS DISTINCT FROM receipt_row.id OR f.application_fee_ref IS DISTINCT FROM coalesce(receipt_row.application_fee_ref,initial_bank.evidence->'fee'->>'providerRef')\n   OR f.provider_charge_ref IS DISTINCT FROM receipt_row.provider_charge_ref OR f.currency<>p.currency\n   OR NOT EXISTS(SELECT 1 FROM merchant_fee_observations ack WHERE ack.operation_id=f.id AND ack.binding_verified AND ack.provider_ref=f.provider_ref\n    AND ack.application_fee_ref=f.application_fee_ref AND ack.amount_minor=f.amount_minor AND ack.currency=f.currency)))\n  OR EXISTS(SELECT 1 FROM payments p JOIN merchant_agreement_payment_routes route_row ON route_row.payment_id=p.id WHERE p.invoice_id=target_invoice\n   AND (SELECT coalesce(sum(f.amount_minor),0) FROM merchant_fee_refunds f WHERE f.payment_id=p.id AND f.status='accepted')>route_row.application_fee_minor) THEN RETURN;END IF;\n SELECT sum(p.amount_minor),sum(route_row.application_fee_minor),sum(p.amount_minor-p.refunded_minor),\n  sum(least(floor(route_row.application_fee_minor::numeric*(p.amount_minor-p.refunded_minor)/p.amount_minor),route_row.application_fee_minor-(SELECT coalesce(sum(f.amount_minor),0) FROM merchant_fee_refunds f WHERE f.payment_id=p.id AND f.status='accepted')))\n  INTO cash_total,fee_total,remaining_cash,retained_fee FROM payments p JOIN merchant_agreement_payment_routes route_row ON route_row.payment_id=p.id WHERE p.invoice_id=target_invoice;\n IF cash_total<>invoice_row.paid_minor OR cash_total>invoice_row.total_minor\n  OR cash_total-remaining_cash<>invoice_row.refunded_minor OR fee_total<>floor(policy_row.fee_minor::numeric*cash_total/invoice_row.total_minor) THEN RETURN;END IF;\n whole_target:=floor(policy_row.fee_minor::numeric*remaining_cash/invoice_row.total_minor);residual:=greatest(0,retained_fee-whole_target);\n SELECT jsonb_agg(jsonb_build_object('payment',to_jsonb(p),'route',to_jsonb(route_row),'link',to_jsonb(l),'proof',to_jsonb(rp),'batch',to_jsonb(b)) ORDER BY l.receipt_id)\n  INTO inventory FROM payments p JOIN merchant_agreement_payment_routes route_row ON route_row.payment_id=p.id JOIN controlled_cash_application_links l ON l.payment_id=p.id\n  JOIN controlled_cash_application_receipts rp ON rp.id=l.receipt_proof_id JOIN controlled_cash_application_batches b ON b.id=l.batch_id WHERE p.invoice_id=target_invoice;\n revision:=encode(sha256(convert_to(jsonb_build_object('invoice',to_jsonb(invoice_row),'policy',to_jsonb(policy_row),'collection',to_jsonb(collection_row),'inventory',inventory,\n  'refunds',(SELECT coalesce(jsonb_agg(to_jsonb(f) ORDER BY f.id),'[]'::jsonb) FROM refunds f JOIN payments p ON p.id=f.payment_id WHERE p.invoice_id=target_invoice),\n  'feeReturns',(SELECT coalesce(jsonb_agg(to_jsonb(f) ORDER BY f.id),'[]'::jsonb) FROM merchant_fee_refunds f JOIN payments p ON p.id=f.payment_id WHERE p.invoice_id=target_invoice))::text,'UTF8')),'hex');\n FOR item IN SELECT p.*,route_row.application_fee_minor,l.receipt_id,l.batch_id,l.receipt_proof_id,coalesce(original_receipt.application_fee_ref,initial_bank.evidence->'fee'->>'providerRef') as original_fee_ref FROM payments p\n  JOIN merchant_agreement_payment_routes route_row ON route_row.payment_id=p.id JOIN controlled_cash_application_links l ON l.payment_id=p.id\n  JOIN controlled_cash_application_receipts initial_proof ON initial_proof.id=l.receipt_proof_id JOIN merchant_cash_return_observations initial_bank ON initial_bank.id=initial_proof.bank_observation_id\n  JOIN subscription_provider_charge_receipts original_receipt ON original_receipt.id=l.receipt_id\n  WHERE p.invoice_id=target_invoice ORDER BY l.receipt_id LOOP\n  SELECT coalesce(sum(f.amount_minor),0) INTO already_returned FROM merchant_fee_refunds f WHERE f.payment_id=item.id AND f.status='accepted';\n  original_target:=least(floor(item.application_fee_minor::numeric*(item.amount_minor-item.refunded_minor)/item.amount_minor),item.application_fee_minor-already_returned);\n  take:=least(residual,original_target);residual:=residual-take;\n  known:=true;payment_id:=item.id;receipt_id:=item.receipt_id;batch_id:=item.batch_id;receipt_proof_id:=item.receipt_proof_id;\n  amount_minor:=item.amount_minor;refunded_minor:=item.refunded_minor;original_fee_minor:=item.application_fee_minor;\n  original_fee_ref:=item.original_fee_ref;actual_fee_returned_minor:=already_returned;target_retained_fee_minor:=original_target-take;principal_minor:=invoice_row.total_minor;fee_minor:=policy_row.fee_minor;RETURN NEXT;\n END LOOP;\nEND $$;",
+      "beforeBodySha256": "95d51ff17ef45231f6a8e02e7bbfa439d7e44d4df19daf3f01763127c4a37328",
+      "afterBodySha256": "3674003607c940ea38100ad9f2ea6c38f848c0023a9db38acb9cc0f9f20bd9f8",
+      "changes": [
+        {
+          "before": "",
+          "after": "\n IF NOT freeholder_atomic_auxiliary_fee_ready() THEN RETURN;END IF;",
+          "beforeStart": 479,
+          "afterStart": 479
+        },
+        {
+          "before": "",
+          "after": "IF EXISTS(SELECT 1 FROM payments actual_payment WHERE actual_payment.invoice_id=target_invoice AND NOT EXISTS(\n  SELECT 1 FROM freeholder_atomic_fee_return_resources(actual_payment.id) physical WHERE physical.ledger='inventory' AND physical.known)) THEN RETURN;END IF;\n ",
+          "beforeStart": 10635,
+          "afterStart": 10703
+        },
+        {
+          "before": "f",
+          "after": "physical",
+          "beforeStart": 12247,
+          "afterStart": 12585
+        },
+        {
+          "before": "m",
+          "after": "freehold",
+          "beforeStart": 12271,
+          "afterStart": 12616
+        },
+        {
+          "before": "",
+          "after": "_atomi",
+          "beforeStart": 12274,
+          "afterStart": 12626
+        },
+        {
+          "before": "hant",
+          "after": "",
+          "beforeStart": 12275,
+          "afterStart": 12633
+        },
+        {
+          "before": "f",
+          "after": "t",
+          "beforeStart": 12286,
+          "afterStart": 12640
+        },
+        {
+          "before": "",
+          "after": "r",
+          "beforeStart": 12288,
+          "afterStart": 12642
+        },
+        {
+          "before": "",
+          "after": "_resources(p.i",
+          "beforeStart": 12289,
+          "afterStart": 12644
+        },
+        {
+          "before": "",
+          "after": ") phy",
+          "beforeStart": 12290,
+          "afterStart": 12659
+        },
+        {
+          "before": " f",
+          "after": "ical",
+          "beforeStart": 12291,
+          "afterStart": 12665
+        },
+        {
+          "before": "f",
+          "after": "physical",
+          "beforeStart": 12300,
+          "afterStart": 12676
+        },
+        {
+          "before": "payme",
+          "after": "k",
+          "beforeStart": 12302,
+          "afterStart": 12685
+        },
+        {
+          "before": "t_id=p.id AND f.status='accepted'",
+          "after": "own",
+          "beforeStart": 12308,
+          "afterStart": 12687
+        },
+        {
+          "before": "f",
+          "after": "physical",
+          "beforeStart": 12661,
+          "afterStart": 13010
+        },
+        {
+          "before": "m",
+          "after": "freehold",
+          "beforeStart": 12685,
+          "afterStart": 13041
+        },
+        {
+          "before": "",
+          "after": "_atomi",
+          "beforeStart": 12688,
+          "afterStart": 13051
+        },
+        {
+          "before": "hant",
+          "after": "",
+          "beforeStart": 12689,
+          "afterStart": 13058
+        },
+        {
+          "before": "f",
+          "after": "t",
+          "beforeStart": 12700,
+          "afterStart": 13065
+        },
+        {
+          "before": "",
+          "after": "r",
+          "beforeStart": 12702,
+          "afterStart": 13067
+        },
+        {
+          "before": "",
+          "after": "_resources(p.i",
+          "beforeStart": 12703,
+          "afterStart": 13069
+        },
+        {
+          "before": "",
+          "after": ") phy",
+          "beforeStart": 12704,
+          "afterStart": 13084
+        },
+        {
+          "before": " f",
+          "after": "ical",
+          "beforeStart": 12705,
+          "afterStart": 13090
+        },
+        {
+          "before": "f",
+          "after": "physical",
+          "beforeStart": 12714,
+          "afterStart": 13101
+        },
+        {
+          "before": "payme",
+          "after": "k",
+          "beforeStart": 12716,
+          "afterStart": 13110
+        },
+        {
+          "before": "t_id=p.id AND f.status='accepted'",
+          "after": "own",
+          "beforeStart": 12722,
+          "afterStart": 13112
+        },
+        {
+          "before": "f",
+          "after": "physical",
+          "beforeStart": 15147,
+          "afterStart": 15507
+        },
+        {
+          "before": "m",
+          "after": "freehold",
+          "beforeStart": 15193,
+          "afterStart": 15560
+        },
+        {
+          "before": "",
+          "after": "_atomi",
+          "beforeStart": 15196,
+          "afterStart": 15570
+        },
+        {
+          "before": "hant",
+          "after": "",
+          "beforeStart": 15197,
+          "afterStart": 15577
+        },
+        {
+          "before": "f",
+          "after": "t",
+          "beforeStart": 15208,
+          "afterStart": 15584
+        },
+        {
+          "before": "",
+          "after": "r",
+          "beforeStart": 15210,
+          "afterStart": 15586
+        },
+        {
+          "before": "",
+          "after": "_resources(item.i",
+          "beforeStart": 15211,
+          "afterStart": 15588
+        },
+        {
+          "before": "",
+          "after": ") phy",
+          "beforeStart": 15212,
+          "afterStart": 15606
+        },
+        {
+          "before": " f",
+          "after": "ical",
+          "beforeStart": 15213,
+          "afterStart": 15612
+        },
+        {
+          "before": "f",
+          "after": "physical",
+          "beforeStart": 15222,
+          "afterStart": 15623
+        },
+        {
+          "before": "payme",
+          "after": "k",
+          "beforeStart": 15224,
+          "afterStart": 15632
+        },
+        {
+          "before": "t_id=item.id AND f.status='accepted'",
+          "after": "own",
+          "beforeStart": 15230,
+          "afterStart": 15634
+        }
+      ]
+    },
+    {
+      "name": "freeholder_controlled_atomic_refund_fee_state",
+      "beforeStatement": "CREATE FUNCTION freeholder_controlled_atomic_refund_fee_state(target_payment uuid)\nRETURNS TABLE(known boolean,actual_retained_fee_minor float8,reconciled boolean,receipt_id uuid,inspection_id uuid,observation_id uuid,bank_namespace_revision text)\nLANGUAGE plpgsql STABLE AS $$\nDECLARE parent_row payments%ROWTYPE;route_row merchant_agreement_payment_routes%ROWTYPE;\n original_receipt subscription_provider_charge_receipts%ROWTYPE;target_row record;bank_row record;returned_fee numeric;\nBEGIN\n SELECT * INTO parent_row FROM payments WHERE id=target_payment;\n SELECT * INTO route_row FROM merchant_agreement_payment_routes WHERE payment_id=target_payment;\n SELECT * INTO original_receipt FROM subscription_provider_charge_receipts WHERE id=route_row.original_charge_receipt_id;\n SELECT target_policy.* INTO target_row FROM freeholder_controlled_atomic_refund_targets(parent_row.invoice_id) target_policy WHERE target_policy.payment_id=target_payment AND target_policy.known;\n IF target_row.payment_id IS NULL OR original_receipt.id IS NULL THEN RETURN;END IF;\n SELECT coalesce(sum(f.amount_minor) FILTER(WHERE f.status='accepted'),0) INTO returned_fee FROM merchant_fee_refunds f WHERE f.payment_id=target_payment;\n IF returned_fee>route_row.application_fee_minor OR EXISTS(SELECT 1 FROM merchant_fee_refunds f WHERE f.payment_id=target_payment AND f.status='accepted' AND(\n  f.provider_platform_account_id<>route_row.provider_platform_account_id OR f.original_charge_receipt_id IS DISTINCT FROM original_receipt.id\n  OR f.application_fee_ref IS DISTINCT FROM target_row.original_fee_ref OR f.provider_charge_ref IS DISTINCT FROM original_receipt.provider_charge_ref OR f.currency<>parent_row.currency\n  OR NOT EXISTS(SELECT 1 FROM merchant_fee_observations ack WHERE ack.operation_id=f.id AND ack.binding_verified AND ack.provider_ref=f.provider_ref\n   AND ack.application_fee_ref=f.application_fee_ref AND ack.amount_minor=f.amount_minor AND ack.currency=f.currency))) THEN RETURN;END IF;\n known:=false;receipt_id:=original_receipt.id;reconciled:=false;\n SELECT * INTO bank_row FROM freeholder_controlled_receipt_bank_observation(\n  (SELECT collection_id FROM controlled_cash_application_links l JOIN controlled_cash_application_batches b ON b.id=l.batch_id WHERE l.payment_id=target_payment),original_receipt.id);\n IF bank_row.actual_inspection_id IS NOT NULL THEN inspection_id:=bank_row.actual_inspection_id;observation_id:=bank_row.actual_observation_id;bank_namespace_revision:=bank_row.bank_fingerprint;END IF;\n -- Report actual bank-retained fee, never an inferred collected balance while\n -- an unknown/dashboard refund is still unassigned. A read older than an\n -- accepted positive ACK cannot outweigh that retained money fact.\n IF bank_row.actual_inspection_id IS NOT NULL AND bank_row.current_evidence->>'amountRefundedMinor'=parent_row.refunded_minor::text THEN\n  IF route_row.application_fee_minor=0 AND target_row.original_fee_ref IS NULL AND bank_row.current_evidence->'fee'='null'::jsonb AND returned_fee=0 THEN\n   known:=true;actual_retained_fee_minor:=0;\n  ELSIF bank_row.current_evidence->'fee'->>'providerRef'=target_row.original_fee_ref\n   AND bank_row.current_evidence->'fee'->>'originatingChargeRef'=original_receipt.provider_charge_ref\n   AND bank_row.current_evidence->'fee'->>'accountId'=route_row.recipient_account_id\n   AND bank_row.current_evidence->'fee'->>'currency'=parent_row.currency\n   AND bank_row.current_evidence->'fee'->>'amountMinor'=route_row.application_fee_minor::text\n   AND coalesce(bank_row.current_evidence->'fee'->>'refundedMinor','') ~ '^[0-9]+$'\n   AND (bank_row.current_evidence->'fee'->>'refundedMinor')::numeric BETWEEN returned_fee AND route_row.application_fee_minor THEN\n   known:=true;actual_retained_fee_minor:=route_row.application_fee_minor-(bank_row.current_evidence->'fee'->>'refundedMinor')::numeric;\n  END IF;\n END IF;\n IF NOT EXISTS(SELECT 1 FROM merchant_fee_refunds f WHERE f.payment_id=target_payment AND f.status IN('reserved','dispatching','unknown'))\n  AND NOT EXISTS(SELECT 1 FROM merchant_fee_refund_invocations actual_caller WHERE actual_caller.payment_id=target_payment AND actual_caller.finish IS NULL AND actual_caller.stop IS NULL)\n  AND NOT EXISTS(SELECT 1 FROM merchant_fee_observations ack JOIN merchant_fee_refunds f ON f.id=ack.operation_id WHERE f.payment_id=target_payment AND(f.status<>'accepted' OR NOT ack.binding_verified\n   OR ack.provider_ref IS DISTINCT FROM f.provider_ref OR ack.application_fee_ref IS DISTINCT FROM f.application_fee_ref OR ack.amount_minor<>f.amount_minor OR ack.currency<>f.currency))\n  AND NOT EXISTS(SELECT 1 FROM merchant_payment_observations raw_fee WHERE raw_fee.payment_id=target_payment AND raw_fee.status='succeeded' AND(\n   (raw_fee.observed_fee_refunded_minor IS NOT NULL AND raw_fee.observed_fee_refunded_minor>returned_fee)\n   OR(raw_fee.observed_application_fee_minor IS NOT NULL AND raw_fee.observed_application_fee_minor<>route_row.application_fee_minor)\n   OR(raw_fee.application_fee_ref IS NOT NULL AND raw_fee.application_fee_ref IS DISTINCT FROM target_row.original_fee_ref)))\n  AND NOT EXISTS(SELECT 1 FROM merchant_fee_refund_invocations raw_source WHERE raw_source.payment_id=target_payment AND raw_source.kind='source_inspect' AND raw_source.request->>'readKind'='fee_preflight' AND raw_source.first_result IS NOT NULL AND(\n   raw_source.first_result->'body'->'result'->>'source' IS DISTINCT FROM 'fee_preflight'\n   OR raw_source.first_result->'body'->'result'->>'applicationFeeRef' IS DISTINCT FROM target_row.original_fee_ref\n   OR raw_source.first_result->'body'->'result'->>'accountId' IS DISTINCT FROM route_row.recipient_account_id\n   OR (CASE WHEN route_row.collection_kind='destination' THEN raw_source.first_result->'body'->'result'->>'originatingChargeRef' ELSE raw_source.first_result->'body'->'result'->>'chargeRef' END) IS DISTINCT FROM original_receipt.provider_charge_ref\n   OR upper(raw_source.first_result->'body'->'result'->>'currency') IS DISTINCT FROM parent_row.currency\n   OR raw_source.first_result->'body'->'result'->'amountMinor' IS DISTINCT FROM to_jsonb(route_row.application_fee_minor)\n   OR(CASE WHEN freeholder_controlled_bank_minor(raw_source.first_result->'body'->'result'->'returnedMinor') THEN (raw_source.first_result->'body'->'result'->>'returnedMinor')::numeric>returned_fee ELSE true END)))\n  AND known AND bank_row.actual_inspection_id IS NOT NULL AND actual_retained_fee_minor=target_row.target_retained_fee_minor\n  AND bank_row.current_evidence->>'amountRefundedMinor'=parent_row.refunded_minor::text\n  AND ((route_row.application_fee_minor=0 AND target_row.original_fee_ref IS NULL AND bank_row.current_evidence->'fee'='null'::jsonb AND returned_fee=0)\n   OR(route_row.application_fee_minor>0 AND bank_row.current_evidence->'fee'->>'providerRef'=target_row.original_fee_ref\n    AND bank_row.current_evidence->'fee'->>'originatingChargeRef'=original_receipt.provider_charge_ref\n    AND bank_row.current_evidence->'fee'->>'accountId'=route_row.recipient_account_id\n    AND bank_row.current_evidence->'fee'->>'currency'=parent_row.currency\n    AND bank_row.current_evidence->'fee'->>'amountMinor'=route_row.application_fee_minor::text\n    AND bank_row.current_evidence->'fee'->>'refundedMinor'=returned_fee::text)) THEN reconciled:=true;END IF;\n RETURN NEXT;\nEND $$;",
+      "beforeBodySha256": "892452a4eef08256f57f2d1d0c7bb492be539a87e34dd932022269c967cfd750",
+      "afterBodySha256": "7564bec682b47fba4517097002e7c1e92da6aca21f4a7c678ddb080da08a4f3d",
+      "changes": [
+        {
+          "before": "f",
+          "after": "physical",
+          "beforeStart": 803,
+          "afterStart": 803
+        },
+        {
+          "before": ") FILTER(WHERE f.status='accepted'",
+          "after": "",
+          "beforeStart": 817,
+          "afterStart": 824
+        },
+        {
+          "before": "m",
+          "after": "freehold",
+          "beforeStart": 879,
+          "afterStart": 852
+        },
+        {
+          "before": "",
+          "after": "_atomi",
+          "beforeStart": 882,
+          "afterStart": 862
+        },
+        {
+          "before": "hant",
+          "after": "",
+          "beforeStart": 883,
+          "afterStart": 869
+        },
+        {
+          "before": "f",
+          "after": "t",
+          "beforeStart": 894,
+          "afterStart": 876
+        },
+        {
+          "before": "",
+          "after": "r",
+          "beforeStart": 896,
+          "afterStart": 878
+        },
+        {
+          "before": "d",
+          "after": "_re",
+          "beforeStart": 897,
+          "afterStart": 880
+        },
+        {
+          "before": " f WHERE f.paym",
+          "after": "ourc",
+          "beforeStart": 899,
+          "afterStart": 884
+        },
+        {
+          "before": "nt_id=",
+          "after": "s(",
+          "beforeStart": 915,
+          "afterStart": 889
+        },
+        {
+          "before": "",
+          "after": ") physical WHERE physical.known",
+          "beforeStart": 935,
+          "afterStart": 905
+        },
+        {
+          "before": "",
+          "after": "freeholder_atomic_fee_return_resources(target_payment) physical WHERE NOT physical.known OR physical.pending)\n  AND NOT EXISTS(SELECT 1 FROM ",
+          "beforeStart": 3637,
+          "afterStart": 3638
+        },
+        {
+          "before": "",
+          "after": "NOT EXISTS(SELECT 1 FROM original_cash_recovery_facts raw_fact JOIN original_cash_recovery_operations raw_operation ON raw_operation.id=raw_fact.operation_id\n   JOIN original_cash_recoveries raw_owner ON raw_owner.id=raw_operation.recovery_id\n   WHERE(raw_owner.payment_id=target_payment OR raw_owner.subscription_charge_receipt_id=original_receipt.id) AND(\n    (raw_fact.kind='state' AND raw_fact.evidence->'fee' IS NOT NULL AND raw_fact.evidence->'fee'<>'null'::jsonb AND(\n     raw_fact.evidence->'fee'->>'providerRef' IS DISTINCT FROM target_row.original_fee_ref OR raw_fact.evidence->'fee'->>'amountMinor' IS DISTINCT FROM route_row.application_fee_minor::text\n     OR raw_fact.evidence->'fee'->>'currency' IS DISTINCT FROM parent_row.currency OR(CASE WHEN freeholder_controlled_bank_minor(raw_fact.evidence->'fee'->'refundedMinor') THEN(raw_fact.evidence->'fee'->>'refundedMinor')::numeric>returned_fee ELSE true END)))\n    OR(raw_fact.kind='parent' AND(raw_operation.kind='fee' OR EXISTS(SELECT 1 FROM original_cash_recovery_operations auxiliary WHERE auxiliary.id::text=raw_operation.request->>'auxiliaryOperationId' AND auxiliary.kind='fee')) AND(\n     raw_fact.evidence->>'providerRef' IS DISTINCT FROM target_row.original_fee_ref OR raw_fact.evidence->>'accountId' IS DISTINCT FROM route_row.recipient_account_id OR raw_fact.evidence->>'chargeRef' IS DISTINCT FROM original_receipt.provider_charge_ref\n     OR raw_fact.evidence->>'amountMinor' IS DISTINCT FROM route_row.application_fee_minor::text OR raw_fact.evidence->>'currency' IS DISTINCT FROM parent_row.currency\n     OR(CASE WHEN freeholder_controlled_bank_minor(raw_fact.evidence->'returnedMinor') THEN(raw_fact.evidence->>'returnedMinor')::numeric>returned_fee ELSE true END)))))\n  AND ",
+          "beforeStart": 6096,
+          "afterStart": 6238
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "subscription_current_period_billing.v1",
+  "checklist": ["C9.13", "C9.33", "C11.05", "C12.38"],
+  "status": "Current-period charge and ordinary deferred-amendment defects are fixed; the final billing file passes58/58 and commercial security regressions pass; hosted/provider and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "3ab1fb1f597ddc2e22f0ee596f94facc06bcf1aebc5cd68dd7c9ac70db2c227a" },
+    { "path": "src/modules/subscriptions/billing.ts", "sha256": "a34f99b67992ce19d8fe6f95a56fe2c7757ee5b4d74cd1026abda6ba01f9c508" },
+    { "path": "src/modules/subscriptions/service.ts", "sha256": "690f63f82676cf0213ed09fe94d7f6e77fead8666d04df020de79358aca5e7e1" },
+    { "path": "src/modules/subscriptions/commercial-amendment-calendar.ts", "sha256": "8c91a88685008fb7ff1d9ebf4e880a53d5af3e3f046fd9c8be2847757b62154d" },
+    { "path": "tests/modules/subscription-billing.test.ts", "sha256": "1772737b297184befca55404521b9addf8fab0f9ec0149c10f3e7ab0f90d7f7d" }
+  ],
+  "defects": [
+    "The future-calendar guard skipped an outstanding invoice whose actual current period had already started",
+    "Ordinary deferred plan changes were blocked by a seller-merchant amendment requirement they never created"
+  ],
+  "controls": {
+    "baseline": { "database": "module_subscription_billing_20261116", "passed": 49, "failed": 9 },
+    "afterCurrentPeriodFix": { "database": "subscription_billing_fixed_20261116", "passed": 56, "failed": 2 },
+    "final": { "database": "subscription_billing_final_20261116", "passed": 58, "failed": 0, "durationSeconds": 581.06 },
+    "commercialSecurity": { "database": "subscription_commercial_amendments_20261116", "passed": 2, "failed": 0 },
+    "coverage": ["pending and unknown stored-method charges retain authenticated provider evidence and original retry identity", "current-period and due-renewal charges execute", "ordinary deferred changes select the live variant and new-plan price", "seller-merchant acceptance remains bound to its actual retained commercial history"],
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "changelogOutput": "passed",
+    "guardsWeakened": false
+  },
+  "changesets": [".changeset/subscription-current-period-charge.md", ".changeset/subscription-deferred-amendment-scope.md"],
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "3ab1fb1f597ddc2e22f0ee596f94facc06bcf1aebc5cd68dd7c9ac70db2c227a",
+      "beforeSha256": "fdd834ca2c4c817ecfb9ded4cc7e3d094c642296260cf6bb5e710ee6a6e52e15",
+      "continue": true,
+      "edits": [
+        {
+          "before": "- [x] **C9.14** Build entitlements/grants for subscriptions, passes, retainers,",
+          "after": "  Current-period billing repair2026-11-16 (C9.13/C9.33/C11.05/C12.38): a genuine\n  first-period stored-method charge was skipped because its period end was mistaken\n  for a future start. The guard now targets only future periods/plan changes. Ordinary\n  deferred plans no longer invent a seller-merchant amendment requirement; retained\n  commercial evidence still gates entitlement. The final native billing file passes58/58\n  and both commercial-amendment security controls pass. TypeScript/lint/changelog pass.\n  See `deploy/subscription-current-period-billing.source.json`. Provider/hosted acceptance\n  and the checklist row remain open.\n- [x] **C9.14** Build entitlements/grants for subscriptions, passes, retainers,",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

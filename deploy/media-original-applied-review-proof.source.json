@@ -1,0 +1,32 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_original_applied_review_proof.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Immutable affirmative original review proof controls pass; fictional values establish no actual executor acceptance or provider outcome",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "bbd73db1efdde97e53fb0ffe07038765b143a739f10a1257e475f081961e0bff" },
+    { "path": "tests/core/media-original-applied-review-proof.test.ts", "sha256": "00d438d90254c6033bd11a369731ddc3b9faecfff3f4709a7577e0e09f40e72b" }
+  ],
+  "controls": {
+    "final": { "passed": 9, "failed": 0, "durationSeconds": 0.729 },
+    "coverage": ["exact independently stopped affirmative proof preserves missing returns", "portable reviewed actual finish needs no Linux evidence", "independent stop without exact affirmative review refused", "other receipt/caller/read/inventory/review reference refused", "retry, incomplete inventory and changed digests refused", "changed original nonce or physical descriptor refused", "missing or different executor stop refused", "retained original session/version debt refused", "fresh pinned finished absence and two complete absence inventories required after positive review"],
+    "runtimeChanges": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "bbd73db1efdde97e53fb0ffe07038765b143a739f10a1257e475f081961e0bff",
+      "beforeSha256": "9af1cfb7785740305cc2bb132136c92e09e6ec002c82cb5509414f5ce333b696",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  Synthetic scopes alone are not genuine pg-boss execution.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  Synthetic scopes alone are not genuine pg-boss execution.\n  Original applied-review proof qualification2026-11-16: all9 controls pass.\n  Exact affirmative review, original nonce/descriptor, positive inventory and\n  independent closure are required; retry, substituted references, retained debt\n  and stale/unfinished absence are refused. Portable reviewed finishes need no\n  Linux path and missing original returns remain NULL. Focused lint passes. See\n  `deploy/media-original-applied-review-proof.source.json`. Fictional proof values\n  establish no actual executor acceptance or provider outcome.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

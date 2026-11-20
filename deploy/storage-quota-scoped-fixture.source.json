@@ -1,0 +1,37 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "storage_quota_scoped_fixture.v1",
+  "checklist": ["C10.32"],
+  "status": "Scoped storage-quota fixture repaired and independently qualified on current migration93 source; hosted upload/delete/over-quota acceptance remains open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "8321d04877117120fbed1d3e0aab076a815ff4b0bf0d602e17d831646d27f926" },
+    { "path": "tests/core/storage-quota.test.ts", "sha256": "adee5b6fab104b3487774b950eae49f89d917001acf5b2c020f9052c9551838f" },
+    { "path": "tests/helpers/storage-quota-scope.ts", "sha256": "8ef487231531c5829f1fa40fc213b0061075c370d5b83b1d06aaf8cb4e008fdf" },
+    { "path": "deploy/hosted-storage-quotas.md", "sha256": "003da4030fa9ad2669a0383ca909da6b8fc2af5b5cc6c5102a4d960ac03ca11a" }
+  ],
+  "controls": {
+    "before": { "database": "storage_quota_audit_20261115", "passed": 2, "failed": 9, "cause": "Direct ledger calls predated original-caller admission" },
+    "delegated": { "database": "storage_quota_final_20261115", "passed": 11, "failed": 0 },
+    "independent": { "database": "storage_quota_independent_20261115", "passed": 11, "failed": 0 },
+    "fixture": "Genuine started media intents, admitted original callers and observed synthetic TCP S3 responses",
+    "guardsWeakened": false,
+    "runtimeDefectFound": false,
+    "typecheck": "passed",
+    "focusedLint": "passed"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "8321d04877117120fbed1d3e0aab076a815ff4b0bf0d602e17d831646d27f926",
+      "beforeSha256": "395a00ffac895bd0776156cb6db0604da5f90d3790a47c45bbb93f66c7e51bea",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  source packaging/documentation defect, separate from storage runtime quality.\n  Focused source checks do not close hosted build or operational acceptance.\n\n",
+          "after": "  source packaging/documentation defect, separate from storage runtime quality.\n  Focused source checks do not close hosted build or operational acceptance.\n  *(Scoped-fixture qualification 2026-11-15: the first current run had nine\n  failures because its direct calls predated original-caller admission. The\n  repaired controls use genuine started intents, admitted original callers and\n  observed synthetic TCP S3 responses, with no weakened SQL guards. Independent\n  fresh migration93 execution passes 11/11; TypeScript and focused lint pass.\n  See `deploy/storage-quota-scoped-fixture.source.json`. No runtime defect or\n  hosted acceptance follows.)*\n",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

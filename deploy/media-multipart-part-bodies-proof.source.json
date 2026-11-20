@@ -1,0 +1,32 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_multipart_part_bodies_proof.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Whole original multipart body-declaration controls pass; client declarations grant no provider receipt, FIN or I/O acceptance",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "dbd1aacd3adf3eefe56faaa947895978c20dc953136a441904c1da1b6ba27466" },
+    { "path": "tests/core/media-multipart-part-bodies-proof.test.ts", "sha256": "9e1ee95659b1de8cf47a7b8c01df8f48f5966c7fe6c02aed860d97765ae64d97" }
+  ],
+  "controls": {
+    "final": { "passed": 8, "failed": 0, "durationSeconds": 0.708 },
+    "coverage": ["fixed boundaries and exact final remainder ordered canonically without input mutation", "small single-part declaration does not become receipt/finish", "omitted, duplicate and out-of-range part numbers refused", "changed boundary refused despite unchanged total", "invalid final size and noninteger bytes refused", "noncanonical or missing SHA256 refused", "zero/unsafe reservations and unbounded part sets refused", "same-size different file detected on resume without replacing first manifest"],
+    "runtimeChanges": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "dbd1aacd3adf3eefe56faaa947895978c20dc953136a441904c1da1b6ba27466",
+      "beforeSha256": "3ae6807e09330d49f2cffa657f105eaf91a824dab94e8dee2d480ff22fa7118d",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  lint passes. See `deploy/media-multipart-complete-manifest.source.json`. No\n  provider or consumption acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  lint passes. See `deploy/media-multipart-complete-manifest.source.json`. No\n  provider or consumption acceptance follows.\n  Part-body declaration qualification2026-11-16: all8 controls pass. Fixed part\n  boundaries, final remainder, canonical ordering, SHA256 and bounded whole-file\n  reservations are enforced without changing the submitted declaration. Resume\n  detects a same-size different file without replacing the first manifest. Focused\n  lint passes. See `deploy/media-multipart-part-bodies-proof.source.json`. Client\n  declarations grant no provider receipt, FIN or actual I/O acceptance.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

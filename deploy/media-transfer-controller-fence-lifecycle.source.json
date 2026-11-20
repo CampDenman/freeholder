@@ -1,0 +1,34 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_transfer_controller_fence_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Current-plan controller fencing qualified on fresh migration108 PostgreSQL; provider and process-stop acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "1c264eda33aec71b8c5555ff1a71b78d62e7b355b4c14fc9278a4e592c7a9a96" },
+    { "path": "tests/core/media-transfer-controller-fence-lifecycle.test.ts", "sha256": "f0242ed98194322d14b4f7c8c37dd186b4a804a770a9131ecb7f54105f86cf90" }
+  ],
+  "controls": {
+    "final": { "database": "media_controller_fence_20261116", "passed": 2, "failed": 0, "durationSeconds": 22.47 },
+    "transport": "Synthetic AWS origin mapped through fetch to the fictional TCP provider with all assertions retained",
+    "coverage": ["unrelated target-namespace drain refuses SQL and actual-factory children of plan A's pre-admitted caller", "plan B cannot capture source while plan A owns an authentic admitted target caller"],
+    "runtimeChanges": false,
+    "actualProcessStop": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "1c264eda33aec71b8c5555ff1a71b78d62e7b355b4c14fc9278a4e592c7a9a96",
+      "beforeSha256": "2a900653d0fa37e5bfb72ee1b6fc9d2916c1a00c92839485085f3cdcfc4ce108",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  No provider account, executor stop or C-item acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  No provider account, executor stop or C-item acceptance follows.\n  Controller-fence qualification2026-11-16: fresh migration108 passes2/2. A new\n  unrelated namespace drain refuses both SQL and actual-factory children of plan\n  A's authentic admitted target caller; plan B cannot capture while plan A owns\n  that caller. Synthetic AWS-to-TCP transport preserves every assertion. Focused\n  lint passes. See `deploy/media-transfer-controller-fence-lifecycle.source.json`.\n  No provider account, process stop or C-item acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

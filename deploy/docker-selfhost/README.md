@@ -48,7 +48,7 @@ codes. `selfhost.sh claim-link` prints it again.
 `pnpm launch:prepare --target docker-selfhost --url https://YOUR-DOMAIN` still
 writes the same `.env` from a checkout with Node and pnpm.
 
-## Media: Docker volume or S3
+## Media: Docker volume, Spaces or S3
 
 By default media lives on the Compose `media` volume, mounted at
 `/var/lib/freeholder/media` and served through the app with the same access
@@ -57,10 +57,11 @@ updates and container rebuilds, and it is in every backup. It does not
 survive losing the server unless the backups were copied off it, and a second
 app server cannot share it.
 
-For S3-compatible storage instead, run `prepare --storage s3` and add
-`S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID` and
-`S3_SECRET_ACCESS_KEY` to the `.env`. To move existing media to a bucket, copy
-the volume's files to it with the same paths, then switch.
+For DigitalOcean Spaces, set `FREEHOLDER_STORAGE=spaces` and supply `S3_REGION`,
+`S3_BUCKET`, `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY`; the regional endpoint
+is derived for you. For generic S3-compatible storage, use `FREEHOLDER_STORAGE=s3`
+and also supply `S3_ENDPOINT`. To move existing media to a bucket, copy the
+volume's files to it with the same paths, then switch.
 
 ## Backups and restore
 

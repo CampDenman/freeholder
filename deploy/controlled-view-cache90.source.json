@@ -1,0 +1,55 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "controlled_view_cache90.v1",
+  "checklist": ["C12.38", "C11.05", "C1.08"],
+  "status": "FORWARD SOURCE CONTINUATION; only deterministic deeply frozen safe views are reused for the same fresh content certificate; no authority verdict is cached",
+  "artifacts": [
+    { "path": "src/modules/subscriptions/controlled-provider-proof.ts", "sha256": "537ad69b5f68b95fe2b52b533b8f781e0addae1a872e39c2c4c16565d209d47c" }
+  ],
+  "sourceTables": [
+    "subscription_controlled_resources",
+    "subscription_controlled_operations",
+    "subscription_controlled_calls",
+    "subscription_controlled_facts",
+    "subscription_controlled_finishes",
+    "subscription_controlled_stops",
+    "subscription_controlled_verifications",
+    "subscription_controlled_charge_origins",
+    "subscription_controlled_closures"
+  ],
+  "originalPaymentOracle": {
+    "path": "tests/modules/atomic-credit-fee-persistence84.test.ts",
+    "sha256": "d31f96db01533a22d8e7351c1fec33b72700318b438d03a7885a699742188ec4",
+    "timeoutSeconds": 180
+  },
+  "testContinuations": [
+    {
+      "path": "src/modules/subscriptions/controlled-provider-proof.ts",
+      "afterSha256": "537ad69b5f68b95fe2b52b533b8f781e0addae1a872e39c2c4c16565d209d47c",
+      "beforeSha256": "68b99204d00e47e252fe9735784445c874e10c4276fc50ab8d8f4ddcb343b8f7",
+      "continue": true,
+      "edits": [
+        {
+          "before": "",
+          "after": "type VerificationView=Awaited<ReturnType<typeof resolveControlledVerificationView>>;\ntype RetainedViews={certificate:string;views:VerificationView[]};\n",
+          "occurrences": 1
+        },
+        {
+          "before": "",
+          "after": "const controlledVerificationViews=new WeakMap<Tx,Map<string,RetainedViews>>();\n",
+          "occurrences": 1
+        },
+        {
+          "before": "/** Every reuse and return is preceded by fresh complete PG certification. Every\n * invocation returns cloned raw rows and resolves new async verification views;\n * retained snapshots never contain views, brands or caller/business verdicts. */",
+          "after": "/** Every reuse and return is preceded by fresh complete PG certification. Raw\n * rows are cloned; only deterministic deeply frozen safe views may be reused\n * for the same actual content certificate, never an authority verdict. */",
+          "occurrences": 1
+        },
+        {
+          "before": " const verificationViews=await Promise.all(verifications.map(verification=>{\n  const operation=operationsById.get(verification.operationId),call=callsById.get(verification.callId),finish=finishesByCall.get(verification.callId);\n  if(!operation||!call||!finish)throw new ServiceError(\"conflict\",\"Restore the validated original verification ancestry before resolving its safe view.\");\n  return resolveControlledVerificationView(tx,operation,call,finish,verification);\n }));\n const after=await readJournalContent(tx,resourceId,false);if(!sameJournalContent(before.content,after.content))refuseJournalContent();\n if(!hit)retainJournalBase(tx,after.content,{operations,calls,facts,finishes,stops,verifications,chargeOrigins,closures},revision);",
+          "after": " const retainedViews=controlledVerificationViews.get(tx)?.get(resourceId),reuseViews=retainedViews?.certificate===before.content.fingerprint;\n const verificationViews=reuseViews&&retainedViews?retainedViews.views:await Promise.all(verifications.map(verification=>{\n  const operation=operationsById.get(verification.operationId),call=callsById.get(verification.callId),finish=finishesByCall.get(verification.callId);\n  if(!operation||!call||!finish)throw new ServiceError(\"conflict\",\"Restore the validated original verification ancestry before resolving its safe view.\");\n  return resolveControlledVerificationView(tx,operation,call,finish,verification);\n }));\n const after=await readJournalContent(tx,resourceId,false);if(!sameJournalContent(before.content,after.content))refuseJournalContent();\n if(!reuseViews){const byResource=controlledVerificationViews.get(tx)??new Map<string,RetainedViews>();if(byResource.size>=journalRetention.resources){const oldest=byResource.keys().next().value;if(oldest!==undefined)byResource.delete(oldest);}Object.freeze(verificationViews);byResource.set(resourceId,{certificate:after.content.fingerprint,views:verificationViews});controlledVerificationViews.set(tx,byResource);}\n if(!hit)retainJournalBase(tx,after.content,{operations,calls,facts,finishes,stops,verifications,chargeOrigins,closures},revision);",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

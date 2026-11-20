@@ -12,60 +12,19 @@ import {
   XCircle,
 } from "@phosphor-icons/react/dist/ssr";
 import { formatDateTime } from "@/core/i18n";
-import { doctor } from "@/core/doctor/service";
+import { doctorStatus as doctor } from "@/core/doctor/service";
 import { platformVersion } from "@/core/portability/service";
 import { currentBusiness } from "@/core/settings/read";
 import { Callout, Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
+import {localized} from "./report-labels";
+import {DoctorProbeForm} from "./DoctorProbeForm";
+import {hasModuleAccess} from "@/core/service";
 import { listCspViolations } from "@/core/security/csp-reports";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
-
-type DoctorCheck = Awaited<ReturnType<typeof doctor.call>>["checks"][number];
-
-/**
- * A check that carries a catalog message, shown in the owner's language.
- * Literal keys, one per message, so the i18n gate can see every one of them.
- */
-function localized(
-  check: DoctorCheck,
-  t: Awaited<ReturnType<typeof getT>>,
-): DoctorCheck {
-  const params = check.message?.params ?? {};
-  switch (check.message?.key) {
-    case "doctor.pluginPermissions.review":
-      return { ...check, title: t("doctor.pluginPermissions.title"), detail: t("doctor.pluginPermissions.review", params), remedy: t("doctor.pluginPermissions.remedy") };
-    case "doctor.pluginTrust.failed":
-      return { ...check, title: t("doctor.pluginTrust.title"), detail: t("doctor.pluginTrust.failed", params), remedy: t("doctor.pluginTrust.remedy") };
-    case "doctor.timeZone.agree":
-      return { ...check, title: t("doctor.timeZone.title"), detail: t("doctor.timeZone.agree", params) };
-    case "doctor.timeZone.disagree":
-      return {
-        ...check,
-        title: t("doctor.timeZone.title"),
-        detail: t("doctor.timeZone.disagree", params),
-        remedy: t("doctor.timeZone.disagreeRemedy", params),
-      };
-    case "doctor.timeZone.unknown":
-      return {
-        ...check,
-        title: t("doctor.timeZone.title"),
-        detail: t("doctor.timeZone.unknown", params),
-        remedy: t("doctor.timeZone.unknownRemedy", params),
-      };
-    case "doctor.timeZone.unreadable":
-      return {
-        ...check,
-        title: t("doctor.timeZone.title"),
-        detail: t("doctor.timeZone.unreadable", params),
-        remedy: t("doctor.timeZone.unreadableRemedy", params),
-      };
-    default:
-      return check;
-  }
-}
 
 export default async function HealthPage() {
   const actor = await requireStaffActor("platform");
@@ -95,6 +54,9 @@ export default async function HealthPage() {
           {t("doctor.version", { version: String(version.version) })}
         </p>
       </div>
+
+      <Callout>{t("doctor.probe.passive")}</Callout>
+      {hasModuleAccess(actor,"platform","manage")?<DoctorProbeForm labels={{run:t("doctor.probe.run"),running:t("doctor.probe.running"),hint:t("doctor.probe.hint"),at:t("doctor.probe.at"),ok:t("doctor.ok"),warn:t("doctor.warn"),fail:t("doctor.fail")}}/>:null}
 
       <Callout tone={tone[report.verdict]} icon={icon[report.verdict]}>
         {t(`doctor.${report.verdict}`)}

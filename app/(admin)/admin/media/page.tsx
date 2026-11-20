@@ -139,6 +139,7 @@ export default async function MediaPage({
         <div>
           <h1 className="text-xl font-bold tracking-tight">{t("media.title")}</h1>
           <p className="mt-1 text-sm text-ink-muted">{t("media.intro")}</p>
+          {canManage ? <Link href="/admin/media/transfers" className="mt-2 inline-block text-sm font-semibold text-accent underline">{t("media.transfer.title")}</Link> : null}
           {canManage ? <Link href="/admin/media/recovery" className="mt-2 inline-block text-sm font-semibold text-accent underline">{t("media.recovery.title")}</Link> : null}
           {canManage && !trashed ? (
             <a href="/admin/media/record" className="mt-2 inline-block text-sm font-semibold text-accent">

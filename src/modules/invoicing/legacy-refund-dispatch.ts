@@ -4,6 +4,7 @@
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
+import { legacyBankOriginal } from "./legacy-bank-read-contract";
 import { actorString, ServiceError, type ServiceContext, type Tx } from "@/core/service";
 import { isHostedPaymentProvider } from "@/adapters/payments/providers";
 import { env } from "@/core/env";
@@ -183,7 +184,13 @@ export async function retainLegacyRefundCaller(ctx: ServiceContext, input: { dis
     await ctx.tx.insert(moneyStateEvents).values({ subjectType: "refund", subjectId: refund.id, fromState: null, toState: "provider_result_observed",
       actor: actorString(ctx.actor), reason: "Original physical refund caller finished", metadata });
   }
-  if (bindingsMatch && result.providerRef && !refund.providerRef) await ctx.tx.update(refunds).set({ providerRef: result.providerRef }).where(eq(refunds.id, refund.id));
+  if (bindingsMatch && !recoveryRequired && result.providerRef && !refund.providerRef) {
+    // Authentic feedback may precede the real creator's return. Bind only
+    // this actual retained caller ACK; it authorizes no money/status update.
+    await ctx.tx.execute(sql`select set_config('freeholder.legacy_bank_original_ack',${refund.id},true)`);
+    await ctx.tx.update(refunds).set({ providerRef: result.providerRef }).where(eq(refunds.id, refund.id));
+    await ctx.tx.execute(sql`select set_config('freeholder.legacy_bank_original_ack','',true)`);
+  }
   ctx.setSubject("refund", refund.id);
   return { recoveryRequired, result };
 }
@@ -238,4 +245,68 @@ export async function assertLegacyRefundRelease(ctx: ServiceContext, refund: Ref
       && await originalPaymentMatches(ctx.tx, record(terminal[0]!.original))) return;
   }
   throw new ServiceError("conflict", "The original provider refund is live or unresolved. Reconcile its actual result before releasing the reserved balance.");
+}
+
+/** A fresh read may use the original authenticated resource, never amount
+ * matching or today's platform as a historical create admission. The caller
+ * holds the existing refund/payment/invoice locks before invoking this. */
+export async function originalLegacyBankRefund(tx: Tx, refund: Refund) {
+  const result = await legacyRefundFinishedResult(tx, refund);
+  const rows = await events(tx, refund.id);
+  const [parent] = await tx.select().from(payments).where(eq(payments.id, refund.paymentId));
+  const admission = rows.map(row => record(row.metadata)).find(value => value.protocol === version && value.physicalState === "admitted");
+  const original = record(admission?.original);
+  if (!parent || refund.provider !== "stripe" || !result?.providerRef || result.providerRef !== refund.providerRef
+    || result.status === "unknown" || !admission || !authentic(admission)) {
+    throw new ServiceError("conflict", "Restore the authentic original legacy refund resource and finished physical caller before bank inspection.");
+  }
+  return legacyBankOriginal.parse({ refundId: refund.id, paymentId: refund.paymentId, invoiceId: refund.invoiceId, provider: "stripe",
+    originalRefundRef: result.providerRef, originalPaymentRef: original.providerPaymentRef,
+    originalChargeAccountId: original.providerAccountId, amountMinor: refund.amountMinor, currency: refund.currency,
+    originalCashAmountMinor: parent.amountMinor, originalCreatePlatformAccountId: null, originalCreateProtocolVersion: null,
+    originalHistoryDigest: digest(canonical({ protocol: "freeholder.legacy-bank-original-binding.v1",
+      identity: original, payment: { id: parent.id, invoiceId: parent.invoiceId, provider: parent.provider, providerRef: parent.providerRef,
+        amountMinor: parent.amountMinor, currency: parent.currency, requestHash: parent.requestHash },
+      physical: rows.filter(row => record(row.metadata).protocol === version),
+    })),
+  });
+}
+
+/** Exact independently authentic old physical resources may explain a cash
+ * inventory. Matching an amount never grants an unrelated row this authority. */
+export async function legacyBankKnownRefundResources(tx: Tx, paymentId: string, scope: { originalPaymentRef: string; originalChargeAccountId: string | null; originalCashAmountMinor: number; currency: string }) {
+  const rows = await tx.select().from(refunds).where(eq(refunds.paymentId, paymentId)).limit(5001);
+  if (rows.length > 5000) throw new ServiceError("conflict", "Restore the bounded original refund inventory before legacy cash proof.");
+  const known: Array<{ providerRef: string; amountMinor: number; currency: string }> = [];
+  let allCallersFinished = true;
+  for (const row of rows) {
+    if (await refundIsProvenUnsubmitted(tx, row)) continue;
+    try {
+      const original = await originalLegacyBankRefund(tx, row);
+      if (original.originalPaymentRef !== scope.originalPaymentRef || original.originalChargeAccountId !== scope.originalChargeAccountId
+        || original.originalCashAmountMinor !== scope.originalCashAmountMinor || original.currency !== scope.currency) { allCallersFinished = false; continue; }
+      known.push({ providerRef: original.originalRefundRef, amountMinor: original.amountMinor, currency: original.currency });
+    }
+    catch (error) { if (!(error instanceof ServiceError) && !(error instanceof z.ZodError)) throw error; allCallersFinished = false; }
+  }
+  return { resources: known, allCallersFinished };
+}
+
+/** Namespace evidence can exist while the real creator is still outstanding.
+ * This authentic admission owns a cash namespace; it never proves completion
+ * or assigns a newly observed refund resource to a still-unbound old caller. */
+export async function originalLegacyBankAdmissionNamespace(tx: Tx, refund: Refund) {
+  if (refund.provider !== "stripe") return null;
+  const rows = await events(tx, refund.id), admissions = rows.filter(row => record(row.metadata).protocol === version && record(row.metadata).physicalState === "admitted");
+  if (!originalReservationMatches(rows, refund) || admissions.length !== 1) return null;
+  const admission = record(admissions[0]!.metadata), original = record(admission.original);
+  if (!authentic(admission) || admission.refundId !== refund.id || admission.requestHash !== refund.requestHash || !originalRefundMatches(original, refund)) return null;
+  const [parent] = await tx.select().from(payments).where(eq(payments.id, refund.paymentId));
+  if (!parent || parent.provider !== original.provider || parent.invoiceId !== original.invoiceId || parent.providerRef !== original.providerPaymentRef
+    || parent.requestHash !== original.paymentRequestHash || parent.amountMinor !== original.paymentAmountMinor || parent.currency !== original.currency) return null;
+  const paymentRef = z.string().regex(/^pi_[A-Za-z0-9_]+$/).safeParse(original.providerPaymentRef), account = z.string().regex(/^acct_[A-Za-z0-9]+$/).nullable().safeParse(original.providerAccountId);
+  if (!paymentRef.success || !account.success) return null;
+  return { refundId: refund.id, paymentId: refund.paymentId, invoiceId: refund.invoiceId, provider: "stripe" as const,
+    originalPaymentRef: paymentRef.data, originalChargeAccountId: account.data, originalRefundRef: refund.providerRef,
+    originalCreatePlatformAccountId: null, originalCreateProtocolVersion: null, admissionDigest: digest(canonical(admission)) };
 }

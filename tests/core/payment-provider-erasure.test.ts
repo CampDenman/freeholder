@@ -16,6 +16,7 @@ import {paymentMethods,paymentProviderCustomers,paymentProviderEvents,payments} 
 import {erasePaymentProviderCustomer,providerCustomerErasureScope} from "@/modules/invoicing/provider-erasure";
 import {dataRequests,dataRequestArtifacts} from "@/core/privacy/schema";
 import {getJob,stopJobs,type JobExecutionContext} from "@/core/jobs";
+import {jobIdempotencyKeys} from "@/core/jobs/schema";
 import {OWNER,closeDb,hasDatabase,truncateSpine} from "../helpers/spine";
 let raceGate:{contactId:string;entered:()=>void;resume:Promise<void>}|undefined;
 registerContactPrivacySource({scope:"tests.payment-erasure-race",tables:[],eraseOrder:30,exportData:async()=>[],erase:async(_tx,contactId)=>{
@@ -117,13 +118,59 @@ describe.runIf(hasDatabase)("payment-provider erasure (C1.08/C12.38/C11.10)",()=
   expect((await db().select().from(dataRequests).where(eq(dataRequests.id,result.request.id)))[0]!.status).toBe("in_progress");
   await expect(erasePaymentProviderCustomer.handler(seller.data,jobContext(seller.id))).rejects.toMatchObject({code:"provider_failure"});
   expect((await db().select().from(dataRequests).where(eq(dataRequests.id,result.request.id)))[0]!.status).toBe("in_progress");
-  await erasePaymentProviderCustomer.handler(seller.data,jobContext(randomUUID()));
-  await erasePaymentProviderCustomer.handler(seller.data,jobContext(randomUUID()));
+  await erasePaymentProviderCustomer.handler(seller.data,jobContext(seller.id));
+  await erasePaymentProviderCustomer.handler(seller.data,jobContext(seller.id));
   expect((await db().select().from(dataRequests).where(eq(dataRequests.id,result.request.id)))[0]!.status).toBe("completed");
   const deletes=fetcher.mock.calls.filter(([,init])=>init?.method==="DELETE");
   expect(deletes).toHaveLength(3);
   expect(deletes.filter(([,init])=>new Headers(init?.headers).get("stripe-account")==="acct_original").map(([,init])=>new Headers(init?.headers).get("idempotency-key"))).toEqual([`privacy-customer:${seller.id}`,`privacy-customer:${seller.id}`]);
   expect(await db().select().from(paymentProviderCustomers)).toMatchObject([{contactId:other.id,providerAccountId:"acct_other",providerCustomerRef:"cus_shared"}]);
+ });
+ it("checks the real original untagged task identity and raw namespace before provider I/O",async()=>{
+  const contact=await subject("original-customer-task");
+  await db().insert(paymentProviderCustomers).values({contactId:contact.id,provider:"stripe",providerAccountId:"acct_original",providerCustomerRef:"cus_OriginalTask"});
+  const result=await erase(contact.id),id=jobIds(result)[0]!,job=await getJob(erasePaymentProviderCustomer.name,id);
+  expect(job!.data.buyerMoneyFinisherJobId).toBeUndefined();
+  let deletes=0;
+  const provider=createStripePayments({secretKey:"sk_erasure_fixture",webhookSecrets:["whsec_erasure_fixture"],apiBase:"https://stripe.example.test",fetch:async(_input,init)=>{
+   if(init?.method==="DELETE")deletes++;
+   return Response.json({id:"cus_OriginalTask",deleted:deletes>0});
+  }});
+  vi.spyOn(adapters,"paymentAdapter").mockReturnValue(provider);
+  await expect(erasePaymentProviderCustomer.handler(job!.data,jobContext(randomUUID()))).rejects.toMatchObject({code:"permission"});
+  await expect(erasePaymentProviderCustomer.handler({...job!.data,providerCustomerRef:"cus_AnotherNamespace"},jobContext(id))).rejects.toMatchObject({code:"permission"});
+  expect(deletes).toBe(0);
+  await erasePaymentProviderCustomer.handler(job!.data,jobContext(id));
+  expect(deletes).toBe(1);
+  expect((await db().select().from(dataRequests).where(eq(dataRequests.id,result.request.id)))[0]!.status).toBe("completed");
+  await erasePaymentProviderCustomer.handler(job!.data,jobContext(id));
+  expect(deletes).toBe(1);
+ });
+ it("retains an untagged customer task as recovery debt when its original admission hash is missing",async()=>{
+  const contact=await subject("missing-customer-admission");
+  await db().insert(paymentProviderCustomers).values({contactId:contact.id,provider:"stripe",providerAccountId:"acct_original",providerCustomerRef:"cus_MissingAdmission"});
+  const result=await erase(contact.id),id=jobIds(result)[0]!,job=await getJob(erasePaymentProviderCustomer.name,id);
+  await db().delete(jobIdempotencyKeys).where(eq(jobIdempotencyKeys.jobId,id));
+  const adapter=vi.spyOn(adapters,"paymentAdapter");
+  await expect(erasePaymentProviderCustomer.handler(job!.data,jobContext(id))).rejects.toMatchObject({code:"conflict"});
+  expect(adapter).not.toHaveBeenCalled();
+  const [request]=await db().select().from(dataRequests).where(eq(dataRequests.id,result.request.id));
+  expect(request).toMatchObject({status:"in_progress",fulfilledAt:null});
+  expect(request!.resolution).toMatch(/original provider-customer and buyer money enqueue inventory/);
+  const [artifact]=await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId,result.request.id));
+  expect(artifact!.body).toEqual(result.artifact.body);
+  expect((await getJob(erasePaymentProviderCustomer.name,id))!.data).toEqual(job!.data);
+ });
+ it("rechecks a later named money hold before an original untagged customer DELETE",async()=>{
+  const contact=await subject("later-customer-hold");
+  await db().insert(paymentProviderCustomers).values({contactId:contact.id,provider:"stripe",providerAccountId:"acct_original",providerCustomerRef:"cus_LaterHold"});
+  const result=await erase(contact.id),id=jobIds(result)[0]!,job=await getJob(erasePaymentProviderCustomer.name,id);
+  const holdRequest=await createDataRequest.call({contactId:contact.id,request:{kind:"erasure"}},OWNER);
+  await addRetentionException.call({dataRequestId:holdRequest.id,scope:"commerce.money",reason:"legal_obligation",legalBasis:"Synthetic hold added after actual customer task admission"},OWNER);
+  const adapter=vi.spyOn(adapters,"paymentAdapter");
+  await expect(erasePaymentProviderCustomer.handler(job!.data,jobContext(id))).rejects.toMatchObject({code:"conflict"});
+  expect(adapter).not.toHaveBeenCalled();
+  expect((await db().select().from(dataRequests).where(eq(dataRequests.id,result.request.id)))[0]!.status).toBe("in_progress");
  });
  it("captures a customer known only by a saved method before deleting local rows",async()=>{
   const contact=await subject("method-only-customer");
@@ -228,7 +275,7 @@ describe.runIf(hasDatabase)("payment-provider erasure (C1.08/C12.38/C11.10)",()=
   let deleted=false;
   const provider=createStripePayments({secretKey:"sk_erasure_fixture",webhookSecrets:["whsec_erasure_fixture"],apiBase:"https://stripe.example.test",fetch:async(_input,init)=>{if(init?.method==="DELETE")deleted=true;return Response.json({id:"cus_LostReceipt",deleted});}});
   vi.spyOn(adapters,"paymentAdapter").mockReturnValue(provider);
-  await erasePaymentProviderCustomer.handler(queued!.data,jobContext(randomUUID()));
+  await erasePaymentProviderCustomer.handler(queued!.data,jobContext(id));
   expect(deleted).toBe(true);
   expect((await db().select().from(dataRequests).where(eq(dataRequests.id,first.request.id)))[0]!.status).toBe("completed");
  });

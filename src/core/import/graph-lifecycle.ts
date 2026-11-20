@@ -9,6 +9,8 @@ import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { actorString, ServiceError, type ServiceContext } from "@/core/service";
 import { assertCurrentImportAuthority } from "./authority";
 import { markImportGraphWriter } from "./graph-writer";
+import { markImportCrawlWriter } from "./crawl-writer";
+import { retireCrawlOriginals } from "./crawl-retirement";
 import type { ImportGraphVersion } from "./graph-version";
 import { withinImportBatch, type ImportBatchContext } from "./batch-context";
 import { publicImportRun } from "./privacy";
@@ -23,6 +25,7 @@ export async function advanceGraphLifecycle(ctx: ServiceContext, before: Run, op
   await assertCurrentImportAuthority(ctx, operation);
   await lockContactIdentityForRead(ctx.tx);
   await markImportGraphWriter(ctx.tx);
+  if (object(before.checkpoint).sourceCrawl) await markImportCrawlWriter(ctx.tx);
   const [graph] = await ctx.tx.select().from(importSourceGraphs).where(eq(importSourceGraphs.runId, before.id)).limit(1).for("update");
   const binding = object(object(before.checkpoint).sourceGraph);
   if (!graph || binding.id !== graph.id || binding.generation !== graph.generation) throw new ServiceError("conflict", "The original import graph is no longer available.");
@@ -55,6 +58,7 @@ export async function advanceGraphLifecycle(ctx: ServiceContext, before: Run, op
   }
   if (!remaining && operation === "imports.rollback") {
     await releaseImportSources(ctx, before, checkpoint);
+    if (checkpoint.sourceCrawl) await retireCrawlOriginals(ctx, before.id, "rolled_back");
     const summaries = await ctx.tx.select({ kept: sql<unknown>`${importRuns.checkpoint}->'rolledBack'->'keptMedia'`, pages: sql<unknown>`${importRuns.checkpoint}->'rolledBack'->'keptPages'` }).from(importSourceBatches).innerJoin(importRuns, eq(importRuns.id, importSourceBatches.childRunId)).where(eq(importSourceBatches.graphId, graph.id));
     const keptMedia = [...new Set(summaries.flatMap(summary => z.array(z.uuid()).max(500).parse(summary.kept ?? [])))];
     const keptPages = [...new Set(summaries.flatMap(summary => z.array(z.uuid()).max(500).parse(summary.pages ?? [])))];

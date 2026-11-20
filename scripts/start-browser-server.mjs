@@ -26,4 +26,6 @@ for (const [source, destination] of [
 
 process.env.PORT = baseUrl.port || (baseUrl.protocol === "https:" ? "443" : "80");
 process.env.HOSTNAME = baseUrl.hostname;
+const { main: migrate } = await import("./migrate.mjs");
+await migrate();
 await import(pathToFileURL(resolve(standalone, "server.js")).href);

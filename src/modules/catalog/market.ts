@@ -213,6 +213,7 @@ export const anonymizeSellerOrderReceipts = defineService({
   kind: "mutation", permission: "system", external: false,
   input: z.object({ sellerUserId: uuid, anonymousSellerUserId: uuid }), output: z.object({ affected: z.number().int().nonnegative() }),
   handler: async ({ sellerUserId, anonymousSellerUserId }, ctx) => {
+    await ctx.tx.execute(sql`select set_config('freeholder.order_commercial_writes_v1','1',true),set_config('freeholder.order_commercial_privacy_v1','1',true)`);
     const changed = await ctx.tx.update(orderItems).set({ snapshot: sql`jsonb_set(${orderItems.snapshot}, '{sellerUserId}', to_jsonb(${anonymousSellerUserId}::text), false)` })
       .where(sql`${orderItems.snapshot}->>'sellerUserId' = ${sellerUserId}`).returning({ id: orderItems.id });
     return { affected: changed.length };

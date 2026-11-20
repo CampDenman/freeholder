@@ -1,0 +1,65 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_transfer_quota_late_original.v1",
+  "checklist": ["C1.12", "C10.32", "C11.08"],
+  "status": "Genuine late-original source facts reopen only the exact original caller/token and historical release proof is refused; provider and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "9ba45bc8ccf857b5e18e3277a73d7488cbfe7bc8c86e50dd93874c6a22a20f45" },
+    { "path": "src/core/media/write-ledger.ts", "sha256": "84c3cf5c87875de994335721d99bcb29cdb614063b9e696310ca44858a8623d2" },
+    { "path": "tests/fixtures/media-transfer-quota-role.config.ts", "sha256": "6bf39ed94215af58be5c1ba7d47c74c9ee1f0e7690be20b4e592182c84451887" },
+    { "path": "tests/fixtures/media-transfer-quota-role.probe.ts", "sha256": "49a5aded5a589d319649b021718cebb63629b0bef0f4d84bbaf7170d80e611b9" },
+    { "path": "tests/core/media-transfer-quota-role-lifecycle.test.ts", "sha256": "bfa9a8f4700405036319098652c79cb8c488bcbbf8e6f96c08e12b794f05934e" },
+    { "path": "tests/helpers/media-transfer-provider.ts", "sha256": "bdac3d725dc9b54917f18a35b4ba016fdbcad6fb02c38988a06a431b5fb3857b" },
+    { "path": ".changeset/media-late-original-quota-recovery.md", "sha256": "d987e11167c07e0d47eb3851b4fda18b3d05040446afff99323027ef58696eba" }
+  ],
+  "controls": {
+    "failedBefore": {
+      "database": "media_quota_role_late_original_20261116",
+      "producer": { "passed": 1, "failed": 0 },
+      "native": { "passed": 0, "failed": 1, "selectedSkips": 8 },
+      "actualFailure": "The original source caller remained returned instead of unknown after the genuine late accepted fact"
+    },
+    "passedAfter": {
+      "database": "media_quota_role_late_original_fix2_20261116",
+      "producer": { "passed": 1, "failed": 0 },
+      "native": { "passed": 1, "failed": 0, "selectedSkips": 8 },
+      "physicalPath": "Real current migration108, source putWithReceipt, copy/adopt/retire, create-only source TCP re-PUT and full-byte versioned readback",
+      "releaseRefusal": "The exact original source token has positive bytes and pendingToken restored; release fails and observations remain unchanged"
+    },
+    "rejectedIntermediate": {
+      "database": "media_quota_role_late_original_fix_20261116",
+      "reason": "The first implementation mistook the ordinary onAccepted callback for a late fact and the guarded caller update refused it; no positive result is claimed"
+    },
+    "pureProofRegression": { "passed": 15, "failed": 0 },
+    "ordinaryWriteRecoveryRegression": { "database": "media_late_original_write_recovery_20261116", "passed": 9, "failed": 0 },
+    "allNativeRoleRegressions": {
+      "passed": 9,
+      "failed": 0,
+      "databases": ["media_quota_role_ack_before_fin_postlate_20261116", "media_quota_role_verified_copy_postlate_20261116", "media_quota_role_adopted_copy_postlate_20261116", "media_quota_role_retired_source_postlate_20261116", "media_quota_role_privacy_queued_postlate_20261116", "media_quota_role_unknown_target_postlate_20261116", "media_quota_role_unattempted_postlate_20261116", "media_quota_role_late_original_fix2_20261116"],
+      "privacyWorkerSeconds": 82.774,
+      "harnessOnlyFailures": ["The first sweep combined verified_copy and adopted_copy under one incompatible stage filter", "The final sweep used a not_attempted database prefix instead of the required unattempted prefix; the corrected fresh control passed"]
+    },
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "sourceContinuation": { "passed": 8, "failed": 0 },
+    "changelogOutput": { "passed": 3, "failed": 0, "changesets": 843 },
+    "guardsWeakened": false,
+    "productCodeChanged": true,
+    "remaining": "Hosted provider, clean-room, independent review, owner sign-off and checklist acceptance remain open"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "9ba45bc8ccf857b5e18e3277a73d7488cbfe7bc8c86e50dd93874c6a22a20f45",
+      "beforeSha256": "2ef36b9cfeeae4a1b009c074909056ebb6b367494aaebcddf3e0382beb6e6574",
+      "continue": true,
+      "edits": [
+        {
+          "before": "`deploy/media-transfer-quota-unattempted-target.source.json`. Only the late-original\ncohort remains open in this group; no provider or checklist acceptance follows.\n\n\nSource-only continuation, 2026-11-14 (C1.12/C11.08): the idle multipart",
+          "after": "`deploy/media-transfer-quota-unattempted-target.source.json`. Only the late-original\ncohort remains open in this group; no provider or checklist acceptance follows.\n\nLate-original quota recovery2026-11-16 (C1.12/C10.32/C11.08): a fresh genuine\ncopy/adopt/retire cohort physically reapplies the exact source bytes over TCP, reads\nthem back, and submits the retained original provider revision. The unchanged native\ncontrol first proves the old path wrongly leaves its original caller returned. The\nshared observation path now reopens only callers bound to that exact receipt and\nreconciles the same original quota token. Producer/native controls pass1/1 each;\nrelease is refused without changing observations. All nine native role cases pass\non fresh independent post-repair cohorts, including the genuine82.774s privacy worker.\nFifteen pure quota proofs, nine ordinary recovery cases, TypeScript and focused lint\npass. See\n`deploy/media-transfer-quota-late-original.source.json` and changeset\n`media-late-original-quota-recovery.md`. No provider or checklist acceptance follows.\n\n\nSource-only continuation, 2026-11-14 (C1.12/C11.08): the idle multipart",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

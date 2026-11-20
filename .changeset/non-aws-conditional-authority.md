@@ -1,0 +1,5 @@
+---
+"freeholder": patch
+---
+
+S3-compatible storage that is not Amazon's can now take recorded media writes. Freeholder only trusted an endpoint on `amazonaws.com` for these, and for a real reason: it creates objects with a header that means "only if this key does not exist yet", and deletes them with one that means "only if it still looks exactly like this". A store that accepts those headers and quietly ignores them would report a new object created when it had in fact written over a live one. Rather than assume, Freeholder now checks: at setup it writes one disposable key to your bucket and requires the store to refuse a second creation of it and refuse a deletion that names the wrong version, and it requires the bucket to keep old versions so that if the store ever changes behaviour an ignored condition adds a version instead of destroying one. Both have to hold. If either does not, the write is refused exactly as before and the message says which one is missing, so there is something to fix rather than a flat no. Amazon's own endpoints are unaffected and are never probed.

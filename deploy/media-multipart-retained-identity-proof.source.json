@@ -1,0 +1,32 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_multipart_retained_identity_proof.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Historical original multipart identity controls pass; no certificate, kernel stop, provider outcome or compact-erasure proof is claimed",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "30caef3578875faf35ca88c42eebf949fee3a4d114bfb3df72c092337f99eca7" },
+    { "path": "tests/core/media-multipart-retained-identity-proof.test.ts", "sha256": "bf31bbbc5a66bf2710c03cb837a6beceaa1327de69b67551c3206f51fcd971b4" }
+  ],
+  "controls": {
+    "final": { "passed": 10, "failed": 0, "durationSeconds": 0.722 },
+    "coverage": ["safe first resource/reservation/CREATE/ABORT/physical identities retained without authority flags", "matching late session compares against first digest with raw IDs unavailable", "different late provider ID conflicts instead of being adopted", "conflicting current raw canonical ID refused", "exact original caller/request/descriptor/token/runtime required", "minimized descriptor supports classification only", "ephemeral namespace/key/session/configuration candidates checked before recovery read", "failed/nonpositive/local-signer evidence refused", "old NULL return/ACK/FIN/stop shapes do not become local closure", "raw keys/session IDs and current-contact additions refused"],
+    "runtimeChanges": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "30caef3578875faf35ca88c42eebf949fee3a4d114bfb3df72c092337f99eca7",
+      "beforeSha256": "17b626a3c8488e4a0db1c82a989e55012846c87cfcf307fcb79eb6511d9151c1",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  provider terminal authority, business acceptance or independent review follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  provider terminal authority, business acceptance or independent review follows.\n  Retained-identity proof qualification2026-11-16: all10 controls pass. Historical\n  first resource/CREATE/ABORT/physical identities remain distinct from current\n  permission. Late sessions compare against first digests without refilling raw\n  NULLs; exact caller/request/token/runtime and ephemeral candidate checks refuse\n  foreign evidence, mutation use and historical local-closure promotion. Focused\n  lint passes. See `deploy/media-multipart-retained-identity-proof.source.json`.\n  No certificate, kernel stop, provider outcome or compact-erasure proof follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

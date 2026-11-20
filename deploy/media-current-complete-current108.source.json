@@ -1,0 +1,38 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_current_complete_current108.v1",
+  "checklist": ["C1.12", "C11.10"],
+  "status": "The complete unchanged current media file passes on fresh migration108 after focused fixture/recovery repairs; hosted provider and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "06fd7bc32d9b13eb6db4b3ed3dfcab0386065974ec5af4093cfb3b3886565f7e" },
+    { "path": "tests/core/media.test.ts", "sha256": "da8908408e9fe9a658b81833296ab16e337614cd9795b30ea465a5836b4159f5" },
+    { "path": "tests/core/media-multipart-readback.test.ts", "sha256": "f3a8119c22c1822a625c71f0a2f347745bad63abe706b16c7567fb9db9faae36" },
+    { "path": "src/core/media/write-ledger.ts", "sha256": "84c3cf5c87875de994335721d99bcb29cdb614063b9e696310ca44858a8623d2" }
+  ],
+  "controls": {
+    "database": "media_current_full_postrepair_20261116",
+    "native": { "passed": 48, "failed": 0, "durationSeconds": 241.58 },
+    "storedPartProofs": { "passed": 7, "failed": 0 },
+    "coverage": ["byte/MIME validation and document/audio/video support", "asset registration, metadata, focal points and alt-text review", "renditions, malware quarantine and clean rescan", "trash/restore/purge and exact permissions", "proxy and private-S3 resumable positives with idempotent completion", "expired phone capture and abandoned reservation refusal", "nested usage references and deleted-file gaps"],
+    "previousFailure": "The earlier broad run timed out at600 seconds with capture/reset and raw-write raster fixture failures; focused repairs are separately evidenced and this fresh complete run does not reproduce them",
+    "testOracleChanged": false,
+    "productCodeChanged": false,
+    "guardsWeakened": false,
+    "remaining": "Hosted provider, hosted performance, clean-room, independent review and checklist acceptance remain open"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "06fd7bc32d9b13eb6db4b3ed3dfcab0386065974ec5af4093cfb3b3886565f7e",
+      "beforeSha256": "fcdfd023a1440f6a26a01533f7915a57cf8d8b742287a0b9d4f1a5bb55ac50ce",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  cases. Capture timeout/trailing resets and raw-write raster fixtures remain open.\n  Raster-fixture qualification2026-11-16 (C1.12/C11.10): the full file passes15/15",
+          "after": "  cases. Capture timeout/trailing resets and raw-write raster fixtures remain open.\n  Complete current-media regression qualification2026-11-16 (C1.12/C11.10): after\n  the focused capture/raster/ownership repairs, the unchanged complete media file now\n  PASSes48/48 in241.58s on a fresh current108 database. Validation, asset/rendition\n  lifecycle, malware/quarantine, deletion, private resumable upload, expiration and\n  usage-reference controls all compose; the earlier600s timeout does not reproduce.\n  Seven stored-part proofs also pass. No test or product source changed. See\n  `deploy/media-current-complete-current108.source.json`. Hosted provider/performance\n  and checklist acceptance remain open.\n  Raster-fixture qualification2026-11-16 (C1.12/C11.10): the full file passes15/15",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

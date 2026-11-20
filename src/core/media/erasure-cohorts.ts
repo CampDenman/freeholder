@@ -1,6 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C1.12/C1.08: late physical facts reopen their original erasure, not a new owner.
+import {originalMediaScope,originalMediaDescendant,originalMediaScopePending} from "./original-erasure-scope";
+import {originalProviderEvidencePending,originalProviderEvidenceVersion} from "./original-provider-privacy";
 import {and,asc,eq,inArray,or,isNotNull,isNull,gt} from "drizzle-orm";
 import {db} from "@/core/db";
 import {dataRequests} from "@/core/privacy/schema";
@@ -9,8 +11,12 @@ import {mediaErasureCohorts} from "./erasure-schema";
 import {mediaObjectWrites} from "./write-schema";
 import {mediaMultipartOperations,mediaMultipartResources} from "./multipart-schema";
 import {allowMediaReceiptWrites} from "./write-ledger";
+import {lockTransferInventory} from "./transfer-authority";
 export async function captureMediaErasureCohort(tx:Tx,requestId:string,scope:"media.storageOperations"|"media.multipartOperations",ids:string[],resourceIds:string[]=[]):Promise<void>{
  await allowMediaReceiptWrites(tx);
+ const first=await originalMediaScope(tx,requestId,scope);
+ for(const receiptId of ids)if(!await originalMediaDescendant(tx,first.membership,{receiptId}))throw new Error("A current generation cannot expand the immutable original media erasure capture.");
+ for(const resourceId of resourceIds)if(!await originalMediaDescendant(tx,first.membership,{resourceId}))throw new Error("A new multipart session cannot expand the immutable original media erasure capture.");
  if(ids.length)await tx.insert(mediaErasureCohorts).values(ids.map(objectReceiptId=>({requestId,scope,objectReceiptId}))).onConflictDoNothing();
  if(resourceIds.length)await tx.insert(mediaErasureCohorts).values(resourceIds.map(multipartResourceId=>({requestId,scope,multipartResourceId}))).onConflictDoNothing();
 }
@@ -40,7 +46,7 @@ export async function reconcileMediaErasureCohorts(target?:{objectReceiptId?:str
   // worker's clock. Chunked cohorts keep the original bounded job contracts.
   const originalOperations=operations.filter(operation=>{const resource=resources.find(row=>row.id===operation.resourceId);return !resource?.redactedAt||operation.createdAt<=resource.redactedAt;});
   const version=[...writes.map(row=>`${row.id}:${row.observedAcceptedAt?.toISOString()??""}`),...originalOperations.map(row=>`${row.id}:${row.providerAcceptedAt?.toISOString()??""}`)].sort().join("|");
-  const {createHash}=await import("node:crypto");const evidence=createHash("sha256").update(version).digest("hex");
+  const {createHash}=await import("node:crypto");const providerVersion=await db().transaction(tx=>originalProviderEvidenceVersion(tx,{receiptIds:ids,resourceIds}));const hash=createHash("sha256").update(version);if(providerVersion)hash.update(providerVersion);const evidence=hash.digest("hex");
   const sample=rows[0]!;
   const total=Math.max(ids.length,resourceIds.length);
   for(let offset=0;offset<total;offset+=500){
@@ -57,11 +63,29 @@ export async function originalMediaErasureRequests(tx:Tx,ids:string[],resourceId
  if(!ids.length&&!resourceIds.length)return[];
  return tx.select().from(mediaErasureCohorts).where(or(ids.length?inArray(mediaErasureCohorts.objectReceiptId,ids):undefined,resourceIds.length?inArray(mediaErasureCohorts.multipartResourceId,resourceIds):undefined));
 }
+export async function captureOriginalMediaReceiptDescendants(receiptId:string):Promise<void>{
+ await db().transaction(async tx=>{
+  await lockTransferInventory(tx);
+  const[receipt]=await tx.select({id:mediaObjectWrites.id,reservationId:mediaObjectWrites.originalReservationId}).from(mediaObjectWrites).where(eq(mediaObjectWrites.id,receiptId)).limit(1);
+  if(!receipt?.reservationId)return;
+  const originals=await tx.select({id:mediaObjectWrites.id}).from(mediaObjectWrites).where(eq(mediaObjectWrites.originalReservationId,receipt.reservationId));
+  const scopes=await originalMediaErasureRequests(tx,originals.map(row=>row.id));
+  for(const scope of scopes){
+   if(scope.scope!=="media.storageOperations"&&scope.scope!=="media.multipartOperations")throw new Error("Unknown original media scope.");
+   await captureMediaErasureCohort(tx,scope.requestId,scope.scope,[receiptId]);
+  }
+ });
+}
 export async function objectCohortIds(tx:Tx,requestId:string,scope:string){return(await tx.select({id:mediaErasureCohorts.objectReceiptId}).from(mediaErasureCohorts).where(and(eq(mediaErasureCohorts.requestId,requestId),eq(mediaErasureCohorts.scope,scope)))).flatMap(row=>row.id?[row.id]:[]);}
 export async function mediaCohortPending(tx:Tx,requestId:string,scope:string):Promise<boolean>{
+ if(scope!=="media.storageOperations"&&scope!=="media.multipartOperations")throw new Error("Unknown original media scope.");
+ const[request]=await tx.select().from(dataRequests).where(eq(dataRequests.id,requestId)).limit(1);if(!request)throw new Error("Original media erasure request missing.");
+ if(await originalMediaScopePending(tx,requestId,scope,request.contactId))return true;
  const pending=await tx.select({id:mediaErasureCohorts.id}).from(mediaErasureCohorts)
   .leftJoin(mediaObjectWrites,eq(mediaObjectWrites.id,mediaErasureCohorts.objectReceiptId))
   .leftJoin(mediaMultipartResources,eq(mediaMultipartResources.id,mediaErasureCohorts.multipartResourceId))
   .where(and(eq(mediaErasureCohorts.requestId,requestId),eq(mediaErasureCohorts.scope,scope),or(and(isNotNull(mediaObjectWrites.id),or(isNull(mediaObjectWrites.redactedAt),inArray(mediaObjectWrites.state,["unverified","started","unknown"]))),and(isNotNull(mediaMultipartResources.id),or(isNull(mediaMultipartResources.redactedAt),isNull(mediaMultipartResources.retiredAt),inArray(mediaMultipartResources.state,["unverified","creating","open","completing","aborting","unknown"])))))).limit(1);
- return Boolean(pending.length);
+ if(pending.length)return true;
+ const original=await tx.select().from(mediaErasureCohorts).where(and(eq(mediaErasureCohorts.requestId,requestId),eq(mediaErasureCohorts.scope,scope)));
+ return originalProviderEvidencePending(tx,{receiptIds:original.flatMap(row=>row.objectReceiptId?[row.objectReceiptId]:[]),resourceIds:original.flatMap(row=>row.multipartResourceId?[row.multipartResourceId]:[])});
 }

@@ -62,3 +62,34 @@ or backlog.
 - Commits are signed off (`git commit -s`) — DCO, no CLA.
 - `main` is protected: PR + green checks only.
 - Release notes are religion: every user-facing change gets a note.
+- **Before editing a file, check whether a `deploy/*.json` source record pins
+  its sha256:** `node scripts/pinned-source-records.mjs <path>`. Those records form reversal ladders
+  that several suites walk, so a correct one-line repair can redden
+  `controlled-safe-response-composition87` or `tests/core/migrate-boundary.test.ts`
+  with a failure that names a hash and not the file that moved. Move the
+  records in the same commit. **Read the LIVE count, not the list.** MASTER.md
+  has 3 live pins among 366 stale references; scrolling a long list of `STALE`
+  rows and concluding "these are all historical, so editing is free" is how
+  its live pin was broken on 2026-11-18 — after this tool had already reported
+  it. The script now prints live pins first and ends with a count, because
+  stale pins are history and a matching pin is a tripwire. Three cautions it
+  prints and cannot enforce: a sha that looks replaceable may be a historical
+  blob sha at a pinned commit (verify with
+  `git show <commit>:<path> | sha256sum`); a record declaring
+  `archivalEncoding` escapes every period as `\u002e`, so re-serializing it
+  with a JSON writer silently discards that — edit those as text, and check
+  any record round-trips byte-identically before rewriting it; and the script
+  reads `deploy/*.json` only, so a sha hardcoded in a test file is invisible
+  to it.
+- **A pin does not have to sit beside a `path`.** The script used to collect
+  shas only from record objects carrying `path: <your file>`, so
+  `merchant-fee-xid-epoch87.manifest.json` — which pins
+  `predecessors: { "0085": <sha>, "0086": <sha> }`, keyed by migration number,
+  and whose test hashes `db/migrations/0086_*.sql` straight against it —
+  was reported as *"named, but no sha256 on that path"*. The 0086 boundary
+  repair on 2026-11-18 was therefore made believing 0086 had **no** live pin,
+  and reddened that suite in a full run hours later. It now also reports any
+  sha256 anywhere in a record that equals the file's current digest, because a
+  digest of this content is a pin on this content whatever field holds it. The
+  deeper rule: targeted suites confirm what you expected to touch, and only the
+  whole suite finds what you did not.

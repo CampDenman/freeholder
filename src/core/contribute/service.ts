@@ -5,6 +5,7 @@
 // Admin, HTTP and MCP all call these. Spoke submit never fetches; delivery is
 // a job. Hub ingest is public and write-only, and is 404 until hub mode is on.
 import { createHash, timingSafeEqual } from "node:crypto";
+import { env } from "@/core/env";
 import { z } from "zod";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
@@ -296,6 +297,45 @@ async function recordEvent(
   });
 }
 
+/**
+ * Which hosts a contributed code link may point at (§4.8, C1.33).
+ *
+ * This is an allowlist and has to stay one. `externalUrl` arrives from an
+ * outside contributor and is rendered to a reviewer, so an open field is a
+ * phishing surface rather than a convenience. `github.com` is always accepted
+ * because §4.8 keeps GitHub as the upstream merge path; an instance whose code
+ * lives on its own forge adds that host through `FREEHOLDER_CODE_LINK_HOSTS`
+ * instead of being unable to cite the repository the work was actually done in.
+ */
+export function codeLinkHosts(value = env().FREEHOLDER_CODE_LINK_HOSTS): string[] {
+  const configured = (value ?? "")
+    .split(",")
+    .map((host) => host.trim().toLowerCase())
+    .filter(Boolean);
+  return ["github.com", "www.github.com", ...configured];
+}
+
+/**
+ * The host is compared against a parsed URL rather than the raw string. The
+ * prefix test this replaces was correct — it anchored on a trailing slash, so
+ * `https://github.com.example.test/` did not pass it — but that correctness
+ * was incidental to the slash, and the rule now has to hold for hosts an
+ * operator supplies rather than one literal written here. Parsing also settles
+ * userinfo (`https://github.com@evil.test/`) and scheme explicitly instead of
+ * relying on a reader to notice that the pattern covers them.
+ */
+export function isAcceptedCodeLink(value: string, hosts = codeLinkHosts()): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:") return false;
+  if (url.username || url.password) return false;
+  return hosts.includes(url.hostname.toLowerCase());
+}
+
 const composeInput = z.object({
   kind: z.union([kindSchema, z.literal("security")]),
   title: titleSchema,
@@ -308,8 +348,8 @@ const composeInput = z.object({
     .trim()
     .url()
     .max(2000)
-    .refine((value) => /^https:\/\/(www\.)?github\.com\//i.test(value), {
-      message: "A code link has to be an https://github.com/ address.",
+    .refine((value) => isAcceptedCodeLink(value), {
+      message: "A code link has to be an https:// address on an accepted host.",
     })
     .optional(),
   includeDoctor: z.boolean().default(false),

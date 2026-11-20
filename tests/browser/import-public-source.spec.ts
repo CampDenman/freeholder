@@ -50,7 +50,7 @@ test.describe("public source import owner form (C3.22)", () => {
       await expect(form.getByRole("button")).toBeFocused();
       await page.keyboard.press("Enter");
       await expect(form.getByRole("alert")).toBeVisible();
-      await expect(form.getByRole("alert")).toContainText("public HTTP or HTTPS source URL");
+      await expect(form.getByRole("alert")).toContainText("That source could not be read. Check its public URL and try again.");
       const [saved] = await db().select().from(importRuns).where(eq(importRuns.id, id));
       expect(saved).toMatchObject({ status: "discover", preview: {}, counts: {} });
       await context.close();

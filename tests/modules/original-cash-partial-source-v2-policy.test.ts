@@ -1,0 +1,13 @@
+// Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0
+// PREPARED/UNRUN. Economic domain is not current bank or loan authority.
+import {describe,expect,it} from "vitest";
+import {originalPartialAtomicEconomicTargets} from "@/modules/invoicing/original-cash-partial-source-v2-policy";
+import {merchantTaxDigest} from "@/modules/invoicing/merchant-tax-store";
+const big={receiptId:"00000000-0000-4000-8000-000000000001",paymentId:"00000000-0000-4000-8000-000000000011",amountMinor:4199,refundedMinor:0,feeMinor:400,feeReturnedMinor:0},tiny={receiptId:"00000000-0000-4000-8000-000000000002",paymentId:"00000000-0000-4000-8000-000000000012",amountMinor:1,refundedMinor:1,feeMinor:0,feeReturnedMinor:0};
+const targets=(resources:typeof big[])=>originalPartialAtomicEconomicTargets({principalMinor:4200,feeMinor:400,resources});
+describe("separate atomic partial-source economic epoch",()=>{
+ it("keeps original Fi400/current target399 stable across the genuine accepted one-cent fee return",()=>{const before=targets([big,tiny]),after=targets([{...big,feeReturnedMinor:1},tiny]);expect(after).toEqual(before);expect(after.resources[0]).toMatchObject({feeMinor:400,targetRetainedFeeMinor:399});expect(after.unassignedDutyMinor).toBe(0);});
+ it("retains real unassigned duty instead of moving a cent between physical receipt epochs",()=>{const before=targets([{...big,refundedMinor:2100},{...tiny,refundedMinor:0}]),after=targets([{...big,refundedMinor:2100,feeReturnedMinor:201},{...tiny,refundedMinor:0}]);expect(after).toEqual(before);expect(after.resources[0]).toMatchObject({feeMinor:400,targetRetainedFeeMinor:199});expect(after.wholeTargetFeeMinor).toBe(200);expect(after.unassignedDutyMinor).toBe(1);});
+ it("does not conceal over-returned/changed principal or actual original receipt identity",()=>{const normal=targets([big,tiny]);expect(merchantTaxDigest(targets([{...big,feeReturnedMinor:2},tiny]))).not.toBe(merchantTaxDigest(normal));expect(targets([{...big,feeReturnedMinor:2},tiny]).unassignedDutyMinor).toBe(1);expect(merchantTaxDigest(targets([big,{...tiny,refundedMinor:0}]))).not.toBe(merchantTaxDigest(normal));expect(merchantTaxDigest(targets([{...big,receiptId:"00000000-0000-4000-8000-000000000003"},tiny]))).not.toBe(merchantTaxDigest(normal));});
+ it("rejects duplicate physical owners while keeping the genuine current physical source a separate domain",()=>{expect(()=>targets([big,{...tiny,receiptId:big.receiptId}])).toThrow();const originalPhysical={actualReturnedFee:0,otherRaw:"kept"},laterPhysical={actualReturnedFee:1,otherRaw:"kept"};expect(merchantTaxDigest(originalPhysical)).not.toBe(merchantTaxDigest(laterPhysical));expect(targets([big,tiny])).toEqual(targets([{...big,feeReturnedMinor:1},tiny]));});
+});

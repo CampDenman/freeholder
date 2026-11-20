@@ -63,7 +63,8 @@ look broken.
 Stand up a new hosted Freeholder site with one command, ending in a one-click
 owner claim link. DigitalOcean first: a droplet running the
 [`digitalocean-droplet` recipe](https://github.com/CampDenman/freeholder/tree/main/deploy/digitalocean-droplet),
-with media and nightly backups in Spaces.
+with media and nightly backups in Spaces. New launches record the explicit
+`FREEHOLDER_STORAGE=spaces` choice; existing `s3` configurations remain valid.
 
 ```sh
 doctl auth init                    # or export DIGITALOCEAN_TOKEN in your own shell
@@ -76,6 +77,15 @@ gives you a `freeholder` command instead. Use `@next`: the package is in
 beta, so npm's `latest` tag does not carry it. The dry run reads your account
 and prints every step it would take and what it would cost each month, at
 DigitalOcean's own list price; it creates nothing.
+
+New storage requires a verified provider account and an immutable image with
+the complete original-storage initialization and recovery contract. The CLI
+uses GitHub CLI (`gh attestation verify`) to verify the actual published image,
+then checks its exact source profile before buying storage or starting the app.
+The complete profile remains unpublished while its consuming protocol is
+unfinished, so unsupported new launches stop before purchases. A dry run is a
+cost plan, not readiness acceptance. Existing retained legacy storage keeps
+its separate resume path and acquires no new-origin proof.
 
 **Launching with an AI agent.** An agent can run the dry run and show you the
 plan and cost. Run the real launch in your own terminal: it ends by printing
@@ -145,8 +155,11 @@ if it is empty, because media and backups are your data. If a deletion fails,
 the CLI says which resource to remove in the DigitalOcean console. **Spaces
 billing continues after `--destroy`**: the $5/month Spaces subscription (and
 any bucket kept because it holds files) is billed until you empty the
-buckets and cancel Spaces in the DigitalOcean console. The local
-`freeholder.env` is kept, so delete it yourself once you no longer need it.
+buckets and cancel Spaces in the DigitalOcean console. The complete local
+launch generation—including `freeholder.env` and storage-creation evidence—is
+moved to a non-overwriting `<name>.destroyed` archive, so delete that archive
+yourself once you no longer need it. A later launch may use the original name
+without changing the archived generation.
 
 Exit codes follow `freeholder update`: `0` done, `2` a step failed (the
 message says how to recover), `3` DigitalOcean could not be reached or

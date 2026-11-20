@@ -9,6 +9,7 @@ import {
   enforceImporterLimits,
   robotsDisallow,
   type ImporterDiscovery,
+  type ImporterLimits,
   type ImporterMapping,
 } from "./contract";
 import { parseWordpressExport } from "./wordpress";
@@ -108,11 +109,11 @@ export function parseWordpressWxr(xml: string): ParsedPage[] {
   }));
 }
 
-export function parseSitemap(xml: string): ImporterDiscovery["pages"] {
+export function parseSitemap(xml: string, limits: ImporterLimits = DEFAULT_IMPORTER_LIMITS): ImporterDiscovery["pages"] {
   const locs = [...xml.matchAll(/<loc>\s*([^<]+)\s*<\/loc>/gi)].map((match) =>
     decodeEntities(match[1] ?? "").trim(),
   );
-  enforceImporterLimits({ pages: locs.length, bytes: xml.length, depth: 1 });
+  enforceImporterLimits({ pages: locs.length, bytes: Buffer.byteLength(xml), depth: 1 }, limits);
   return locs.map((url) => ({ url, title: slugFromUrl(url) }));
 }
 

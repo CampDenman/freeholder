@@ -186,6 +186,9 @@ export const importSourceMedia = pgTable("import_source_media", {
   id: uuid("id").primaryKey().defaultRandom(),
   graphId: uuid("graph_id").notNull().references(() => importSourceGraphs.id, { onDelete: "cascade" }),
   key: text("key").notNull(),
+  // C3.47: distinct from the fetched file digest; captures the actual URL key
+  // before its unaccepted private projection can be minimized.
+  sourceKeyDigest: text("source_key_digest"),
   planned: jsonb("planned").notNull(),
   digest: text("digest"),
   bytes: integer("bytes"),

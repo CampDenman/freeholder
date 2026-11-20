@@ -1,62 +1,60 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+import {assertPhysicalStorageAbsence} from "./physical-absence";
+import {requireDurableMediaRetirementProof} from "./retirement-authority";
 // C1.12/C11.08: fresh human evidence resolves each original multipart outcome.
 import {createHash,randomUUID} from "node:crypto";
-import {and,asc,eq,inArray,isNull,isNotNull,ne} from "drizzle-orm";
+import {and,asc,eq,inArray,isNull,isNotNull,ne,sql} from "drizzle-orm";
 import {z} from "zod";
 import {boundStorage} from "@/adapters/storage";
-import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
-import {actorString,defineOrchestratedService,hasModuleAccess,ServiceError,type Actor,type Tx} from "@/core/service";
+import {actorString,defineOrchestratedService,ServiceError} from "@/core/service";
 import {defineMediaService as defineService} from "./guarded-service";
 import {mediaUploads,mediaObjects} from "./schema";
 import {mediaObjectWrites} from "./write-schema";
 import {mediaMultipartOperations,mediaMultipartResources,MULTIPART_STATES} from "./multipart-schema";
-import {allowMediaReceiptWrites,deleteWithReceipt,lockObjectDigest,storageOperationsHeld,objectKeyDigest} from "./write-ledger";
+import {mediaStorageTransferCalls} from "./transfer-schema";
+import {allowMediaReceiptWrites,storageOperationsHeld} from "./write-ledger";
+import {deleteWithReceipt} from "./delete-with-receipt";
+import appliedRecoveryServices,{recoverExactOriginalMultipartComplete} from "./multipart-applied-recovery";
+import {confirmation,capture,fingerprint,human} from "./multipart-recovery-context";
+import {withOriginalMultipartInvocation} from "./provider-callers";
 import {abortOriginalMultipart,claimMultipartAbort} from "./multipart-operations";
 import {captureMediaErasureCohort,originalMediaErasureRequests,reconcileMediaErasureCohorts} from "./erasure-cohorts";
 
-type Resource=typeof mediaMultipartResources.$inferSelect;
-type Operation=typeof mediaMultipartOperations.$inferSelect;
+import {sealOriginalMultipartRetirement} from "./multipart-retirement-certificate";
+import {readRetainedOriginalMultipartIdentity} from "./multipart-retained-identity";
 const digest=z.string().regex(/^[a-f0-9]{64}$/),date=z.date();
 const resourceRow=z.object({id:z.uuid(),uploadId:z.uuid(),key:z.string(),namespace:digest.nullable(),providerUploadId:z.string().nullable(),state:z.enum(MULTIPART_STATES),expectedBytes:z.number(),contentType:z.string(),objectReceiptId:z.uuid().nullable(),retiredAt:date.nullable(),updatedAt:date});
-const operationRow=z.object({id:z.uuid(),kind:z.enum(["create","complete","abort"]),state:z.string(),providerAcceptedAt:date.nullable(),updatedAt:date});
-const confirmation=z.object({resourceId:z.uuid(),operationId:z.uuid().optional(),expectedWitness:digest,originalNamespace:digest,providerUploadId:z.string().min(1).max(4096).optional(),
- originalKey:z.string().min(1).max(2048).optional(),
- action:z.enum(["verify_original","applied","not_applied","cleanup"]),sha256:digest.optional(),bytes:z.number().int().nonnegative().max(5*1024**3).optional(),
- providerFinalReference:z.string().trim().min(8).max(300),providerEvidence:z.string().trim().min(20).max(2000),stoppedWriterEvidence:z.string().trim().min(20).max(2000),confirmation:z.literal("ORIGINAL MULTIPART RESOURCE CONFIRMED")});
+const operationRow=z.object({id:z.uuid(),kind:z.enum(["create","complete","abort","sign"]),state:z.string(),providerAcceptedAt:date.nullable(),updatedAt:date});
+
 const proof=z.object({state:z.enum(["open","absent","object"]),providerUploadId:z.string().nullable(),sha256:digest.optional(),bytes:z.number().int().nonnegative().optional()});
-function human(actor:Actor){if(actor.kind!=="user"||actor.keyScopes||!hasModuleAccess(actor,"media","manage"))throw new ServiceError("permission","Sign in as a person with permission to manage original upload recovery.");}
-function fingerprint(resource:Resource,operation:Operation|null){return createHash("sha256").update(JSON.stringify({resource,operation})).digest("hex");}
-async function capture(tx:Tx,input:z.infer<typeof confirmation>){
- await lockContactIdentityForRead(tx);
- const[identity]=await tx.select({digest:mediaMultipartResources.keyDigest}).from(mediaMultipartResources).where(eq(mediaMultipartResources.id,input.resourceId)).limit(1);
- if(!identity)throw new ServiceError("not_found","The original multipart resource is unavailable.");
- await lockObjectDigest(tx,identity.digest);
- const[resource]=await tx.select().from(mediaMultipartResources).where(eq(mediaMultipartResources.id,input.resourceId)).limit(1).for("update");
- const operation=input.operationId?(await tx.select().from(mediaMultipartOperations).where(and(eq(mediaMultipartOperations.id,input.operationId),eq(mediaMultipartOperations.resourceId,input.resourceId))).limit(1).for("update"))[0]??null:null;
- if(!resource||(input.operationId&&!operation)||fingerprint(resource,operation)!==input.expectedWitness)throw new ServiceError("conflict","The original upload evidence changed. Reload it before reviewing the outcome.");
- const key=resource.redactedAt?input.originalKey:resource.key;
- if(!key||(input.originalKey&&input.originalKey!==key)||objectKeyDigest(key)!==resource.keyDigest||/[\u0000-\u001f]/.test(key))throw new ServiceError("validation","Restore the exact original object key and verify its immutable digest before recovery.");
- if(resource.namespace&&resource.namespace!==input.originalNamespace)throw new ServiceError("conflict","Restore this upload's original storage resource; its namespace cannot be replaced.");
- if(input.providerUploadId&&resource.providerUploadId&&resource.providerUploadId!==input.providerUploadId)throw new ServiceError("conflict","The evidence names a different original provider upload.");
- if(input.action==="not_applied"&&operation?.providerAcceptedAt)throw new ServiceError("conflict","A recorded positive provider acknowledgement cannot be marked unapplied.");
- return{resource,operation,key};
-}
+
 export const listMultipartOperations=defineService({
  name:"media.listMultipartOperations",summary:"Inspect original upload resources and unresolved multipart calls.",kind:"query",permission:"scoped",agentCallable:false,
- input:z.object({limit:z.number().int().min(1).max(100).default(25)}),output:z.object({rows:z.array(z.object({resource:resourceRow,operation:operationRow.nullable(),witness:digest,sha256:digest.nullable(),bytes:z.number().nullable()}))}),
+ input:z.object({limit:z.number().int().min(1).max(100).default(25)}),output:z.object({rows:z.array(z.object({resource:resourceRow,operation:operationRow.nullable(),withheld:z.boolean(),witness:digest,sha256:digest.nullable(),bytes:z.number().nullable()}))}),
  handler:async(input,ctx)=>{
   human(ctx.actor);
   const resources=await ctx.tx.select().from(mediaMultipartResources).orderBy(asc(mediaMultipartResources.createdAt),asc(mediaMultipartResources.id)).limit(500);
   const rows=[];
   for(const resource of resources){
    const operations=await ctx.tx.select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.resourceId,resource.id)).orderBy(asc(mediaMultipartOperations.createdAt),asc(mediaMultipartOperations.id));
-   const uncertain=operations.filter(row=>["started","unknown"].includes(row.state));
+   const physical=operations.length?await ctx.tx.select({operationId:mediaStorageTransferCalls.multipartOperationId,state:mediaStorageTransferCalls.state,returnedAt:mediaStorageTransferCalls.returnedAt}).from(mediaStorageTransferCalls).where(inArray(mediaStorageTransferCalls.multipartOperationId,operations.map(row=>row.id))):[];
+   const uncertain=operations.filter(row=>["started","unknown"].includes(row.state)||row.kind==="sign"&&row.state==="accepted"&&!resource.retiredAt||physical.some(call=>call.operationId===row.id&&(call.state==="admitted"||call.state==="unknown"||!call.returnedAt)));
+   if(resource.state==="unknown"){
+    const first=await readRetainedOriginalMultipartIdentity(ctx.tx,resource.id);
+    if(first.state==="proven"){
+     const abort=operations.find(row=>row.id===first.identity.retirement.operationId&&row.kind==="abort");
+     if(abort&&!uncertain.some(row=>row.id===abort.id)){
+      const[reviewable]=await ctx.tx.execute<{proven:boolean}>(sql`select freeholder_media_multipart_repeat_abort_context(${abort.id}::uuid) as proven`);
+      if(reviewable?.proven===true)uncertain.push(abort);
+     }
+    }
+   }
    const upload=(await ctx.tx.select({state:mediaUploads.state}).from(mediaUploads).where(eq(mediaUploads.id,resource.uploadId)).limit(1))[0];
    if(resource.redactedAt&&!uncertain.length&&resource.retiredAt)continue;
    if(!uncertain.length&&!['unverified','creating','completing','aborting','unknown'].includes(resource.state)&&!(upload&&upload.state!=="complete"&&(!resource.retiredAt||resource.objectReceiptId)))continue;
    const object=resource.objectReceiptId?(await ctx.tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id,resource.objectReceiptId)).limit(1))[0]:null;
-   for(const operation of uncertain.length?uncertain:[null]){rows.push({resource,operation,witness:fingerprint(resource,operation),sha256:object?.sha256??null,bytes:object?.bytes??resource.expectedBytes});if(rows.length>=input.limit)return{rows};}
+   for(const operation of uncertain.length?uncertain:[null]){rows.push({resource,operation,withheld:operations.some(row=>row.state==="withheld"),witness:fingerprint(resource,operation),sha256:object?.sha256??null,bytes:object?.bytes??resource.expectedBytes});if(rows.length>=input.limit)return{rows};}
   }
   return{rows};
  },
@@ -64,13 +62,13 @@ export const listMultipartOperations=defineService({
 const claimMultipartRecovery=defineService({
  name:"media.claimMultipartRecovery",summary:"Capture unchanged original upload evidence for human verification.",kind:"mutation",permission:"scoped",external:false,orchestratedBy:"media.reconcileMultipartOperation",agentCallable:false,stepUp:true,auditInputFields:["resourceId","action"],
  input:confirmation,output:z.object({resource:resourceRow,operation:operationRow.nullable()}),
- handler:async(input,ctx)=>{human(ctx.actor);const captured=await capture(ctx.tx,input);ctx.setSubject("media_multipart_resource",captured.resource.id);return captured;},
+ handler:async(input,ctx)=>{human(ctx.actor);const captured=await capture(ctx.tx,input);if(captured.operation?.kind==="sign")throw new ServiceError("conflict","Keep this upload for review. Its upload links require their original issuance and storage-consumption evidence; expiry or a browser response cannot complete recovery.");ctx.setSubject("media_multipart_resource",captured.resource.id);return captured;},
 });
 const applyMultipartRecovery=defineService({
  name:"media.applyMultipartRecovery",summary:"Record verified original multipart observations without rewriting intent.",kind:"mutation",permission:"scoped",external:false,orchestratedBy:"media.reconcileMultipartOperation",agentCallable:false,stepUp:true,auditInputFields:["resourceId","action"],
  input:confirmation.extend({proof,storageKind:z.enum(["s3","replit","local"]),storageLocation:z.record(z.string(),z.string())}),output:z.object({ok:z.literal(true),needsCleanup:z.boolean()}),
  handler:async(input,ctx)=>{
-  human(ctx.actor);const{resource,operation,key}=await capture(ctx.tx,input);await allowMediaReceiptWrites(ctx.tx);
+  human(ctx.actor);const{resource,operation,key}=await capture(ctx.tx,input);requireDurableMediaRetirementProof();await allowMediaReceiptWrites(ctx.tx);
   if(input.action!=="verify_original"&&!operation)throw new ServiceError("validation","Choose the exact original physical call before recording its outcome.");
   if(input.action==="verify_original"&&operation)throw new ServiceError("validation","Record this physical call's outcome explicitly.");
   if(input.action==="not_applied"&&input.proof.state==="object"){
@@ -129,13 +127,15 @@ const claimMultipartCleanup=defineService({
 });
 export const reconcileMultipartOperation=defineOrchestratedService({
  name:"media.reconcileMultipartOperation",summary:"Verify an original upload resource and record a fresh person's provider evidence.",kind:"mutation",permission:"scoped",agentCallable:false,stepUp:true,auditInputFields:["resourceId","action"],input:confirmation,output:z.object({ok:z.literal(true),needsCleanup:z.boolean()}),
- handler:async(input,actor)=>{
-  const original=await claimMultipartRecovery.call(input,actor),captured=await boundStorage();
+ handler:async(input,actor)=>withOriginalMultipartInvocation(async()=>{
+  const original=await claimMultipartRecovery.call(input,actor);
+  if(input.action==="applied"&&["create","complete"].includes(original.operation?.kind??"")||input.action==="cleanup"&&original.operation?.kind==="abort")return recoverExactOriginalMultipartComplete(input,actor);
+  requireDurableMediaRetirementProof();const captured=await boundStorage();
   const key=input.originalKey??original.resource.key;
   if(captured.binding.namespace!==input.originalNamespace||(original.resource.namespace&&original.resource.namespace!==captured.binding.namespace)||!captured.store.directMultipart?.inspect)throw new ServiceError("conflict","Restore the exact original private multipart resource before verification.");
   if(input.action==="cleanup"){
    const cleanup=await claimMultipartCleanup.call(input,actor);
-   if(cleanup.operationId)await abortOriginalMultipart(cleanup.uploadId,cleanup.operationId);
+   if(cleanup.operationId){const admission=await abortOriginalMultipart(cleanup.uploadId,cleanup.operationId);await sealOriginalMultipartRetirement.call(admission,{kind:"system"});}
    return{ok:true as const,needsCleanup:!await deleteWithReceipt(cleanup.key,captured)};
   }
   const multipart=captured.store.directMultipart;
@@ -160,8 +160,9 @@ export const reconcileMultipartOperation=defineOrchestratedService({
    if(bytes!==input.bytes||hash.digest("hex")!==input.sha256)throw new ServiceError("conflict","The original object does not match the verified content.");
    verified={state:"object",providerUploadId,sha256:input.sha256,bytes};
   }
+  if(verified.state==="absent")await assertPhysicalStorageAbsence(captured.store,key);
   const result=await applyMultipartRecovery.call({...input,proof:verified,storageKind:captured.binding.kind,storageLocation:{...captured.binding.location}},actor);
   await reconcileMediaErasureCohorts({multipartResourceId:input.resourceId}).catch(()=>{});return result;
- },
+ }),
 });
-export default[listMultipartOperations,claimMultipartRecovery,applyMultipartRecovery,claimMultipartCleanup,reconcileMultipartOperation];
+export default[sealOriginalMultipartRetirement,listMultipartOperations,claimMultipartRecovery,applyMultipartRecovery,claimMultipartCleanup,reconcileMultipartOperation,...appliedRecoveryServices];

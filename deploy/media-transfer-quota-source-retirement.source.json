@@ -1,0 +1,40 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_transfer_quota_source_retirement.v1",
+  "checklist": ["C1.12", "C10.32", "C11.08"],
+  "status": "Two independent source-retirement quota controls pass with genuine service/TCP handoff; four other native cohorts and provider acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "9527a3af7e6ad7b38e71b075f4221db393785f51aff52b5a1a889360df8aef23" },
+    { "path": "tests/helpers/media-transfer-provider.ts", "sha256": "bdac3d725dc9b54917f18a35b4ba016fdbcad6fb02c38988a06a431b5fb3857b" },
+    { "path": "tests/fixtures/media-transfer-quota-role.config.ts", "sha256": "07d0b874642a2bdf6894bea99afedff4c7ea88e80828f21e223c240e2196c168" },
+    { "path": "tests/fixtures/media-transfer-quota-role.probe.ts", "sha256": "65c898384d8027145aa66b2b26a48ab52d6886def9cf6c5a753fbfe618a574b4" },
+    { "path": "tests/core/media-transfer-quota-role-lifecycle.test.ts", "sha256": "b1a8912af431dec7be134a277c2f61158fbe307d925503326795b2b3b072b0e1" }
+  ],
+  "controls": {
+    "sourceOnlyRetirement": { "database": "media_quota_role_adopted_tcp_20261116", "producerPassed": 1, "nativePassed": 1, "failed": 0 },
+    "namedHold": { "database": "media_quota_role_retired_hold_20261116", "producerPassed": 1, "nativePassed": 1, "failed": 0 },
+    "tcpHandoff": "Opt-in synthetic state persists only object bytes, content types, ETags and original request tags; default provider tests are unchanged",
+    "coverage": ["real current target read, conditional source DELETE, absence and complete inventory", "source capacity zeroes while target charge and original receipt lineage remain live", "a genuine named hold refuses duplicate release before zero-row dedup"],
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "defaultProviderRegression": { "database": "media_transfer_provider_regression_20261116", "passed": 9, "failed": 0, "durationSeconds": 72.91 },
+    "guardsWeakened": false,
+    "productCodeChanged": false,
+    "remaining": "Four other independent native cohorts plus provider/operator acceptance remain open"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "9527a3af7e6ad7b38e71b075f4221db393785f51aff52b5a1a889360df8aef23",
+      "beforeSha256": "86da034e498f4770838e89f73b24ff3736249bd579453f6bdec65c416e08b9b5",
+      "continue": true,
+      "edits": [
+        {
+          "before": "provider/operator/checklist acceptance remain open.\n\n\nSource-only continuation, 2026-11-14 (C1.12/C11.08): the idle multipart",
+          "after": "provider/operator/checklist acceptance remain open.\n\nSource-retirement quota qualification2026-11-16 (C1.12/C10.32/C11.08): two\nfresh adopted cohorts preserve synthetic object bytes/revisions across genuine TCP\nproducer/native handoff. Conditional source cleanup releases only source capacity while\ntarget charge and original privacy lineage remain live; a newly named hold refuses\nduplicate old-source release before dedup. Both native controls pass. TypeScript and\nfocused lint pass. See `deploy/media-transfer-quota-source-retirement.source.json`.\nFour other native cohorts and actual provider/checklist acceptance remain open.\n\n\nSource-only continuation, 2026-11-14 (C1.12/C11.08): the idle multipart",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

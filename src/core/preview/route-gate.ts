@@ -5,11 +5,13 @@
 // proxy.ts's matcher skips robots.txt and sitemap.xml, so the sitemap index
 // checks the preview cookie itself. Same token, same key, same refusal.
 import { env } from "@/core/env";
+import type { Actor } from "@/core/service";
 import {
   PREVIEW_COOKIE,
   PREVIEW_REQUIRED_HTML,
   PREVIEW_ROBOTS_HEADER,
   previewEnabled,
+  previewGated,
   verifyPreviewToken,
 } from "./private-preview";
 
@@ -36,6 +38,17 @@ export function previewRefusal(request: Request): Response | null {
       "x-robots-tag": PREVIEW_ROBOTS_HEADER,
     },
   });
+}
+
+/** Credential exemptions end at a resolved actor, never at a caller-supplied header. */
+export function previewCredentialRefusal(request: Request, actor: Actor): Response | null {
+  if (!previewEnabled(env().FREEHOLDER_PREVIEW_KEY)) return null;
+  if (!previewGated(new URL(request.url).pathname, false, {
+    method: request.method,
+    hasStripeSignature: request.headers.has("stripe-signature"),
+  })) return null;
+  if (actor.kind !== "anonymous") return null;
+  return previewRefusal(request);
 }
 
 /** A preview's responses are for one viewer: never cached by a shared cache. */

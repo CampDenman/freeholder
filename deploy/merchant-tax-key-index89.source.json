@@ -1,0 +1,23 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "merchant_tax_key_index89.v1",
+  "checklist": ["C12.38", "C11.05"],
+  "status": "FORWARD SOURCE CONTINUATION; cached key order stores entry indexes, preserving exact canonical bytes; payment acceptance remains unqualified",
+  "files": [
+    {
+      "path": "src/modules/invoicing/merchant-tax-store.ts",
+      "beforeSha256": "d6d64c759170e7ba6a05efcf4fe9ea9a4f6aa621d97c11d58933fa5636feef3e",
+      "afterSha256": "9cb288221d0cd9637283aa5aac85b8f5370e99b9d8952c6c73d8715e60d0bec2",
+      "edits": [
+        {
+          "before": "const canonicalKeyOrders=new Map<string,readonly (readonly [string,string])[]>();\nfunction canonicalKeyOrder(entries:readonly (readonly [string,unknown])[]){\n const shape=JSON.stringify(entries.map(([key])=>key)),existing=canonicalKeyOrders.get(shape);if(existing)return existing;\n const order=entries.map(([key])=>[key,JSON.stringify(key)] as const).sort(([a],[b])=>a.localeCompare(b));\n if(canonicalKeyOrders.size>=2048)canonicalKeyOrders.clear();canonicalKeyOrders.set(shape,order);return order;\n}",
+          "after": "const canonicalKeyOrders=new Map<string,readonly (readonly [number,string])[]>();\nfunction canonicalKeyOrder(entries:readonly (readonly [string,unknown])[]){\n const shape=JSON.stringify(entries.map(([key])=>key)),existing=canonicalKeyOrders.get(shape);if(existing)return existing;\n const order=entries.map((_,index)=>[index,JSON.stringify(entries[index]?.[0])] as const).sort(([a],[b])=>entries[a]![0].localeCompare(entries[b]![0]));\n if(canonicalKeyOrders.size>=2048)canonicalKeyOrders.clear();canonicalKeyOrders.set(shape,order);return order;\n}"
+        },
+        {
+          "before": "  const entries=Object.entries(value as Record<string,unknown>),order=canonicalKeyOrder(entries),values=new Map(entries);let result=\"{\";let first=true;\n  for(const[key,encoded]of order){if(!first)result+=\",\";result+=`${encoded}:${canonical(values.get(key))}`;first=false;}",
+          "after": "  const entries=Object.entries(value as Record<string,unknown>),order=canonicalKeyOrder(entries);let result=\"{\";let first=true;\n  for(const[index,encoded]of order){if(!first)result+=\",\";result+=`${encoded}:${canonical(entries[index]?.[1])}`;first=false;}"
+        }
+      ]
+    }
+  ]
+}

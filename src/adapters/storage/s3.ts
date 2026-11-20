@@ -10,12 +10,20 @@
 // four operations used here, and install size is not a detail on a Replit box
 // or a small droplet (§14).
 import { AwsClient } from "aws4fetch";
+import {createS3MultipartProtocol} from "../../../scripts/media-multipart-protocol.mjs";
+import {createS3MultipartPartIssuer} from "../../../scripts/media-part-capability.mjs";
+import {createS3TransferProtocol,establishS3ConditionalAuthority} from "../../../scripts/media-transfer-protocol.mjs";
+import type {TransferRequestObserver} from "../../../scripts/media-transfer.mjs";
+import {verifyS3PhysicalAbsence} from "./physical-absence";
+import {storageNamespace} from "@/core/media/storage-quota";
 import type {
   MultipartPart,
   MultipartInspection,
+  MultipartObservation,
   SignedUrlOptions,
   StorageAdapter,
   StoredObject,
+  StoredObjectRevision,
 } from "@/adapters/storage/types";
 
 export interface S3Config {
@@ -79,6 +87,25 @@ export function createS3Storage(config: S3Config): StorageAdapter {
     retries: 0,
   });
 
+  /**
+   * The binding an observed physical write is allowed to use.
+   *
+   * `requireS3ConditionalAuthority` trusts an unversioned CREATE or
+   * current-key DELETE on AWS, whose `if-none-match: *` and `if-match`
+   * semantics are known, and on any other endpoint only once BOTH facts are
+   * established (passed beside the binding, never inside its `location`,
+   * which transfer-witness.ts parses strictly as evidence): that this endpoint
+   * was actually watched refusing a second
+   * create and a stale if-match, and that the bucket retains versions so a
+   * later regression cannot destroy what was there.
+   *
+   * Established once per adapter instance, lazily, and only for a non-AWS
+   * endpoint -- the probe writes and deletes a reserved key, which there is no
+   * reason to do against AWS. Versioning is read first because it costs
+   * nothing: a bucket that does not retain versions can never qualify, so
+   * probing it would write an object to earn a refusal it already had.
+   */
+
   const origin = config.endpoint.replace(/\/+$/, "");
   const storageBase = (() => {
     if (config.addressingStyle !== "virtual") return `${origin}/${config.bucket}`;
@@ -87,6 +114,10 @@ export function createS3Storage(config: S3Config): StorageAdapter {
     return target.toString().replace(/\/+$/, "");
   })();
   const objectUrl = (key: string) => `${storageBase}/${encodeURI(key)}`;
+  // One establisher, shared with createS3Store() in media-transfer.mjs, which
+  // reaches the same protocol by a different path. This used to be a private
+  // copy here, and the other path had none at all.
+  const conditionalAuthority = establishS3ConditionalAuthority({ client, url: objectUrl, endpoint: config.endpoint, bucket: config.bucket });
 
   const multipartUrl = (key: string, uploadId?: string, partNumber?: number) => {
     const target = new URL(objectUrl(key));
@@ -98,7 +129,9 @@ export function createS3Storage(config: S3Config): StorageAdapter {
     return target;
   };
 
-  async function inspectMultipart(key: string, uploadId: string): Promise<MultipartInspection> {
+  const accountedMultipart=(observer:TransferRequestObserver)=>createS3MultipartProtocol({client,binding:{kind:"s3",namespace:storageNamespace({id:"s3",endpoint:config.endpoint,bucket:config.bucket}),location:{endpoint:config.endpoint,bucket:config.bucket}},url:objectUrl,observer,retainXmlEvidence:true,requirePartChecksums:true});
+  async function inspectMultipart(key: string, uploadId: string, observation?:MultipartObservation): Promise<MultipartInspection> {
+    if(observation?.request)return accountedMultipart(observation.request).inspect(key,uploadId,observation.expectedParts);
     const parts: MultipartPart[] = [];
     let marker: string | undefined;
     for (let page = 0; page < 11; page++) {
@@ -121,13 +154,14 @@ export function createS3Storage(config: S3Config): StorageAdapter {
   }
 
   return {
-    id: "s3",
+    id: "s3",writeProtocol:"single-put-v1",
     isPublic: config.isPublic ?? false,
     // A public bucket would expose each unvalidated part/object before the
     // completion service can inspect or scan it. Direct upload is therefore a
     // private-bucket capability, not merely an S3 capability.
     directMultipart: config.isPublic ? undefined : {
       async create(key, contentType, observation) {
+        if(observation?.request)return accountedMultipart(observation.request).create(key,contentType,observation.onAccepted);
         const response = await client.fetch(multipartUrl(key), {
           method: "POST",
           headers: { "content-type": contentType },
@@ -143,7 +177,8 @@ export function createS3Storage(config: S3Config): StorageAdapter {
         return { uploadId };
       },
 
-      async signPart(key, uploadId, partNumber, expiresIn) {
+      async signPart(key, uploadId, partNumber, expiresIn, observation) {
+        if(observation?.request)return createS3MultipartPartIssuer({client,binding:{kind:"s3",namespace:storageNamespace({id:"s3",endpoint:config.endpoint,bucket:config.bucket}),location:{endpoint:config.endpoint,bucket:config.bucket}},url:objectUrl,observer:observation.request})({key,uploadId,partNumber,sha256:observation.sha256,bytes:observation.bytes,expiresAt:observation.expiresAt});
         const target = multipartUrl(key, uploadId, partNumber);
         target.searchParams.set(
           "X-Amz-Expires",
@@ -156,8 +191,8 @@ export function createS3Storage(config: S3Config): StorageAdapter {
         return { url: signed.url, method: "PUT" as const };
       },
 
-      async listParts(key, uploadId) {
-        const result = await inspectMultipart(key, uploadId);
+      async listParts(key, uploadId, observation) {
+        const result = await inspectMultipart(key, uploadId,observation);
         if (result.state === "absent") throw new Error("storage: the original multipart upload is no longer present");
         return result.parts;
       },
@@ -192,6 +227,7 @@ export function createS3Storage(config: S3Config): StorageAdapter {
       },
 
       async complete(key, uploadId, parts, observation) {
+        if(observation?.request)return accountedMultipart(observation.request).complete(key,uploadId,parts,observation.onAccepted);
         const body = `<CompleteMultipartUpload>${[...parts]
           .sort((a, b) => a.partNumber - b.partNumber)
           .map(
@@ -227,6 +263,7 @@ export function createS3Storage(config: S3Config): StorageAdapter {
       },
 
       async abort(key, uploadId, observation) {
+        if(observation?.request)return accountedMultipart(observation.request).abort(key,uploadId,observation.onAccepted);
         const response = await client.fetch(multipartUrl(key, uploadId), {
           method: "DELETE",
         });
@@ -240,7 +277,16 @@ export function createS3Storage(config: S3Config): StorageAdapter {
       },
     },
 
-    async put(key, body, contentType): Promise<StoredObject> {
+    async put(key, body, contentType, observation): Promise<StoredObject> {
+      if(observation?.request){
+        let originalRevision:StoredObjectRevision|undefined;
+        const request:TransferRequestObserver=(descriptor,operation)=>observation.request!(descriptor,async(notify,identity)=>operation(async facts=>{await notify(facts);if(facts.stage==="metadata"&&facts.revision)originalRevision=facts.revision;},identity));
+        const namespace=storageNamespace({id:"s3",endpoint:config.endpoint,bucket:config.bucket});
+        const protocol=createS3TransferProtocol({client,binding:{kind:"s3",namespace,location:{endpoint:config.endpoint,bucket:config.bucket}},url:objectUrl,observer:request,authority:await conditionalAuthority()});
+        await protocol.put(key,body,contentType);await observation.onAccepted?.({revision:originalRevision});
+        return{key,bytes:body.byteLength,contentType};
+      }
+
       // A Blob rather than the raw view: it carries the content type with it.
       const response = await client.fetch(objectUrl(key), {
         method: "PUT",
@@ -254,6 +300,10 @@ export function createS3Storage(config: S3Config): StorageAdapter {
           `storage: PUT ${key} failed (${response.status}) ${await response.text()}`,
         );
       }
+      const value=response.headers.get("etag"),versionId=response.headers.get("x-amz-version-id");
+      const valid=value!==null&&/^"[\x21\x23-\x7e\x80-\xff]+"$/.test(value)&&(!versionId||versionId.length<=4096&&!/[\u0000-\u001f\u007f]/.test(versionId));
+      await observation?.onAccepted?.({revision:valid?{kind:"etag",key,namespace:storageNamespace({id:"s3",endpoint:config.endpoint,bucket:config.bucket}),value,...(versionId?{versionId}:{})}:undefined});
+      // Missing revision stays explicit provenance debt; success is no retirement authority.
       return { key, bytes: body.byteLength, contentType };
     },
 
@@ -301,6 +351,7 @@ export function createS3Storage(config: S3Config): StorageAdapter {
       return responseChunks(response.body);
     },
 
+    verifyPhysicalAbsence:key=>verifyS3PhysicalAbsence(config,key),
     async delete(key): Promise<void> {
       const response = await client.fetch(objectUrl(key), {
         method: "DELETE",

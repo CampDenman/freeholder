@@ -26,6 +26,7 @@ export default defineModule({
       "subscription.expired",
       "subscription.dunning",
       "subscription.planChanged",
+      "subscription.prorationApplied",
     ],
     listens: {
       "invoice.paid": "onInvoicePaid",

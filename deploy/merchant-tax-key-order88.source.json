@@ -1,0 +1,22 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "merchant_tax_key_order88.v1",
+  "status": "FORWARD SOURCE CONTINUATION; caches only bounded canonical key order and preserves values, getters and locale-aware bytes; not performance acceptance",
+  "files": [
+    {
+      "path": "src/modules/invoicing/merchant-tax-store.ts",
+      "beforeSha256": "3f3be610773d454dd7b40d6150d3435eddbbb9ec557000947a844f38773f56c5",
+      "afterSha256": "d6d64c759170e7ba6a05efcf4fe9ea9a4f6aa621d97c11d58933fa5636feef3e",
+      "edits": [
+        {
+          "before": "import type {Tx} from \"@/core/service\";",
+          "after": "import type {Tx} from \"@/core/service\";\nconst canonicalKeyOrders=new Map<string,readonly (readonly [string,string])[]>();\nfunction canonicalKeyOrder(entries:readonly (readonly [string,unknown])[]){\n const shape=JSON.stringify(entries.map(([key])=>key)),existing=canonicalKeyOrders.get(shape);if(existing)return existing;\n const order=entries.map(([key])=>[key,JSON.stringify(key)] as const).sort(([a],[b])=>a.localeCompare(b));\n if(canonicalKeyOrders.size>=2048)canonicalKeyOrders.clear();canonicalKeyOrders.set(shape,order);return order;\n}"
+        },
+        {
+          "before": " if(value&&typeof value===\"object\"){\n  const entries=Object.entries(value as Record<string,unknown>).sort(([a],[b])=>a.localeCompare(b));let result=\"{\";let first=true;\n  for(const[key,item]of entries){if(!first)result+=\",\";result+=`${JSON.stringify(key)}:${canonical(item)}`;first=false;}\n  return`${result}}`;\n }",
+          "after": " if(value&&typeof value===\"object\"){\n  const entries=Object.entries(value as Record<string,unknown>),order=canonicalKeyOrder(entries),values=new Map(entries);let result=\"{\";let first=true;\n  for(const[key,encoded]of order){if(!first)result+=\",\";result+=`${encoded}:${canonical(values.get(key))}`;first=false;}\n  return`${result}}`;\n }"
+        }
+      ]
+    }
+  ]
+}

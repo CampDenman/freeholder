@@ -1,0 +1,122 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "master_status_continuation_20261117.v1",
+  "checklist": [
+    "C1.12",
+    "C11.17",
+    "C12.38"
+  ],
+  "status": "MASTER.md advanced past the recorded source-continuation head without a continuation entry: commit a2f8aaea (an explicitly unreviewed WIP snapshot) inserted the two §43 status paragraphs below between the `full-local-browser-20261116` paragraph and the `next-security-performance-20261116` paragraph, while the deploy records committed beside them still pin the predecessor a52835c139d0495be50650c3a9f067fb1227f2f4c5ad4fb90553168d6ecbefd3 as current. Every *-source test that reverses the MASTER.md ledger therefore stopped at the raw current bytes instead of the recorded head. This record carries the exact delta so the chain back to the last reviewed MASTER.md stays verifiable; it asserts nothing about the two qualifications the paragraphs describe, which remain the owning workstreams' to evidence.",
+  "productBehaviorChanged": false,
+  "unrecordedIn": "a2f8aaeaa532cfb8ed0dbd9f4ef7841e66e7a7c8",
+  "lastReviewedMaster": {
+    "commit": "e2b17318",
+    "sha256": "2f54ae40d1f2e1a3e54d89eb1b7686e3a61661ac0b700238e7a01edcf64a5819"
+  },
+  "artifacts": [
+    {
+      "path": "MASTER.md",
+      "sha256": "42ae9b506549fd66483d275bd4fd6ea81b94687b49c31feb1d5b83f847c2fb44"
+    }
+  ],
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "42ae9b506549fd66483d275bd4fd6ea81b94687b49c31feb1d5b83f847c2fb44",
+      "beforeSha256": "a52835c139d0495be50650c3a9f067fb1227f2f4c5ad4fb90553168d6ecbefd3",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  acceptance remain open; no C row closes.\n  Framework security/performance qualification2026-11-16",
+          "after": "  acceptance remain open; no C row closes.\n  Complete-browser failure audit and repair2026-11-16 (C1.08/C1.12/C3.22/C5.19/C9.38/\n  C11.17/C12.23/C12.38): the actual189-case run was NOT GREEN:156 passed,31 failed,\n  2 skipped. Nine raw privacy fixtures now use the required identity lock; the member\n  upload fixture restores real contact ownership; archive cleanup has a cycle-free\n  guarded deletion entry; the legacy merchant trial declares its actual scope version.\n  Focused privacy/import PASS13/13 and archive/member/trial PASS9/9. All35 selected\n  media controls pass after isolating database-resetting files. The real pending-membership\n  parallel-read fix PASSes native1/1 and its production-browser control. Genuine signed\n  return-callback controls PASS2/2 and all8 localized return journeys PASS. Every original\n  failure now has a focused pass, but the complete source/browser reruns remain required.\n  See `deploy/browser-failure-repairs-20261116.source.json`; no C row closes.\n  Native media-isolation repair2026-11-16 (C1.12/C11.17): three full-source attempts\n  timed out; the second exposed eight capture failures after an erasure case stalled.\n  The third passed capture/subscription-billing before the harness deadline. The stalled\n  case generated3182 entries from accumulated shared local media. Vitest\n  now supplies a unique temporary media root per run unless explicitly configured.\n  The complete capture file PASSes17/17 under that ordinary configuration, including\n  its concurrent-upload control. The final full source/browser reruns remain open.\n  Framework security/performance qualification2026-11-16",
+          "occurrences": 1
+        },
+        {
+          "before": "  (patch without DCO refused; `externalUrl` GitHub-only; determination\n",
+          "after": "  (patch without DCO refused; `externalUrl` restricted to an allowlist of\n  hosts — `github.com` always, plus any host named in\n  `FREEHOLDER_CODE_LINK_HOSTS`, compared against a parsed URL so scheme,\n  userinfo and look-alike suffixes are settled explicitly\n  (`isAcceptedCodeLink`, proved by `tests/core/contribute-code-link.test.ts`);\n  it was GitHub-only until 2026-11-18, which left an instance keeping its code\n  on its own forge unable to cite the repository the work was done in;\n  determination\n",
+          "occurrences": 1
+        },
+        {
+          "before": "  forward-only commit ancestry via the public compare endpoint, a private\n",
+          "after": "  forward-only commit ancestry via the public compare endpoint,\n  with an optional root-configured `publisher` block (2026-11-18) for an\n  installation that publishes and signs its own images — all of\n  `image`/`cosign_key`/`compare_api` or none, a root-owned non-group-writable\n  key, `cosign verify --key` *instead of* the keyless identity rather than\n  beside it, and a Forgejo-shaped ancestry proof, since that API returns\n  `total_commits` with no `status` or `merge_base_commit` and the upstream\n  reading would refuse every candidate while looking like a bad signature\n  (`validate_publisher`/`verify_forward_on_forge`, 16 added drills in\n  `tests/host/test_docker_updater.py`, 90 passing); its publishing half is\n  `.forgejo/workflows/publish-image.yml`, which builds at an exact revision,\n  refuses one with no successful forge CI run, signs the pushed digest and\n  verifies that signature against the public half in the same run, a private\n",
+          "occurrences": 1
+        },
+        {
+          "before": "  artifact (matrix gate), image-swap rollback refuses without a\n  `ghcr.io/campdenman/freeholder@sha256:<64>` digest\n",
+          "after": "  artifact (matrix gate), image-swap rollback refuses without an immutable\n  `<repository>@sha256:<64>` digest, where `<repository>` is\n  `FREEHOLDER_IMAGE_REPOSITORY` and defaults to\n  `ghcr.io/campdenman/freeholder`\n",
+          "occurrences": 1
+        },
+        {
+          "before": "  refusal asserted in `tests/core/update-targets.test.ts` (38 tests) and, for\n  the gate script, exercised against the real recipes. **F09** SPDX headers on\n",
+          "after": "  refusal asserted in `tests/core/update-targets.test.ts` (41 tests) and, for\n  the gate script, exercised against the real recipes. The repository half of\n  that pin became `FREEHOLDER_IMAGE_REPOSITORY` on 2026-11-18: the safety\n  property is the **digest**, never which registry serves it, and hardcoding\n  `ghcr.io/campdenman/freeholder` meant an instance serving its own images\n  from a mirror or its own forge could not roll back at all — the deployments\n  most likely to need one. `isImmutableImageDigest` keeps refusing a bare\n  repository, a moving tag, and a short, over-long, upper-case or non-hex\n  digest, each asserted directly. **F09** SPDX headers on\n",
+          "occurrences": 1
+        },
+        {
+          "before": "",
+          "after": "Migration boundary guard correction (2026-11-18, C11.10/C11.08/C1.08): the\nexact first guard of boundary86 no longer censuses pg_stat_activity, and the\nwhole first guard is now **2599 bytes** (be98ff6d...), not the 2038 bytes\npinned above. The census refused the rollout whenever any other client backend\nwas connected to the target database. It could not deliver that property -- a\nbackend may arrive the moment after it passes, which the guard's own header\nconceded while requiring it -- and it made every packaged deploy unbootable:\nFreeholder applies migrations in-process at boot while the web server is\nalready answering readiness probes, so the migrating instance's own pool was\nalways \"another client\". The failure was not a refused write but an instance\nthat never became ready, reported as `migration unavailable (Error)` with\nnothing named, because the driver wraps the server error and the readiness\ndiscriminator read only the outermost code. Both failure reporters now read a\nbounded code from the cause chain, never a message. What remains is the control\nthat holds: LOCK TABLE ... IN ACCESS EXCLUSIVE MODE NOWAIT over the nine\nsubscription_controlled_* tables, which conflicts with every lock mode and so\nrefuses the instant another session holds any lock on them, plus the\nprepared-transaction check for its named error. Two PostgreSQL proofs replace\nthe single census proof: an idle target-database client no longer blocks the\nrollout, and a client genuinely holding a lock on those tables is refused with\n55P03. External closed-set OS/runtime drain remains the operator's practice for\na multi-replica estate; it is no longer asserted by counting connections.\nC11.10/C11.08/C1.08 and stable acceptance stay open.\n\n",
+          "occurrences": 1
+        },
+        {
+          "before": "",
+          "after": "  Non-AWS conditional authority2026-11-18 (C1.12/C11.08): an observed physical\n  CREATE or current-key DELETE was trusted only on an `*.amazonaws.com`\n  endpoint, because `if-none-match: *` IS the create-only guarantee and\n  `if-match` the delete one, and a provider that accepts and ignores either\n  answers \"created\" for a write that landed on a live key. That fail-closed\n  rule left every other S3-compatible store unusable for observed writes --\n  including the recipe gate's own fixture, which is why the entries above\n  reached for \"genuine synthetic AWS-to-TCP transport\" rather than a real\n  endpoint, and why the demo seed refused with `conditional_authority` the\n  first time that gate ran on this branch. Such an endpoint is now trusted\n  once BOTH facts are established at setup and carried on the binding:\n  `proveS3ConditionalSemantics` watched this endpoint refuse a second create\n  and a stale `if-match`, and the bucket reports versioning Enabled so a later\n  provider regression writes a new version instead of destroying one. Neither\n  alone suffices; both absent, the endpoint stays fail-closed exactly as\n  before, and the refusal now names which fact is missing. AWS is unchanged and\n  is never probed. The recipe gate enables and reads back bucket versioning in\n  its own setup step, so a store that cannot retain versions fails there rather\n  than inside Freeholder. No provider-account, hosted or C-item acceptance\n  follows: this is the conditional-semantics half the earlier entries recorded\n  as pending, not storage acceptance.\n",
+          "occurrences": 1
+        },
+        {
+          "before": "| Storage | **S3-compatible adapter** | Replit Object Storage / DO Spaces / R2 / MinIO |",
+          "after": "| Storage | **S3-compatible adapter** | Replit Object Storage / DO Spaces / R2 / any S3-compatible endpoint that passes `scripts/s3-provider-probe.mjs` |",
+          "occurrences": 1
+        },
+        {
+          "before": "| Styling | **Tailwind + CSS logical properties** | RTL-ready from day one |\n| i18n | **ICU MessageFormat catalogs** (`/locales/*.json`) + `EntityTranslation` table | Per §4.9 |",
+          "after": "| Styling | **Tailwind + CSS logical properties** | RTL-ready from day one |\n**Storage providers are qualified by behaviour, not by name.** The recorded-write\npath (`putWithReceipt`, used by galleries, social ingest, sealed member blobs,\ncrawl imports and Doctor's `storage.roundTrip`) writes with `if-none-match: *`\nand deletes with `if-match`, and refuses an endpoint that accepts either and\nignores it. Measured 2026-11-18: SeaweedFS answered `204` to a stale `if-match`\nDELETE and destroyed the object, so \"S3-compatible\" cannot be taken on trust.\nAWS is trusted by name; every other endpoint is probed once at setup.\nVersioning is recorded as evidence, not required. MinIO is untested here, not\nrejected -- its image is no longer anonymously pullable, so we could not measure\nit; run the probe against your own instance.\n\n| i18n | **ICU MessageFormat catalogs** (`/locales/*.json`) + `EntityTranslation` table | Per §4.9 |",
+          "occurrences": 1
+        },
+        {
+          "before": "- `npx create-freeholder` (Apache-2.0) scaffolds/forks for Railway, Render, DO App Platform, and bare Docker (`Dockerfile` + `compose.yml` with PG + MinIO for full self-host).",
+          "after": "- `npx create-freeholder` (Apache-2.0) scaffolds/forks for Railway, Render, DO App Platform, and bare Docker (`Dockerfile` + `compose.yml` with PG + an S3-compatible store for full self-host).",
+          "occurrences": 1
+        },
+        {
+          "before": "- CI runs a **recipe validation matrix**: for each Tier 1–2 recipe, boot the app with that recipe's config against ephemeral PG + MinIO, run doctor, run the smoke suite. Recipes that rot get flagged automatically, not discovered by frustrated users.",
+          "after": "- CI runs a **recipe validation matrix**: for each Tier 1–2 recipe, boot the app with that recipe's config against ephemeral PG + S3-compatible storage, run doctor, run the smoke suite. Recipes that rot get flagged automatically, not discovered by frustrated users.",
+          "occurrences": 1
+        },
+        {
+          "before": "  PostgreSQL and MinIO, claims the seeded instance and runs canonical Doctor.",
+          "after": "  PostgreSQL and S3-compatible storage, claims the seeded instance and runs canonical Doctor.",
+          "occurrences": 1
+        },
+        {
+          "before": "  against PostgreSQL/MinIO and runs the authenticated canonical Doctor in CI.",
+          "after": "  against PostgreSQL/S3-compatible storage and runs the authenticated canonical Doctor in CI.",
+          "occurrences": 1
+        },
+        {
+          "before": "Versioning is recorded as evidence, not required. MinIO is untested here, not\nrejected -- its image is no longer anonymously pullable, so we could not measure\nit; run the probe against your own instance.",
+          "after": "Versioning is recorded as evidence, not required for that probe. MinIO is\nuntested here, not rejected -- its image is no longer anonymously pullable, so we\ncould not measure it; run the probe against your own instance.\n\nSeparately, and this is a harder requirement than the probe: proving an erasure\nneeds the provider to ENUMERATE versions, because that listing is how Freeholder\nshows no old bytes remain. A provider's own claim that it keeps no versions is\nnot evidence -- `tests/core/media-original-retirement-lifecycle.test.ts` holds a\nprovider that reports versioning disabled and retains the bytes anyway -- so a\nstore which cannot answer a versions listing cannot be used for erasure-proof\nmedia, and is refused. adobe/s3mock is such a store, which is why the recipe\ngate's S3 target does not yet pass.",
+          "occurrences": 1
+        },
+        {
+          "before": "ignores it. Measured 2026-11-18: SeaweedFS answered `204` to a stale `if-match`\nDELETE and destroyed the object, so \"S3-compatible\" cannot be taken on trust.\nAWS is trusted by name; every other endpoint is probed once at setup.\nVersioning is recorded as evidence, not required for that probe. MinIO is\nuntested here, not rejected -- its image is no longer anonymously pullable, so we\ncould not measure it; run the probe against your own instance.\n\nSeparately, and this is a harder requirement than the probe: proving an erasure\nneeds the provider to ENUMERATE versions, because that listing is how Freeholder\nshows no old bytes remain. A provider's own claim that it keeps no versions is\nnot evidence -- `tests/core/media-original-retirement-lifecycle.test.ts` holds a\nprovider that reports versioning disabled and retains the bytes anyway -- so a\nstore which cannot answer a versions listing cannot be used for erasure-proof\nmedia, and is refused. adobe/s3mock is such a store, which is why the recipe\ngate's S3 target does not yet pass.",
+          "after": "ignores it. Measured 2026-11-18 and 2026-11-19 across ten S3-compatible stores\nrun locally: FOUR of them -- SeaweedFS, Zenko CloudServer, Garage and Ceph RADOS\nGateway, which runs real production clusters -- answered `204` to a stale\n`if-match` DELETE and destroyed the object. A conditional DELETE is the scarce\nguarantee, not version enumeration: `if-match` on DeleteObject is a recent S3\naddition, so \"S3-compatible\" cannot be taken on trust and a trust list keyed on\nreputation would have admitted all four. AWS is trusted by name; every other\nendpoint is probed once at setup.\nVersioning is recorded as evidence, not required for that probe. MinIO is\nuntested here, not rejected -- its image is no longer anonymously pullable from\nDocker Hub, quay.io or Chainguard, so we could not measure it; run the probe\nagainst your own instance. Measured conformant: AWS S3 and rustfs. Measured\nnon-conformant, with the question each one failed, in the table in\n`scripts/media-transfer-protocol.mjs`.\n\nSeparately, and this is a harder requirement than the probe: proving an erasure\nneeds the provider to ENUMERATE versions, because that listing is how Freeholder\nshows no old bytes remain. A provider's own claim that it keeps no versions is\nnot evidence -- `tests/core/media-original-retirement-lifecycle.test.ts` holds a\nprovider that reports versioning disabled and retains the bytes anyway -- so a\nstore which cannot answer a versions listing cannot be used for erasure-proof\nmedia, and is refused. Garage and s3proxy answer `501 NotImplemented` and are\nrefused on those grounds. adobe/s3mock is a narrower case that was mis-stated\nonce: it does retain and enumerate versions, with real version ids and delete\nmarkers, but wraps them in a `ListBucketResult` root instead of\n`ListVersionsResult`, which is indistinguishable from \"no versions exist\" --\nmeasured identically on 3.12.0, 4.12.4 and 5.2.3, so a long-standing upstream\ndefect rather than a regression. That defect is why the recipe gate's S3 target\nfailed, and the fix was a conformant fixture rather than a looser product: the\ngate now runs rustfs, asserts all four answers with\n`scripts/s3-provider-probe.mjs` before depending on them, and passes.",
+          "occurrences": 1
+        },
+        {
+          "before": "See `deploy/atomic-auxiliary-six-native-checkpoint-20261114.json`.\n",
+          "after": "See `deploy/atomic-auxiliary-six-native-checkpoint-20261114.json`.\n\nCORRECTION 2026-11-19, so the retained-180s statement above is not read as\nstanding. The per-case 180s limit still holds for every money suite EXCEPT\n`tests/modules/atomic-credit-fee-persistence84.test.ts`, whose deadline Tony\nraised to 300s on that date. Nothing regressed: the six cases above ran at\n135.24-173.87s, and after a measured optimisation this suite's worst case is\n116.9s on a developer box. It fails only on a GitHub-hosted runner, which is\n1.8x slower, putting that case at ~210s against the old ceiling. The cost of\nthe change is detection -- at 300s the suite catches roughly a 2x regression\nwhere 180s caught 4% -- so the per-service cost is instead reported on every\nrun by `atomic-credit-stage-profile89`, whose header carries the attribution.\nRaising it required re-anchoring twelve live pins across ten records, two of\nthem freezes (`atomic-credit-fee-partition84.freeze.json` and the\n`frozen.sha256` in `atomic-credit-fee-root-assembly-20261114.json`), which was\nauthorised rather than incidental. The narrative digest inside\n`controlled-safe-public-boundary88.source.json`'s replay chain is deliberately\nuntouched, because it records what was true then. If the payment path is ever\nbrought under ~100s on a developer box, restore 180s and re-freeze.\n",
+          "occurrences": 1
+        },
+        {
+          "before": "  their messages are safe against a compromised server.\n- [ ] **C12.30** Hash-match known abuse imagery on upload, once member",
+          "after": "  their messages are safe against a compromised server.\n- [ ] **C12.40** Renewal alerts: warn a member before a charge somebody else\n  is about to make. A `renewal-alerts` module, off by default, holding a\n  register of third-party subscriptions against the contact spine and one\n  daily look-ahead job on the pg-boss registry that sends a transactional\n  notice through the configured mail adapter. It is deliberately NOT\n  `modules/subscriptions`, which is the site's own billing: nothing here\n  charges anyone, holds money or integrates a payment provider, and the two\n  must not acquire a dependency on each other, so `requires` is core alone.\n  Three properties are design decisions rather than implementation details,\n  because the obvious build of this feature gets each of them wrong.\n  Suppression is a unique row per (subscription, renewal) rather than\n  arithmetic over a \"last alerted\" timestamp: a window derived from the\n  renewal date and the lead time is correct only near its middle, double-sends\n  or goes silent at the boundaries, and leaves nothing to point at when a\n  member asks whether they were told. The pass is one scheduled job rather\n  than an interval timer in the web process, which on an autoscaled deployment\n  runs only when traffic happens to wake an instance and fires again on every\n  boot. And a failed send is counted and returned rather than swallowed: a\n  pass that logs only when something succeeded writes no trace at all once the\n  mail route stops working, which is the failure mode a notification product\n  can least afford. Erasure deletes rather than anonymises, because a list of\n  what somebody pays for has no aggregate anyone else is entitled to and an\n  anonymised copy is residue rather than data. Source progress 2026-11-19:\n  schema, contact-merge and privacy registration, look-ahead job and message,\n  and now the member's own surface. Five services in\n  `src/modules/renewal-alerts/service.ts` — two scoped self-service reads and\n  three writes that resolve the contact from the session and scope their\n  `WHERE` by it, so no input reaches another member's register. The register\n  itself is a portal room registered through the C8.11 section registry\n  (`src/modules/renewal-alerts/portal.ts`), which means the list and record\n  pages are the ones every other room already uses rather than a hand-written\n  twin that could disagree with them; the registry has no create verb, so the\n  only bespoke screens are adding and correcting a charge, under\n  `app/portal/(account)/renewals/`. One optional field was added to\n  `PortalSection` for this — an `add` descriptor the room page renders —\n  because a register the member keeps themselves is the one room that needs a\n  way in, and every other room's records are made by the business. Strings\n  land in all four catalogues, and `packages/sdk/src/generated.ts` is\n  regenerated, so the five services reach the SDK, OpenAPI and MCP surfaces as\n  a committed artifact rather than a claim. Landing with\n  `db/migrations/0080_renewal_alerts.sql`,\n  `tests/modules/renewal-alerts.test.ts` (28),\n  `tests/core/merge-completeness.test.ts`, `registry-completeness`,\n  `i18n-gate` and `locale-quality` passing, typecheck clean across the\n  repository, `eslint .` clean repository-wide, and the licensing gate\n  OK; changeset `renewal-alerts.md`. **Still required to close:** a\n  database-backed test of the pass itself, which has not run yet because the\n  suite skips database-backed tests when no `TEST_DATABASE_URL` is set rather\n  than failing; a browser or accessibility test over the three new screens;\n  and one observed real delivery end to end. No alert has been delivered by\n  this code.\n\n- [ ] **C12.30** Hash-match known abuse imagery on upload, once member",
+          "occurrences": 1
+        },
+        {
+          "before": "  `db/migrations/0080_renewal_alerts.sql`,",
+          "after": "  `db/migrations/0111_renewal_alerts.sql` (renumbered from 0080 on this\n  integration branch, which already held a different 0080),",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

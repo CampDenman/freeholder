@@ -53,7 +53,7 @@ export const claimTrialSetupReconciliation=defineService({
 export const applyTrialSetupReconciliation=defineService({
  name:"subscriptions.applyTrialSetupReconciliation",auditInputFields:["dispatchId","outcome"],orchestratedBy:"subscriptions.reconcileTrialSetupDispatch",summary:"Record exact human-confirmed final provider and stopped-caller evidence.",
  kind:"mutation",permission:"scoped",external:false,agentCallable:false,stepUp:true,writeClass:"money",
- input:confirmation.extend({requestHash:z.string().length(64),providerAccountId:z.string().optional(),verifiedCustomerRef:z.string().optional(),verifiedProviderRef:z.string().optional()}),output:result,
+ input:confirmation.extend({requestHash:z.string().length(64),providerAccountId:z.string().optional(),providerPlatformAccountId:z.string().optional(),verifiedCustomerRef:z.string().optional(),verifiedProviderRef:z.string().optional()}),output:result,
  handler:async(input,ctx)=>{
   requireRecoveryManager(ctx.actor);
   await lockContactIdentity(ctx.tx);
@@ -63,7 +63,7 @@ export const applyTrialSetupReconciliation=defineService({
    if((input.outcome==="cancelled")!==(dispatch.state==="provider_cancelled"))throw new ServiceError("conflict","This physical request already has another settled outcome.");
    return {dispatchId:dispatch.id,state:dispatch.state,source:dispatch.state==="succeeded"?"provider_response" as const:"human_provider_confirmation" as const};
   }
-  if(input.outcome==="completed" && ((input.providerAccountId??"")!==attempt.providerAccountId || !input.verifiedCustomerRef || (dispatch.kind==="session" && (!input.verifiedProviderRef || input.verifiedCustomerRef!==dispatch.customerAtStart))))throw new ServiceError("conflict","The completed resource was not verified on this dispatch's original account.");
+  if(input.outcome==="completed" && ((input.providerAccountId??"")!==attempt.providerAccountId || (input.providerPlatformAccountId??null)!==attempt.providerPlatformAccountId || !input.verifiedCustomerRef || (dispatch.kind==="session" && (!input.verifiedProviderRef || input.verifiedCustomerRef!==dispatch.customerAtStart))))throw new ServiceError("conflict","The completed resource was not verified on this dispatch's original account.");
   const resolved=input.outcome==="completed"?"provider_completed" as const:"provider_cancelled" as const;
   await ctx.tx.update(subscriptionSetupDispatches).set({state:resolved,finishedAt:sql`clock_timestamp()`,providerCustomerRef:input.outcome==="completed"?input.verifiedCustomerRef!:null,providerRef:input.outcome==="completed"?input.verifiedProviderRef??null:null,resolution:{source:"human_provider_confirmation",actor:actorString(ctx.actor),providerOperationRef:input.providerOperationRef,providerEvidence:input.providerEvidence,callerStopEvidence:input.callerStopEvidence,originalRequestHash:dispatch.requestHash,originalIdempotencyKey:request.idempotencyKey}}).where(eq(subscriptionSetupDispatches.id,dispatch.id));
   if(input.outcome==="completed"){
@@ -89,16 +89,16 @@ export const reconcileTrialSetupDispatch=defineOrchestratedService({
   if(input.outcome==="cancelled" && (input.providerCustomerRef || input.providerRef))throw new ServiceError("validation","A guaranteed no-resource cancellation must leave resource fields empty.");
   const claimed=await claimTrialSetupReconciliation.call(input,actor);
   if(!["running","unknown"].includes(claimed.state))return applyTrialSetupReconciliation.call({...input,requestHash:dispatchRequestHash(claimed.request)},actor);
-  let providerAccountId:string|undefined,verifiedCustomerRef:string|undefined,verifiedProviderRef:string|undefined;
+  let providerAccountId:string|undefined,providerPlatformAccountId:string|undefined,verifiedCustomerRef:string|undefined,verifiedProviderRef:string|undefined;
   if(input.outcome==="completed"){
    if(!input.providerCustomerRef || (claimed.kind==="session" && (!input.providerRef || input.providerCustomerRef!==claimed.customerAtStart)))throw new ServiceError("validation","Supply the exact completed resource from the original provider account.");
    const adapter=paymentAdapter(claimed.provider);
    if(adapter.id!==claimed.provider || !adapter.status.available || !adapter.recoverMethodSetup)throw new ServiceError("conflict","This provider cannot verify the original completed setup resource.");
    const recovered=await adapter.recoverMethodSetup({...claimed.request,providerCustomerRef:input.providerCustomerRef,providerRef:input.providerRef,createdAt:claimed.createdAt,verifyCustomerCreation:claimed.kind==="customer"});
-   if(recovered.state==="unresolved" || recovered.providerCustomerRef!==input.providerCustomerRef || (recovered.providerAccountId??"")!==(claimed.request.providerAccountId??"") || (claimed.kind==="session" && (recovered.state==="customer_only" || recovered.providerRef!==input.providerRef)))throw new ServiceError("conflict","The provider did not verify this exact original resource.");
-   providerAccountId=recovered.providerAccountId;verifiedCustomerRef=recovered.providerCustomerRef;verifiedProviderRef=claimed.kind==="session"?recovered.providerRef:undefined;
+   if(recovered.state==="unresolved" || recovered.providerCustomerRef!==input.providerCustomerRef || (recovered.providerAccountId??"")!==(claimed.request.providerAccountId??"") || recovered.providerPlatformAccountId!==claimed.request.providerPlatformAccountId || (claimed.kind==="session" && (recovered.state==="customer_only" || recovered.providerRef!==input.providerRef)))throw new ServiceError("conflict","The provider did not verify this exact original resource.");
+   providerAccountId=recovered.providerAccountId;providerPlatformAccountId=recovered.providerPlatformAccountId;verifiedCustomerRef=recovered.providerCustomerRef;verifiedProviderRef=claimed.kind==="session"?recovered.providerRef:undefined;
   }
-  return applyTrialSetupReconciliation.call({...input,requestHash:dispatchRequestHash(claimed.request),providerAccountId,verifiedCustomerRef,verifiedProviderRef},actor);
+  return applyTrialSetupReconciliation.call({...input,requestHash:dispatchRequestHash(claimed.request),providerAccountId,providerPlatformAccountId,verifiedCustomerRef,verifiedProviderRef},actor);
  },
 });
 

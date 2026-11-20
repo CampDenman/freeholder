@@ -1,0 +1,48 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_transfer_privacy_descendant_recovery.v1",
+  "checklist": ["C1.12", "C10.32", "C11.08"],
+  "status": "Cross-scope media privacy convergence is repaired and the genuine native worker passes after real retries; hosted/provider and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "c7605fdaf70e9991507466b5e6f43de22fce5e5b8e4db4b3d8692ccf705134b6" },
+    { "path": "src/core/media/erasure-cohorts.ts", "sha256": "5a0c496a5773f18ae7b45685073c54c52d624c863d63c790a4dcd9d4e9434f8d" },
+    { "path": "src/core/media/transfer-callers.ts", "sha256": "d7cbbc674cb2184d709f96483b73880d387a56c2182ba54c145728fd56783c19" },
+    { "path": "src/core/media/transfer-erasure.ts", "sha256": "b503c1073de94b84203cb16730878c420b8892c7c5e851ba7b06b14ba90dec26" },
+    { "path": "tests/core/media-transfer-quota-role-lifecycle.test.ts", "sha256": "8941bf33a68ab3a3f81b30377b8ca9941468da9f9a21f5a98c071cc13baa3ca7" }
+  ],
+  "defects": [
+    "DELETE receipts produced by one media worker were absent from another original scope and rejected as foreign",
+    "A physically retired transfer retry attempted proof-dependent reads and quota release again after other workers had minimized those records"
+  ],
+  "repair": [
+    "Capture exact-reservation receipt descendants in every existing relevant cohort under the genuine transfer capability and inventory lock",
+    "Preserve immutable first capture bodies and reject legacy-null adoption",
+    "Return idempotently when the existing SQL predicate proves that the original transfer is already fully retired"
+  ],
+  "controls": {
+    "nativePrivacy": { "database": "media_quota_role_privacy_idempotent_20261116", "passed": 1, "failed": 0, "durationSeconds": 108.782, "actualRetries": true },
+    "lateErasure": { "database": "media_descendant_capture_regression_20261116", "passed": 4, "failed": 0 },
+    "pureQuota": { "passed": 9, "failed": 0 },
+    "transferLifecycle": { "database": "media_privacy_repair_transfer_regression_20261116", "passed": 9, "failed": 0 },
+    "typecheck": "passed with project heap setting",
+    "focusedLint": "passed",
+    "guardsWeakened": false,
+    "productCodeChanged": true
+  },
+  "changesets": [".changeset/media-privacy-descendant-recovery.md"],
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "c7605fdaf70e9991507466b5e6f43de22fce5e5b8e4db4b3d8692ccf705134b6",
+      "beforeSha256": "5a9bb521b39779cd95176f1883f9a60215e32aaee2fed8392cd5521f8f0606ba",
+      "continue": true,
+      "edits": [
+        {
+          "before": "acceptance remain open; no C-item closes.\n\n\nSource-only continuation, 2026-11-14 (C1.12/C11.08): the idle multipart",
+          "after": "acceptance remain open; no C-item closes.\n\nPrivacy descendant-recovery qualification2026-11-16 (C1.12/C10.32/C11.08):\nthe preceding failure is repaired without changing first capture bodies. Exact-reservation\nDELETE descendants now join every existing original cohort under genuine transfer\nauthority, and an already fully retired transfer returns without more physical/quota\nwork. A fresh genuine pg-boss cohort converges and its native control passes after\n108.782s of actual retries. Late-erasure4/4, quota pure9/9 and transfer lifecycle9/9\nregressions pass; TypeScript/lint pass. See\n`deploy/media-transfer-privacy-descendant-recovery.source.json` and changeset\n`media-privacy-descendant-recovery.md`. Hosted/provider and checklist acceptance remain open.\n\n\nSource-only continuation, 2026-11-14 (C1.12/C11.08): the idle multipart",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

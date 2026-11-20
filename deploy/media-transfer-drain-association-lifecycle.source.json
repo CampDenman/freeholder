@@ -1,0 +1,34 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_transfer_drain_association_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Current transfer drain-association refusal controls qualified on fresh migration108 PostgreSQL; no kernel-stop or provider-account acceptance is claimed",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "18159c9b6652ce60199f0b1ef4f738a0bdb5c269e074aad59a66f6426b867abe" },
+    { "path": "tests/core/media-transfer-drain-association-lifecycle.test.ts", "sha256": "b206d529aed0582ff504bd44e251f7ced9b73db12fb997b621dfda8e97359ef6" }
+  ],
+  "controls": {
+    "final": { "database": "media_drain_association_20261116", "passed": 4, "failed": 0, "durationSeconds": 34.26 },
+    "transport": "Synthetic AWS origin mapped through fetch to the fictional TCP provider with every refusal assertion retained",
+    "coverage": ["real plan/caller cohort cannot release without a verified executor stop", "subset of the complete original cohort cannot seal the first association", "captured/verified/released fabricated births refused", "authentic pre-admitted target PUT remains fenced by exact current-plan capture"],
+    "runtimeChanges": false,
+    "actualKernelStop": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "18159c9b6652ce60199f0b1ef4f738a0bdb5c269e074aad59a66f6426b867abe",
+      "beforeSha256": "1baf0fbad8ac3fe61c69206e7f3668904c396c0d8418f9c321d1f9316db1824f",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  provider account, executor stop or C-item acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  provider account, executor stop or C-item acceptance follows.\n  Drain-association qualification2026-11-16: fresh migration108 passes4/4.\n  Capture-only metadata grants no release; subset caller cohorts and fabricated\n  terminal births are refused; a genuinely pre-admitted target PUT stays fenced\n  even when the later capture names its exact current plan. Synthetic AWS-to-TCP\n  transport preserves every refusal. Focused lint passes. See\n  `deploy/media-transfer-drain-association-lifecycle.source.json`. No kernel stop,\n  provider account or C-item acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "ROOT_SOURCE_COMPOSED_UNRUN",
+  "checklist": [
+    "C12.38",
+    "C9.33",
+    "C1.08",
+    "C11.08"
+  ],
+  "frozenLeaf": "6522685b5b962f94f3109f5aac5e1851e36b86e5",
+  "rootMerge": "c83b8e18",
+  "sourceManifest": "deploy/original-cash-inventory-causal84.manifest.json",
+  "sourceManifestSha256": "981083891db9cb966c252ebb69c5a5e022b6916a5be872e7e40554ecb7dc4072",
+  "newModels": 0,
+  "sqlChanges": 0,
+  "newRegistryServices": 0,
+  "files": [
+    {
+      "path": "src/modules/invoicing/atomic-auxiliary-fee-service.ts",
+      "beforeSha256": "04b6633924d38457d9e03c49ec15fe74f266869def34e19ea236cae48fccae07",
+      "afterSha256": "dce0b8a48a6befcea95e6bf8b023d45138f75bdbba4c33c297a9daa5f638e569",
+      "finiteDelta": [
+        {
+          "before": "import {atomicAuxiliaryFeeBasis} from \"./atomic-auxiliary-fee-target\";",
+          "after": "import {atomicAuxiliaryFeeBasis} from \"./atomic-auxiliary-fee-target\";\nimport {lockOriginalInventoryPrefix} from \"./original-cash-inventory-prefix\";",
+          "occurrences": 1
+        },
+        {
+          "before": "handler:async(input,ctx)=>{\n await ready(ctx);",
+          "after": "handler:async(input,ctx)=>{\n await lockOriginalInventoryPrefix(ctx,{recoveryId:input.recoveryId,operationId:input.operationId});\n await ready(ctx);",
+          "occurrences": 3
+        }
+      ],
+      "realPrefixBeforeEveryReadyBasisOrPhase": true
+    },
+    {
+      "path": "tests/core/original-cash-inventory-causal84-source.test.ts",
+      "beforeSha256": "97810777022da4241b4a1ca44d8d91a6164d19cb475ab07566f7f2cdef83b74d",
+      "afterSha256": "4a83e0a36c67c33aa75eb13ab52f2e5fb89ab68db82feec7cb7359b30de2e397",
+      "finiteDelta": [
+        {
+          "before": " it(\"leaves old HMAC/schema/raw classification/safe export and all original whole native files unchanged\",()=>{for(const row of manifest.unchanged)expect(hash(read(row.path))).toBe(row.sha256);});",
+          "after": " it(\"preserves old HMAC/schema/raw classification/safe export and whole natives through only the exact auxiliary schema additions\",()=>{\n  for(const row of manifest.unchanged){let source=read(row.path).toString();\n   if(row.path===\"src/modules/invoicing/original-cash-recovery-schema.ts\")for(const insertion of [\", \\\"atomic_fee_target\\\", \\\"atomic_fee_closure\\\"\", \",'atomic_fee_target','atomic_fee_closure'\", \"  uniqueIndex(\\\"original_cash_atomic_fee_target\\\").on(t.recoveryId, sql`(${t.evidence}->>'targetKey')`).where(sql`${t.kind}='atomic_fee_target'`),\\n\", \"  uniqueIndex(\\\"original_cash_atomic_fee_closure\\\").on(t.recoveryId, sql`(${t.evidence}->>'targetFactId')`, sql`(${t.evidence}->>'revision')`).where(sql`${t.kind}='atomic_fee_closure'`),\\n\"]){\n    expect(source.split(insertion)).toHaveLength(2);source=source.replace(insertion,\"\");\n   }\n   expect(hash(source)).toBe(row.sha256);\n  }\n });",
+          "occurrences": 1
+        }
+      ],
+      "schemaReverseOnly": {
+        "path": "src/modules/invoicing/original-cash-recovery-schema.ts",
+        "currentSha256": "8b47655f0aae7a2745894fb0f25741c6cb71e9ea64ac840fc70c70916ddc0010",
+        "originalSha256": "a5fde2a371e83d93d70e07cf919f40db95caa0bd84576f404b446015c68b03e9",
+        "exactFourInsertions": [
+          ", \"atomic_fee_target\", \"atomic_fee_closure\"",
+          ",'atomic_fee_target','atomic_fee_closure'",
+          "  uniqueIndex(\"original_cash_atomic_fee_target\").on(t.recoveryId, sql`(${t.evidence}->>'targetKey')`).where(sql`${t.kind}='atomic_fee_target'`),\n",
+          "  uniqueIndex(\"original_cash_atomic_fee_closure\").on(t.recoveryId, sql`(${t.evidence}->>'targetFactId')`, sql`(${t.evidence}->>'revision')`).where(sql`${t.kind}='atomic_fee_closure'`),\n"
+        ]
+      },
+      "allOriginalDefaultBodyAndNativeOraclesUnchanged": true
+    }
+  ],
+  "originalAuxiliaryHolderAndRequestFieldsPreserved": true,
+  "originalWholeFeePaidPrivacyCausalNativesPreserved": true,
+  "scope": "Exact original GET/whole+partial closure/current principal/partial economic-domain/prefix repair, complete current rows and budgets retained. Prefix on actual THREE same-owner fee handlers before all old predicates. One old source pin reverses ONLY exact A kind/index additions to original entire schema SHA; old manifest/MAC/row fields/defaults/native oracles unchanged. No fake context, stale bank, broad kind projection or historical row upgrade.",
+  "qualification": "Complete combined source/schema/SDK then original positive/negative, original3auxiliary and5causal native cases required; no acceptance transfer."
+}

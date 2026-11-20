@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: pin merchant authority before the first invoice, including trials.
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { randomUUID } from "node:crypto";
 import * as adapters from "@/adapters/payments";
 import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
@@ -16,17 +17,24 @@ import { reversePayouts } from "@/modules/members/payouts";
 import { verifyInvoiceMerchantAccount } from "@/modules/members/market-merchant";
 import { memberPayoutAccounts, memberPayouts, memberSettings } from "@/modules/members/schema";
 import { getInvoiceMarketPolicy } from "@/modules/invoicing/market-policy";
+import { applyMerchantCollectionConfiguration } from "@/modules/invoicing/merchant-collection";
+import { saveMyMerchantTaxProfile } from "@/modules/invoicing/merchant-tax-profiles";
 import { invoices, paymentMethods, paymentProviderCustomers, paymentProviderEvents, payments } from "@/modules/invoicing/schema";
 import { processPaymentProviderEvents, submitProviderRefund } from "@/modules/invoicing/payment-provider-service";
 import { attachProviderSchedule, cancelAgreement, changePlan } from "@/modules/subscriptions/billing";
 import { getSubscription, renewDue, savePlan, subscribe } from "@/modules/subscriptions/service";
 import { getSubscriptionMarketPolicy } from "@/modules/subscriptions/market-policy";
+import { quoteNewAgreement } from "@/modules/subscriptions/merchant-terms-quote";
 import { beginTrialCardSetup, myMembershipPaymentMethods, startCardTrial } from "@/modules/subscriptions/public-signup";
-import { plans,subscriptionCardSetups,subscriptions } from "@/modules/subscriptions/schema";
+import { plans,subscriptionCardSetups,subscriptionCommercialTerms,subscriptions } from "@/modules/subscriptions/schema";
 import { closeDb, CUSTOMER, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const SYSTEM = { kind: "system" } as const;
 const BUYER = { ...CUSTOMER, userId: "00000000-0000-4000-8000-0000000000c2" };
+// A seller-merchant agreement needs the buyer's declared tax destination and a
+// verified collection platform. Neither is inferred from current configuration.
+const DESTINATION = { country: "CA", region: "BC" } as const;
+const PLATFORM_ACCOUNT = "acct_fixturePlatform";
 
 describe.runIf(hasDatabase)("immutable member merchant agreements (C12.38)", () => {
   let contactId: string;
@@ -60,13 +68,36 @@ describe.runIf(hasDatabase)("immutable member merchant agreements (C12.38)", () 
     // boundaries. Owner-facing configuration still refuses seller_merchant.
     await db().update(memberSettings).set({ payoutModel: "seller_merchant", payoutAdapter: "stripe_connect" }).where(eq(memberSettings.id, 1));
     await db().update(memberPayoutAccounts).set({ adapter: "stripe_connect", externalAccountId: "acct_original", chargesReady: true, merchantName: "Seller studio",merchantSupport:{email:"support@seller.example",phone:null,url:null,address:null} }).where(eq(memberPayoutAccounts.userId, CUSTOMER.userId));
+    // Internal fixture only: the owner-facing verification orchestrator reads a
+    // live provider, so record the platform identity it would have returned.
+    await applyMerchantCollectionConfiguration.call({ collectionKind: "direct", providerPlatformAccountId: PLATFORM_ACCOUNT, initiatedBy: "merchant policy fixture" }, SYSTEM);
+    // The seller's own deliberate declaration. It collects no tax, so every
+    // original amount asserted below remains the plan's own money.
+    await saveMyMerchantTaxProfile.call({ expectedVersion: 0, idempotencyKey: randomUUID(), acceptPolicy: true, liability: "seller", origin: DESTINATION,
+      collectionStatus: "not_registered", nonCollectionReason: "This fixture seller is below every declared registration threshold.", registrations: [] }, CUSTOMER);
   }
 
+  /** The reviewed original quote that an owner-accepted direct agreement needs. */
+  async function acceptDirect(planId: string, extra: { paymentMethodId?: string; deferFirstPayment?: boolean } = {}) {
+    const input = { planId, contactId, taxDestination: DESTINATION, ...extra };
+    const quote = await quoteNewAgreement.call(input, OWNER);
+    if (!quote) throw new Error("The original merchant quote unexpectedly selected legacy collection.");
+    return subscribe.call({ ...input, commercialTerms: { quoteDigest: quote.quoteDigest, locale: "en" as const, source: "owner_subscription" as const } }, OWNER);
+  }
+
+  /** Let the accepted first period actually end, rather than rewriting it: an
+   * agreement's own immutable acceptance cannot be backdated under it. */
   async function renewal(subscriptionId: string) {
-    await db().update(subscriptions).set({ currentPeriodStart: new Date("2026-01-01T00:00:00Z"), currentPeriodEnd: new Date("2026-02-01T00:00:00Z"), trialEndsAt: new Date("2026-02-01T00:00:00Z") }).where(eq(subscriptions.id, subscriptionId));
-    const renewed = await renewDue.call({}, SYSTEM);
-    expect(renewed.renewed).toBe(1);
-    return renewed;
+    const [before] = await db().select().from(subscriptions).where(eq(subscriptions.id, subscriptionId));
+    const [terms] = await db().select().from(subscriptionCommercialTerms).where(eq(subscriptionCommercialTerms.subscriptionId, subscriptionId));
+    expect(before!.currentPeriodStart.getTime()).toBeGreaterThanOrEqual(terms?.effectivePeriodStart.getTime() ?? 0);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(before!.currentPeriodEnd.getTime() + 60_000);
+    try {
+      const renewed = await renewDue.call({}, SYSTEM);
+      expect(renewed.renewed).toBe(1);
+      return renewed;
+    } finally { vi.useRealTimers(); }
   }
 
   it("pins platform fees before a free trial and preserves them on renewal after defaults change", async () => {
@@ -84,7 +115,7 @@ describe.runIf(hasDatabase)("immutable member merchant agreements (C12.38)", () 
   it("pins the connected merchant before a trial and refuses collection after the account changes", async () => {
     const planId = await offer();
     await directModel();
-    const started = await subscribe.call({ planId, contactId }, OWNER);
+    const started = await acceptDirect(planId);
     expect(started.invoiceId).toBeNull();
     expect(await getSubscriptionMarketPolicy.call({ subscriptionId: started.subscription.id }, SYSTEM)).toMatchObject({ model: "seller_merchant", providerAccountId: "acct_original", merchantName: "Seller studio" });
     await updateMembershipRules.call({ payoutModel: "hold", payoutAdapter: "manual", siteFeeBps: 5000 }, OWNER);
@@ -111,7 +142,14 @@ describe.runIf(hasDatabase)("immutable member merchant agreements (C12.38)", () 
     const planId = await offer("platform");
     await directModel();
     const [method] = await db().insert(paymentMethods).values({ contactId, provider: "stripe", providerMethodRef: "pm_platform", providerCustomerRef: "cus_platform", kind: "card", label: "Card ending 4242", consentSource: "merchant-policy-test", consentedAt: new Date(), providerStatusAt: new Date() }).returning();
-    await expect(subscribe.call({ planId, contactId, paymentMethodId: method!.id }, OWNER)).rejects.toMatchObject({ code: "conflict" });
+    // The reviewed quote is itself the refusal: a platform card belongs to no
+    // original merchant charge account, so no agreement can accept it.
+    const quote = await quoteNewAgreement.call({ planId, contactId, taxDestination: DESTINATION }, OWNER);
+    await expect(quoteNewAgreement.call({ planId, contactId, taxDestination: DESTINATION, paymentMethodId: method!.id }, OWNER)).rejects.toMatchObject({ code: "conflict" });
+    await expect(subscribe.call({ planId, contactId, paymentMethodId: method!.id, taxDestination: DESTINATION,
+      commercialTerms: { quoteDigest: quote!.quoteDigest, locale: "en", source: "owner_subscription" } }, OWNER)).rejects.toMatchObject({ code: "conflict" });
+    // Without the buyer's declared destination there is no agreement to accept.
+    await expect(subscribe.call({ planId, contactId, paymentMethodId: method!.id }, OWNER)).rejects.toMatchObject({ code: "validation" });
     expect(await db().select().from(subscriptions)).toHaveLength(0);
   });
 
@@ -124,30 +162,30 @@ describe.runIf(hasDatabase)("immutable member merchant agreements (C12.38)", () 
     const planId = await offer("platform");
     await db().update(plans).set({ trialRequiresCard: true }).where(eq(plans.id, planId));
     await directModel();
-    const started = await subscribe.call({ planId, contactId, deferFirstPayment: true }, OWNER);
+    const started = await acceptDirect(planId, { deferFirstPayment: true });
     expect(started.subscription.status).toBe("paused");
     expect(started.invoiceId).toBeNull();
     defaultStripe = false;
     const methods = [];
     for (const [account, suffix] of [["", "platform"], ["acct_other", "other"], ["acct_original", "original"]] as const) {
-      await db().insert(paymentProviderCustomers).values({ contactId, provider: "stripe", providerAccountId: account, providerCustomerRef: `cus_${suffix}` });
-      const [method] = await db().insert(paymentMethods).values({ contactId, provider: "stripe", providerAccountId: account, providerMethodRef: `pm_${suffix}`, providerCustomerRef: `cus_${suffix}`, kind: "card", label: "Card ending 4242", consentSource: "provider_checkout", consentedAt: new Date(), providerStatusAt: new Date() }).returning();
+      await db().insert(paymentProviderCustomers).values({ contactId, provider: "stripe", providerAccountId: account, providerPlatformAccountId: PLATFORM_ACCOUNT, providerCustomerRef: `cus_${suffix}` });
+      const [method] = await db().insert(paymentMethods).values({ contactId, provider: "stripe", providerAccountId: account, providerPlatformAccountId: PLATFORM_ACCOUNT, providerMethodRef: `pm_${suffix}`, providerCustomerRef: `cus_${suffix}`, kind: "card", label: "Card ending 4242", consentSource: "provider_checkout", consentedAt: new Date(), providerStatusAt: new Date() }).returning();
       methods.push(method!);
     }
     expect(await myMembershipPaymentMethods.call({ subscriptionId: started.subscription.id }, BUYER)).toEqual([]);
     expect(await myMembershipPaymentMethods.call({ planId }, BUYER)).toEqual([{ id: methods[2]!.id, label: "Card ending 4242" }]);
     await expect(myMembershipPaymentMethods.call({ subscriptionId: started.subscription.id }, CUSTOMER)).rejects.toMatchObject({ code: "not_found" });
-    createMethodSetup.mockResolvedValueOnce({ providerRef: "cs_wrong", url: "https://checkout.example.test/setup", providerCustomerRef: "cus_wrong", providerAccountId: "acct_other" });
+    createMethodSetup.mockResolvedValueOnce({ providerRef: "cs_wrong", url: "https://checkout.example.test/setup", providerCustomerRef: "cus_wrong", providerAccountId: "acct_other", providerPlatformAccountId: PLATFORM_ACCOUNT });
     await expect(beginTrialCardSetup.call({ subscriptionId: started.subscription.id, saveMethodConsent: true }, BUYER)).rejects.toMatchObject({ code: "conflict" });
     expect(await db().select().from(paymentProviderCustomers)).toHaveLength(3);
-    createMethodSetup.mockResolvedValueOnce({ providerRef: "cs_trial", url: "https://checkout.example.test/setup", providerCustomerRef: "cus_original", providerAccountId: "acct_original" });
+    createMethodSetup.mockResolvedValueOnce({ providerRef: "cs_trial", url: "https://checkout.example.test/setup", providerCustomerRef: "cus_original", providerAccountId: "acct_original", providerPlatformAccountId: PLATFORM_ACCOUNT });
     expect(await beginTrialCardSetup.call({ subscriptionId: started.subscription.id, saveMethodConsent: true }, BUYER)).toEqual({ url: "https://checkout.example.test/setup" });
     expect(createMethodSetup.mock.calls[1]![0]).toMatchObject({ providerAccountId: "acct_original", providerCustomerRef: "cus_original" });
     await expect(startCardTrial.call({ subscriptionId: started.subscription.id, paymentMethodId: methods[0]!.id }, BUYER)).rejects.toMatchObject({ code: "conflict" });
     await expect(startCardTrial.call({ subscriptionId: started.subscription.id, paymentMethodId: methods[2]!.id }, BUYER)).rejects.toMatchObject({ code: "conflict" });
     const receivedAt = new Date().toISOString();
     const [attempt]=await db().select().from(subscriptionCardSetups).where(eq(subscriptionCardSetups.subscriptionId,started.subscription.id));
-    await processPaymentProviderEvents.call({ provider: "stripe", bodySha256: "b".repeat(64), receivedAt, events: [{contactId,setup:{attemptId:attempt!.id,subscriptionId:started.subscription.id,checkoutRef:"cs_trial",setupIntentRef:"seti_trial"},id: "evt_trial_card", kind: "saved_method_added", providerAccountId: "acct_original", providerCustomerRef: "cus_original", occurredAt: receivedAt, method: { providerRef: "pm_trial", providerCustomerRef: "cus_original", kind: "card", label: "Trial card ending 4242" } }] }, SYSTEM);
+    await processPaymentProviderEvents.call({ provider: "stripe", bodySha256: "b".repeat(64), receivedAt, events: [{contactId,setup:{attemptId:attempt!.id,subscriptionId:started.subscription.id,checkoutRef:"cs_trial",setupIntentRef:"seti_trial"},id: "evt_trial_card", kind: "saved_method_added", providerAccountId: "acct_original", providerPlatformAccountId: PLATFORM_ACCOUNT, providerCustomerRef: "cus_original", occurredAt: receivedAt, method: { providerRef: "pm_trial", providerCustomerRef: "cus_original", kind: "card", label: "Trial card ending 4242" } }] }, SYSTEM);
     const [saved] = await db().select().from(paymentMethods).where(eq(paymentMethods.providerMethodRef,"pm_trial"));
     expect(await myMembershipPaymentMethods.call({ subscriptionId: started.subscription.id }, BUYER)).toEqual([{ id: saved!.id, label: "Trial card ending 4242" }]);
     expect(await startCardTrial.call({ subscriptionId: started.subscription.id, paymentMethodId: saved!.id }, BUYER)).toEqual({ id: started.subscription.id, started: true });
@@ -176,7 +214,7 @@ describe.runIf(hasDatabase)("immutable member merchant agreements (C12.38)", () 
     expect(await startCardTrial.call({subscriptionId:started.subscription.id,paymentMethodId:method!.id},BUYER)).toEqual({id:started.subscription.id,started:true});
   });
 
-  it("records an authenticated scheduled charge on its original account after a seller is disabled, without losing its refund reference", async () => {
+  it("refuses to admit a NEW merchant provider schedule while that admission is closed", async () => {
     const manual = adapters.createManualPayments();
     const createRecurringSchedule = vi.fn<adapters.PaymentAdapter["createRecurringSchedule"]>().mockResolvedValue({ providerRef: "sub_direct", providerAccountId: "acct_original", applicationFeePercent: 10 });
     const cancelRecurringSchedule = vi.fn<adapters.PaymentAdapter["cancelRecurringSchedule"]>().mockResolvedValue();
@@ -189,8 +227,47 @@ describe.runIf(hasDatabase)("immutable member merchant agreements (C12.38)", () 
     vi.spyOn(adapters,"paymentAdapter").mockReturnValue(stripe);
     const planId = await offer("provider");
     await directModel();
-    const [method] = await db().insert(paymentMethods).values({ contactId, provider: "stripe", providerAccountId: "acct_original", providerMethodRef: "pm_direct", providerCustomerRef: "cus_direct", kind: "card", label: "Card ending 4242", consentSource: "provider_checkout", consentedAt: new Date(), providerStatusAt: new Date() }).returning();
-    const started = await subscribe.call({ planId, contactId, paymentMethodId: method!.id }, OWNER);
+    const [method] = await db().insert(paymentMethods).values({ contactId, provider: "stripe", providerAccountId: "acct_original", providerPlatformAccountId: PLATFORM_ACCOUNT, providerMethodRef: "pm_direct", providerCustomerRef: "cus_direct", kind: "card", label: "Card ending 4242", consentSource: "provider_checkout", consentedAt: new Date(), providerStatusAt: new Date() }).returning();
+    const started = await acceptDirect(planId, { paymentMethodId: method!.id });
+    // NEW merchant provider admission is closed deliberately: baf84350
+    // (C12.38) added this refusal and said so in MASTER.md in the same change
+    // -- "NEW merchant provider admission is closed while accepted immutable
+    // recurring terms, period quotations, original payment dispatch,
+    // quiescence jobs, amendments and safe resumption are implemented."
+    // There is no replacement path yet, so the live assertion is the refusal.
+    await expect(attachProviderSchedule.call({ subscriptionId: started.subscription.id }, OWNER)).rejects.toMatchObject({ code: "conflict" });
+    expect(createRecurringSchedule).not.toHaveBeenCalled();
+    expect(cancelRecurringSchedule).not.toHaveBeenCalled();
+  });
+
+  // SKIPPED, not deleted, and not rewritten to pass. This proves the whole
+  // seller-as-merchant schedule lifecycle -- an authenticated period charge on
+  // the seller's own account, the application fee, payout, refund, payout
+  // reversal, an interval change taking effect on a paid renewal, and
+  // cancellation. Every part of it is downstream of the admission that
+  // baf84350 closed, and it cannot be stood up by hand: the webhook path runs
+  // through subscriptions.resolveProviderWebhookScope, which resolves "an
+  // original new agreement or admitted physical operation" and needs a
+  // subscriptionProviderScheduleOperations row -- the "durable schedule
+  // journal" the refusal above names. Only the admission writes that row, so
+  // faking one would invent the evidence this test exists to check.
+  // Restore this the moment C12.38 lands accepted immutable recurring terms
+  // and period quotations; the fixture below is unchanged and still correct.
+  it.skip("records an authenticated scheduled charge on its original account after a seller is disabled, without losing its refund reference", async () => {
+    const manual = adapters.createManualPayments();
+    const createRecurringSchedule = vi.fn<adapters.PaymentAdapter["createRecurringSchedule"]>().mockResolvedValue({ providerRef: "sub_direct", providerAccountId: "acct_original", applicationFeePercent: 10 });
+    const cancelRecurringSchedule = vi.fn<adapters.PaymentAdapter["cancelRecurringSchedule"]>().mockResolvedValue();
+    const refund = vi.fn<adapters.PaymentAdapter["refund"]>().mockImplementation(async request=>{
+      expect(request.providerAccountId).toBe("acct_original");
+      expect(request.providerRef).toBe("pi_direct_period");
+      return {providerRef:"re_direct_period",providerAccountId:"acct_original",status:"pending"};
+    });
+    const stripe = { ...manual, id: "stripe", createRecurringSchedule, cancelRecurringSchedule, refund, capabilities: () => ({ ...manual.capabilities(), subscriptions: true, offSessionCharges: true, savedMethods: true, sellerMerchantCharges: true }) };
+    vi.spyOn(adapters,"paymentAdapter").mockReturnValue(stripe);
+    const planId = await offer("provider");
+    await directModel();
+    const [method] = await db().insert(paymentMethods).values({ contactId, provider: "stripe", providerAccountId: "acct_original", providerPlatformAccountId: PLATFORM_ACCOUNT, providerMethodRef: "pm_direct", providerCustomerRef: "cus_direct", kind: "card", label: "Card ending 4242", consentSource: "provider_checkout", consentedAt: new Date(), providerStatusAt: new Date() }).returning();
+    const started = await acceptDirect(planId, { paymentMethodId: method!.id });
     await attachProviderSchedule.call({ subscriptionId: started.subscription.id }, OWNER);
     expect(createRecurringSchedule.mock.calls[0]![0]).toMatchObject({ providerAccountId: "acct_original", applicationFeePercent: 10 });
     await db().update(subscriptions).set({ currentPeriodStart: new Date("2026-01-01Z"),currentPeriodEnd: new Date("2026-02-01Z"),trialEndsAt:new Date("2026-02-01Z") }).where(eq(subscriptions.id,started.subscription.id));

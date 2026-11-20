@@ -1,0 +1,37 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "multipart_applied_recovery_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Scoped unknown-COMPLETE applied recovery qualified on fresh migration99 PostgreSQL; provider-account, host-stop and erasure acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "84d67444afe535cbcfcc30775ed27f6ea3bf8d4fbfa654dfb93a8ee65d8bb3b2" },
+    { "path": "tests/core/media-multipart-applied-recovery-lifecycle.test.ts", "sha256": "a6f9b1ebeee533f3290bb581234fddcac1f833aa15f7abbe9bdf5d9a7709dd8a" },
+    { "path": "src/core/media/multipart-complete-manifest.ts", "sha256": "50e480c9a5f91e4b09280d8ba2642d93d979d082e5fb1d97a8cfaf620adf6b11" },
+    { "path": "src/core/media/multipart-complete-recovery-proof.ts", "sha256": "74501d0e7b834ce2aee9aeb26961cc1fbb104239547c842a72cabff8494d1522" },
+    { "path": "src/core/media/multipart-operations.ts", "sha256": "31445fc94aff5b80e4c6ae7fc3564b2df47266f705cb550592e6ecc2e7d815aa" },
+    { "path": ".changeset/multipart-manifest-recovery-digest.md", "sha256": "c2dff3d15708f2afb11925430e5e86cf9e97b1effdaebadb3a596487a4a06e32" }
+  ],
+  "controls": {
+    "before": { "database": "multipart_applied_recovery_audit_20261115", "passed": 4, "failed": 1, "defect": "Persisted JSONB key order changed the naively recomputed original manifest digest" },
+    "final": { "database": "multipart_applied_recovery_fixed_20261115", "passed": 5, "failed": 0, "durationSeconds": 65.36 },
+    "coverage": ["fresh part-bound bytes and two inventories", "canonical completion without another POST", "original ACK/FIN remain unchanged including NULL", "foreign CREATE nonce refusal", "retained session debris refusal", "paused caller refusal before fresh I/O", "scoped actor refusal before provider reads"],
+    "typecheck": "passed",
+    "focusedLint": "passed after removing the refactor's unused import",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "84d67444afe535cbcfcc30775ed27f6ea3bf8d4fbfa654dfb93a8ee65d8bb3b2",
+      "beforeSha256": "b64d1b733ee5d251d4e1d88d642743e61b694b8d3c1c60d2a9341643411be01b",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  account or C-item acceptance follows.\n  Signing containment source2026-11-13",
+          "after": "  account or C-item acceptance follows.\n  Unknown-COMPLETE recovery qualification2026-11-15: the first current run passed\n  4/5; JSONB key reordering made the retained part manifest fail its original\n  digest. Creation and recovery now share canonical field ordering, preserving\n  existing digest values. Final fresh migration99 execution passes5/5, including\n  canonical completion without another POST, nonce/session/debris refusals and\n  active/scoped-caller controls. Full TypeScript/focused lint pass. See\n  `deploy/multipart-applied-recovery-lifecycle.source.json`. No invented ACK/FIN,\n  provider account, host stop, erasure or C-item acceptance follows.\n  Signing containment source2026-11-13",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

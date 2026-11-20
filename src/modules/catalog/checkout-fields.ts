@@ -22,6 +22,10 @@ export const CHECKOUT_FIELDS = [
   "region",
   "postalCode",
   "country",
+  "billingCountry",
+  "billingRegion",
+  "billingPostalCode",
+  "billingCity",
   "shippingMethodId",
   "couponCode",
 ] as const;
@@ -66,6 +70,10 @@ const PATH_FIELDS: Record<string, CheckoutField> = {
   "shippingAddress.region": "region",
   "shippingAddress.postalCode": "postalCode",
   "shippingAddress.country": "country",
+  "taxDestination.country": "billingCountry",
+  "taxDestination.region": "billingRegion",
+  "taxDestination.postalCode": "billingPostalCode",
+  "taxDestination.city": "billingCity",
   shippingMethodId: "shippingMethodId",
   couponCode: "couponCode",
 };

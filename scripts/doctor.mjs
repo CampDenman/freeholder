@@ -11,6 +11,8 @@
 //   node scripts/doctor.mjs --totp-secret BASE32 --json
 //   node scripts/doctor.mjs --api-key fh_... --json
 //   FREEHOLDER_URL=... FREEHOLDER_API_KEY=... node scripts/doctor.mjs --json
+// This explicit command performs a physical probe. A key needs the separately
+// granted platform.probeDoctor scope; legacy health/read scopes stay passive.
 //
 // `--enroll-totp` is reserved for a fresh, disposable validation instance. It
 // proves that the image's first owner can enroll before doctor runs, instead
@@ -162,12 +164,12 @@ async function main() {
     }
     const jar = await ownerSession(url, email, password, totpSecret);
     if (shouldEnroll) await enrollTotp(url, jar);
-    headers = { cookie: cookieHeader(jar) };
+    headers = { cookie: cookieHeader(jar),"x-csrf-token":decodeURIComponent(jar.get("freeholder_csrf")??"") };
   }
 
-  const response = await fetch(`${url}/api/doctor`, { headers });
+  const response = await fetch(`${url}/api/doctor`, { method:"POST",headers:{...headers,"content-type":"application/json"},body:"{}" });
   const report = await response.json();
-  if (!report.checks) throw new Error(`Doctor did not answer: ${response.status}`);
+  if (!report.checks) throw new Error(`Doctor did not answer (${response.status}): ${report?.error?.message ?? "A physical probe needs the explicitly granted platform.probeDoctor scope."}`);
 
   if (process.argv.includes("--json")) {
     console.log(JSON.stringify(report, null, 2));

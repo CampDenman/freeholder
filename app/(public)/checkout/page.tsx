@@ -37,12 +37,15 @@ import { composeDocumentTitle } from "@/core/seo/meta";
 import { currentBusiness } from "@/core/settings/read";
 import { getModuleConfig } from "@/core/settings/service";
 import { catalogSettingsSchema, checkoutTermsHash } from "@/modules/catalog/checkout-policy";
+import { merchantCheckoutRequirements } from "@/modules/invoicing/merchant-collection";
+import { quoteMerchantCheckout } from "@/modules/catalog/merchant-checkout-quote";
+import { InvoiceIssuer } from "../../portal/invoices/InvoiceIssuer";
 import { CHECKOUT_RETURN_KEY, fieldsFromQuery, type CheckoutField } from "@/modules/catalog/checkout-fields";
 import { decodeFormReturn, FORM_RETURN_COOKIE, returnedValues } from "@/core/http/public-form-return";
 import { getLocale, getT } from "../../i18n";
-import { loadShopperCart } from "../shopper-cart";
+import { loadShopperCart, readShopperCart } from "../shopper-cart";
 import { recordPageView } from "../[[...slug]]/pageview";
-import { shopperCheckoutAction } from "./checkout-actions";
+import { shopperCheckoutAction, reviewMerchantCheckoutAction } from "./checkout-actions";
 import { DeliveryMethods } from "./DeliveryMethods";
 import { quoteDeliveryAction } from "./checkout-actions";
 
@@ -94,6 +97,7 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
   const formatMinor = (minor: number, currency: string) =>
     formatMoney(minor, currency, locale);
   const needsShipping = cart.lines.some((line) => line.requiresShipping);
+  const { buyerTaxDestinationRequired: needsMerchantTaxDestination } = await merchantCheckoutRequirements.call({}, { kind: "anonymous" });
 
   let email = "";
   let name = "";
@@ -109,9 +113,7 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
   const error = typeof query.error === "string" ? query.error : undefined;
   // A refused submission comes back with what the shopper typed and the
   // fields the refusal was about (src/modules/catalog/checkout-fields.ts).
-  const returned = (error
-    ? returnedValues(decodeFormReturn(cookieJar.get(FORM_RETURN_COOKIE)?.value), CHECKOUT_RETURN_KEY)
-    : undefined) ?? {};
+  const returned = returnedValues(decodeFormReturn(cookieJar.get(FORM_RETURN_COOKIE)?.value), CHECKOUT_RETURN_KEY) ?? {};
   const invalid = new Set<CheckoutField>(error ? fieldsFromQuery(query.fields) : []);
   const fieldState = (field: CheckoutField, id: string) =>
     invalid.has(field) ? { "aria-invalid": true as const, "aria-describedby": `${id}-error` } : {};
@@ -122,6 +124,22 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
       </span>
     ) : null;
   const valueOf = (field: CheckoutField, fallback = "") => returned[field] ?? fallback;
+  let commercialQuote: Awaited<ReturnType<typeof quoteMerchantCheckout.call>> = null;
+  let needsMerchantReview = needsMerchantTaxDestination;
+  let commercialQuoteFailed = false;
+  if (needsMerchantTaxDestination) {
+    const credential = await readShopperCart();
+    const address = (country: string | undefined, region: string | undefined, postalCode: string | undefined, city: string | undefined) => country ? { country, ...(region ? { region } : {}), ...(postalCode ? { postalCode } : {}), ...(city ? { city } : {}) } : undefined;
+    try {
+      if (!credential) throw new Error("Cart credential expired.");
+      commercialQuote = await quoteMerchantCheckout.call({ cartId: credential.cartId, cartToken: credential.token,
+        email: returned.email || email || undefined,
+        shippingAddress: address(returned.country, returned.region, returned.postalCode, returned.city),
+        taxDestination: address(returned.billingCountry, returned.billingRegion, returned.billingPostalCode, returned.billingCity),
+        shippingMethodId: returned.shippingMethodId || undefined, couponCode: returned.couponCode || undefined }, actor);
+      needsMerchantReview = commercialQuote !== null;
+    } catch { commercialQuoteFailed = query.review === "1" || Object.keys(returned).length > 0; }
+  }
   // A returned address is quoted here, so a shopper without JavaScript sees
   // the methods it can choose from after a refusal.
   const returnedQuotes = /^[A-Za-z]{2}$/.test(returned.country ?? "")
@@ -132,7 +150,7 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
       })
     : null;
 
-  const adapter = paymentAdapter();
+  const adapter = paymentAdapter(needsMerchantTaxDestination ? "stripe" : undefined);
   const paymentMode = !adapter.status.available || adapter.id === "none"
     ? ("unavailable" as const)
     : adapter.id === "manual"
@@ -197,6 +215,28 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
             </label>
           </fieldset>
 
+          {needsMerchantReview && !needsShipping ? <fieldset className="grid gap-3">
+            <legend className="text-sm font-semibold text-ink">{t("store.checkout.billingTaxLegend")}</legend>
+            <p className="text-sm text-ink-muted">{t("store.checkout.billingTaxHint")}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-1 text-sm text-ink-muted">{t("store.checkout.country")}
+                <input id="checkout-billing-country" name="billingCountry" autoComplete="billing country" minLength={2} maxLength={2} pattern="[A-Za-z]{2}" required defaultValue={valueOf("billingCountry")} className={inputClass} {...fieldState("billingCountry", "checkout-billing-country")} />
+                {fieldError("billingCountry", "checkout-billing-country")}
+              </label>
+              <label className="grid gap-1 text-sm text-ink-muted">{t("store.checkout.region")}
+                <input id="checkout-billing-region" name="billingRegion" autoComplete="billing address-level1" maxLength={100} defaultValue={valueOf("billingRegion")} className={inputClass} {...fieldState("billingRegion", "checkout-billing-region")} />
+                {fieldError("billingRegion", "checkout-billing-region")}
+              </label>
+              <label className="grid gap-1 text-sm text-ink-muted">{t("store.checkout.postalCode")}
+                <input id="checkout-billing-postal" name="billingPostalCode" autoComplete="billing postal-code" maxLength={30} defaultValue={valueOf("billingPostalCode")} className={inputClass} {...fieldState("billingPostalCode", "checkout-billing-postal")} />
+                {fieldError("billingPostalCode", "checkout-billing-postal")}
+              </label>
+              <label className="grid gap-1 text-sm text-ink-muted">{t("store.checkout.city")}
+                <input id="checkout-billing-city" name="billingCity" autoComplete="billing address-level2" maxLength={200} defaultValue={valueOf("billingCity")} className={inputClass} {...fieldState("billingCity", "checkout-billing-city")} />
+                {fieldError("billingCity", "checkout-billing-city")}
+              </label>
+            </div>
+          </fieldset> : null}
           {needsShipping ? (
             <fieldset className="grid gap-3">
               <legend className="text-sm font-semibold text-ink">
@@ -345,6 +385,22 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
           ) : null}
           {checkoutSettings.checkoutTerms ? <input type="hidden" name="termsVersion" value={checkoutSettings.checkoutTerms.version} /> : null}
           {checkoutSettings.checkoutTerms ? <input type="hidden" name="termsHash" value={checkoutTermsHash(checkoutSettings.checkoutTerms.body)} /> : null}
+          {needsMerchantReview ? <section className="grid gap-4 rounded-lg border border-rule bg-surface p-4" aria-labelledby="merchant-review-title">
+            <h2 id="merchant-review-title" className="font-semibold">{t("store.checkout.merchantReview")}</h2>
+            <p className="text-sm text-ink-muted">{t("store.checkout.merchantReviewHint")}</p>
+            {commercialQuoteFailed ? <Callout tone="danger">{t("store.checkout.merchantQuoteChanged")}</Callout> : null}
+            {commercialQuote ? <>
+              <a className="text-accent underline" href="/portal/purchases/tax">{t("merchantTax.exemption.title")}</a>
+              <input type="hidden" name="taxQuoteDigest" value={commercialQuote.taxQuoteDigest} />
+              <input type="hidden" name="commercialQuoteDigest" value={commercialQuote.commercialQuoteDigest} />
+              {commercialQuote.parties.map((party, position) => <div key={position} className="grid gap-2 border-t border-rule pt-3">
+                <InvoiceIssuer issuer={{issuerIsMerchant:true,issuerName:party.merchantName,issuerSupport:party.merchantSupport}} businessName="" locale={locale} t={t} />
+                <p>{t("store.checkout.merchantTaxTotal",{tax:formatMinor(party.amounts.taxMinor,commercialQuote.currency),total:formatMinor(party.amounts.totalMinor,commercialQuote.currency)})}</p>
+              </div>)}
+              <p className="font-semibold">{t("store.checkout.merchantGrandTotal",{amount:formatMinor(commercialQuote.amounts.totalMinor,commercialQuote.currency)})}</p>
+            </> : null}
+            <Button type="submit" formAction={reviewMerchantCheckoutAction} formNoValidate>{t("store.checkout.reviewMerchantQuote")}</Button>
+          </section> : null}
           <label className="flex items-center gap-2 text-sm text-ink">
             <input
               id="checkout-terms"
@@ -353,11 +409,12 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
               required
               className="size-4"
             />
-            {checkoutSettings.checkoutTerms ? t("store.checkout.agreeVersion", { title: checkoutSettings.checkoutTerms.title, version: checkoutSettings.checkoutTerms.version }) : t("store.checkout.terms")}
+            {needsMerchantReview ? t("store.checkout.acceptMerchantQuote") : null}
+            {checkoutSettings.checkoutTerms ? t("store.checkout.agreeVersion", { title: checkoutSettings.checkoutTerms.title, version: checkoutSettings.checkoutTerms.version }) : !needsMerchantReview ? t("store.checkout.terms") : null}
           </label>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button type="submit" className="px-6 py-2.5">
+            <Button type="submit" disabled={needsMerchantReview && !commercialQuote} className="px-6 py-2.5">
               {t("store.checkout.placeOrder")}
             </Button>
             <a

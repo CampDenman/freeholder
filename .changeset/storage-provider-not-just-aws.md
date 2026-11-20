@@ -1,0 +1,5 @@
+---
+"freeholder": patch
+---
+
+Any S3-compatible storage that keeps its word now works for recorded media writes, not only Amazon's. Freeholder needed a provider to retain old versions of objects as well as honour the two conditions it writes with; that excluded providers which honour those conditions perfectly well without versioning, and S3 is one storage provider among many. Versioning is now recorded as evidence rather than demanded. What is still required, and will not be relaxed, is that the provider actually does what it says: before the first recorded write Freeholder asks your store to refuse a second creation of the same key and to refuse a deletion that names the wrong version, and declines to use it if it accepts either and ignores it. That is not theoretical — one well-known S3-compatible store, asked to delete an object only if it still matched a version it did not match, answered success and deleted it anyway. `scripts/s3-provider-probe.mjs` runs those questions against your own endpoint and prints what it can and cannot promise.

@@ -12,7 +12,7 @@ import {subscriptionCardSetups,subscriptionSetupDispatches,subscriptions} from "
 
 const scope="subscriptions.cardSetups";
 const task=z.object({attemptId:z.uuid(),requestId:z.uuid(),originalJobId:z.uuid()});
-const target=z.object({provider:z.string(),providerAccountId:z.string(),customerRefs:z.array(z.string())});
+const target=z.object({provider:z.string(),providerAccountId:z.string(),providerPlatformAccountId:z.string().nullable(),customerRefs:z.array(z.string())});
 const fingerprint=(value:z.infer<typeof target>)=>createHash("sha256").update(JSON.stringify(value)).digest("hex");
 async function cleanupTarget(tx:Tx,attemptId:string,requestId:string,jobId:string){
  const [attempt]=await tx.select().from(subscriptionCardSetups).where(eq(subscriptionCardSetups.id,attemptId)).for("update");
@@ -21,7 +21,7 @@ async function cleanupTarget(tx:Tx,attemptId:string,requestId:string,jobId:strin
  const dispatches=await tx.select().from(subscriptionSetupDispatches).where(eq(subscriptionSetupDispatches.setupId,attempt.id)).for("update");
  if(dispatches.some(item=>item.state==="running"||item.state==="unknown"))throw new ServiceError("conflict","A dispatched provider request is unresolved. Its actual outcome or cancellation guarantee must be reconciled before cleanup can finish.");
  const customerRefs=[...new Set([attempt.providerCustomerRef,...dispatches.map(item=>item.providerCustomerRef)].filter((ref):ref is string=>!!ref))].sort();
- return {attempt,target:{provider:attempt.provider,providerAccountId:attempt.providerAccountId,customerRefs}};
+ return {attempt,target:{provider:attempt.provider,providerAccountId:attempt.providerAccountId,providerPlatformAccountId:attempt.providerPlatformAccountId,customerRefs}};
 }
 
 export const claimTrialSetupErasure=defineService({
@@ -68,7 +68,7 @@ export const eraseTrialSetupCustomers=defineJob({
   if(original.customerRefs.length && (adapter.id!==original.provider || !adapter.status.available || !adapter.eraseCustomer))throw new Error("The original provider cannot acknowledge setup customer erasure; cleanup remains pending.");
   for(const customerRef of original.customerRefs){
    await context.throwIfCancelled();
-   await adapter.eraseCustomer!({providerCustomerRef:customerRef,providerAccountId:original.providerAccountId||undefined,idempotencyKey:`privacy-setup:${input.originalJobId}:${createHash("sha256").update(customerRef).digest("hex").slice(0,32)}`});
+   await adapter.eraseCustomer!({providerCustomerRef:customerRef,providerAccountId:original.providerAccountId||undefined,providerPlatformAccountId:original.providerPlatformAccountId??undefined,idempotencyKey:`privacy-setup:${input.originalJobId}:${createHash("sha256").update(customerRef).digest("hex").slice(0,32)}`});
   }
   await context.throwIfCancelled();
   await finishTrialSetupErasure.call({...input,fingerprint:claimed.fingerprint!},{kind:"system"});

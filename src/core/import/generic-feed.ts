@@ -52,7 +52,7 @@ function baseFor(node: XmlNode | undefined, parent: string): string {
   return base.href;
 }
 
-export function parseGenericFeed(payload: string, origin: string): GenericPage[] {
+function originalFeed(payload: string, origin: string) {
   if (Buffer.byteLength(payload) > DEFAULT_IMPORTER_LIMITS.maxBytes) throw new Error("This feed exceeds its 20 MB source limit.");
   if (/<!DOCTYPE|<!ENTITY/i.test(payload) || XMLValidator.validate(payload) !== true) throw new Error("The source is not safe, well-formed RSS or Atom XML.");
   const parsed: unknown = new XMLParser({ preserveOrder: true, ignoreAttributes: false, attributeNamePrefix: "", trimValues: false, parseTagValue: false, ignoreDeclaration: true, ignorePiTags: true, processEntities: { maxTotalExpansions: 100_000, maxExpandedLength: DEFAULT_IMPORTER_LIMITS.maxBytes, maxEntitySize: 1_000 } }).parse(payload);
@@ -69,6 +69,11 @@ export function parseGenericFeed(payload: string, origin: string): GenericPage[]
   if (!atom && !channel) throw new Error("The source has no RSS channel or Atom feed.");
   const entries = matching(nested(atom ?? channel!), atom ? "entry" : "item");
   const feedBase = baseFor(atom ?? channel, origin);
+  return { atom, entries, feedBase };
+}
+
+export function parseGenericFeed(payload: string, origin: string): GenericPage[] {
+  const { atom, entries, feedBase } = originalFeed(payload, origin);
   const result: GenericPage[] = []; let bytes = 0;
   for (const entry of entries) {
     const fields = nested(entry);
@@ -97,4 +102,23 @@ export function parseGenericFeed(payload: string, origin: string): GenericPage[]
     result.push({ ...page, title, kind: "post", seo: { ...page.seo, title, preserveTitle: true }, provenance: { url: url.href, source: atom ? "atom" : "rss" }, ...(Number.isFinite(publication) ? { publishedAt: new Date(publication).toISOString(), status: publication > Date.now() ? "draft" as const : "publish" as const } : {}) });
   }
   return result;
+}
+
+/** Durable discovery records actual permalinks and publication metadata only.
+ * It never parses a feed excerpt as the later original rendered page body.
+ * The ordinary synchronous parser keeps its existing500-entry limit above.
+ */
+export function parseGenericFeedLinks(payload: string, origin: string): Array<{ url: string; title: string; publishedAt?: string; status?: "draft" | "publish" }> {
+  const { atom, entries, feedBase } = originalFeed(payload, origin);
+  if (entries.length > 10_000) throw new Error("The complete feed exceeds its 10,000-entry frontier budget.");
+  return entries.map(entry => {
+    const fields = nested(entry), entryBase = baseFor(entry, feedBase);
+    const link = atom ? matching(fields, "link").find(node => !attr(node, "rel") || attr(node, "rel") === "alternate") : first(fields, "link");
+    const guid = first(fields, atom ? "id" : "guid");
+    const href = atom ? attr(link, "href") || xmlText(guid) : xmlText(link) || (attr(guid, "isPermaLink") !== "false" ? xmlText(guid) : "");
+    if (!href) throw new Error("A feed entry has no original public permalink.");
+    const url = assertPublicHttpUrl(new URL(href, entryBase).href), title = titleText(xmlText(first(fields, "title"))) || url.pathname;
+    const date = xmlText(first(fields, atom ? "published" : "pubdate")) || xmlText(first(fields, "updated")), publication = date ? Date.parse(date) : NaN;
+    return { url: url.href, title, ...(Number.isFinite(publication) ? { publishedAt: new Date(publication).toISOString(), status: publication > Date.now() ? "draft" as const : "publish" as const } : {}) };
+  });
 }

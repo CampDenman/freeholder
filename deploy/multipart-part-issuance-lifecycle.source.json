@@ -1,0 +1,37 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "multipart_part_issuance_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Runtime-predicated original part capability and local issuer lifecycle qualified on fresh/upgraded migration98 PostgreSQL; consumption, stopped/legacy recovery and provider acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "ba7aea8bc0fd85ee5809fc14ec322a84688e28cce3cef351b346616fb4225849" },
+    { "path": "tests/core/media-multipart-part-issuance-lifecycle.test.ts", "sha256": "796e976f32a6c923e56cb63e88a81c1fd6c3d09f9d0158cf8112f3eaefec95ee" },
+    { "path": "db/migrations/0098_original_part_capability.sql", "sha256": "f5d12511ddb7519371f11b763f64342d394ecfce1969891fb7c57d0811a1b537" },
+    { "path": "db/migrations/meta/_journal.json", "sha256": "f7be0ec5927b590501f7f5777c37bba6c12af096fcf1d0be09e6fa7d59e10417" },
+    { "path": "src/core/media/multipart-part-authority.ts", "sha256": "cacfef95ad8e8bebbcd998f510a7bd9288a46e02a2c6817fafe2af7daf385ed7" },
+    { "path": ".changeset/multipart-part-capability.md", "sha256": "730802423c564924080d1af38bf4eb287948eeaf54afdde7b52589828637cb3e" }
+  ],
+  "controls": {
+    "final": { "database": "multipart_part_issuance_audit_20261115", "passed": 6, "failed": 0, "durationSeconds": 47.81 },
+    "upgrade": { "database": "part_capability_upgrade_7d335493c581490aa43ab0ccbae527f8", "from": 97, "to": 98, "journalEntries": 99, "untaggedCapability": "unavailable", "passed": true },
+    "coverage": ["once-only body-bound mint and genuine FIN", "raw managed signer refusal before SDK", "unrelated customer refusal", "named hold refusal before admission/SDK", "delegated authority remains pending after local return", "historical presence-only call receives unavailable"],
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "ba7aea8bc0fd85ee5809fc14ec322a84688e28cce3cef351b346616fb4225849",
+      "beforeSha256": "64feda0f8ac77fdb751e64de68d43c495f060a2b9f828cc4d39d83e8d6b15489",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  credential ingress, account or C-item acceptance is claimed.\n  Signing containment source2026-11-13",
+          "after": "  credential ingress, account or C-item acceptance is claimed.\n  Durable part capability qualification2026-11-15: migration98 publishes only a\n  runtime-predicated authority tag, returning unavailable to old presence-only\n  callers. Fresh execution passes6/6 for once-only body-bound local mint/FIN,\n  raw signer and unrelated-principal refusal, named holds, and delegated authority\n  remaining pending after return. The real97→98 upgrade verifies all99 journals\n  and unavailable untagged capability; full TypeScript/focused lint pass. See\n  `deploy/multipart-part-issuance-lifecycle.source.json`. Actual consumption,\n  stopped/legacy recovery and provider acceptance still govern other controls.\n  Signing containment source2026-11-13",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

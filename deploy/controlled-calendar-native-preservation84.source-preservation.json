@@ -1,0 +1,20 @@
+{
+  "domain": "freeholder.controlled-calendar-native-preservation84.v1",
+  "files": [
+    {
+      "path": "tests/core/atomic-auxiliary-fee-prepost-bank84.test.ts",
+      "beforeSha256": "aa7dcee5e5881b4be879173eb38e49bbbe9a839c6e1e90880546865ebd664a9c",
+      "afterSha256": "493af9baaaf424df901ceabb350713928dc5bad7bc4a2fd110dd8eb2e3eecdbf",
+      "finiteDelta": [
+        {
+          "before": "import manifest from \"../../deploy/atomic-auxiliary-fee-prepost-bank85.manifest.json\";",
+          "after": "import manifest from \"../../deploy/atomic-auxiliary-fee-prepost-bank85.manifest.json\";\nimport calendarReviewWindows from \"../../deploy/controlled-calendar-review-windows.source-preservation.json\";"
+        },
+        {
+          "before": "  for(const [path,entry] of Object.entries(manifest.preservedOriginalInputs)){\n   const bytes=read(path);expect(bytes.length).toBe(entry.bytes);expect(hash(bytes)).toBe(entry.sha256);\n  }\n",
+          "after": "  for(const [path,entry] of Object.entries(manifest.preservedOriginalInputs)){\n   let bytes=read(path);if(path===\"src/modules/invoicing/controlled-target-raw-classification.ts\"){\n    const exact=calendarReviewWindows.files[0];if(!exact)throw Error(\"Require the exact reviewed-calendar-window continuation.\");expect(hash(bytes)).toBe(exact.afterSha256);\n    for(const delta of [...exact.finiteDelta].reverse()){expect(bytes.toString().split(delta.after)).toHaveLength(2);bytes=Buffer.from(bytes.toString().replace(delta.after,()=>delta.before));}\n    expect(hash(bytes)).toBe(exact.beforeSha256);\n   }\n   expect(bytes.length).toBe(entry.bytes);expect(hash(bytes)).toBe(entry.sha256);\n  }\n"
+        }
+      ]
+    }
+  ]
+}

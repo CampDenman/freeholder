@@ -14,6 +14,7 @@ import {
 } from "@/modules/catalog/cookies";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
+import { RETURN_BANK_REPLACEMENT_CONFIRMATION } from "@/modules/catalog/legacy-return-bank-recovery";
 import { safeLocalPath } from "@/core/http/local-path";
 import { flashAdminError, postedFromPath } from "./action-helpers";
 import {
@@ -39,6 +40,8 @@ import {
   refundReturn,
   prepareReturnRefund,
   submitReturnProviderRefund,
+  recoverReturnBankRefunds,
+  replaceReturnBankRefunds,
   requestReturn,
   shipFulfillment,
   removeCartItem,
@@ -822,6 +825,14 @@ export async function productAction(form: FormData): Promise<void> {
       } else if (intent === "prepareReturnRefund") {
         await prepareReturnRefund.call({id:field(form,"id"),idempotencyKey:field(form,"idempotencyKey")},actor);
         destination = `/admin/returns?id=${field(form,"id")}&saved=prepareReturnRefund`;
+      } else if (intent === "recoverReturnBankRefunds") {
+        await recoverReturnBankRefunds.call({id:field(form,"id")},actor);
+        destination = `/admin/returns?id=${field(form,"id")}&saved=recoverReturnBankRefunds`;
+      } else if (intent === "replaceReturnBankRefunds") {
+        const confirmation=field(form,"confirmation");
+        if(confirmation!==RETURN_BANK_REPLACEMENT_CONFIRMATION) throw new ServiceError("validation","Confirm only the original return's verified failed bank refunds before replacement.");
+        await replaceReturnBankRefunds.call({id:field(form,"id"),confirmation},actor);
+        destination = `/admin/returns?id=${field(form,"id")}&saved=replaceReturnBankRefunds`;
       } else if (intent === "submitReturnProviderRefund") {
         await submitReturnProviderRefund.call({id:field(form,"id"),idempotencyKey:field(form,"idempotencyKey")},actor);
         destination = `/admin/returns?id=${field(form,"id")}&saved=submitReturnProviderRefund`;

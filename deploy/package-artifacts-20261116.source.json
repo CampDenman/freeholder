@@ -1,0 +1,35 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "package_artifacts_20261116.v1",
+  "checklist": ["C11.17"],
+  "status": "All seven published packages pack, install and execute outside the workspace; ownership and image-upgrade acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "1d3a7abdd8da0fffc485384eeb46ea29447cfdde817ac03e6ad8221927473ad2" },
+    { "path": "scripts/package-artifact-gate.mjs", "sha256": "0f77b1a37920e36a61bcb128e70098d7d6727fb41c94a96de6d13d9d2f706837" },
+    { "path": "package.json", "sha256": "60f7f7c88f9323474ce6823c88813bafad18b1dd3c6b7fc49341145965308b60" }
+  ],
+  "controls": {
+    "command": "pnpm packages:verify",
+    "exitCode": 0,
+    "durationSeconds": 77.36,
+    "packages": { "packedInstalledExercised": 7, "failed": 0 },
+    "productCodeChanged": false,
+    "guardsWeakened": false,
+    "remaining": "psql and Docker are unavailable locally, so the ownership drill and previous-image upgrade/rollback gate remain unrun; clean-room, hosted, independent review and owner signoff remain open"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "1d3a7abdd8da0fffc485384eeb46ea29447cfdde817ac03e6ad8221927473ad2",
+      "beforeSha256": "d258c779bc1b4d7ea926e6152d7365f6cf5b227490c0f57bba40e6dbeccb5649",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  `deploy/production-build-20261116.source.json`. Hosted startup and C11.17 remain open.\n  Recovery-browser current qualification2026-11-16 (C1.12/C11.08/C11.17): the old",
+          "after": "  `deploy/production-build-20261116.source.json`. Hosted startup and C11.17 remain open.\n  Package-consumer qualification2026-11-16 (C11.17): `pnpm packages:verify` PASSes,\n  packing/installing/exercising all7 published packages outside the workspace. No product\n  source changed. See `deploy/package-artifacts-20261116.source.json`. Ownership drill and\n  image upgrade remain unrun locally because psql/Docker are unavailable; C11.17 is open.\n  Recovery-browser current qualification2026-11-16 (C1.12/C11.08/C11.17): the old",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

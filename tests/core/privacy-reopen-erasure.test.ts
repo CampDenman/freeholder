@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Shared receipt transitions are independent of source-specific provider I/O.
 import { beforeAll, beforeEach, afterAll, describe, it, expect } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
 import { createContact } from "@/core/contacts/service";
@@ -33,6 +33,7 @@ describe.runIf(hasDatabase)("reopen original erasure receipts", () => {
     expect(first).toMatchObject({ changed: true, recoveryRequired: false }); expect(first.jobId).toBeTruthy();
     const job = await getJob(JOB, first.jobId!); expect(job!.data).toEqual({ proof: "fictional-original-source-evidence", requestId: original.request.id, originalJobId: first.jobId });
     expect(await reopenErasureJob.call(input(original.request.id), { kind: "system" })).toEqual({ jobId: first.jobId, recoveryRequired: false, changed: false });
+    expect(await reopenErasureJob.call({ ...input(original.request.id), idempotencyKey: "fictional-later-source-read" }, { kind: "system" })).toEqual({ jobId: first.jobId, recoveryRequired: false, changed: false });
     const [request] = await db().select().from(dataRequests).where(eq(dataRequests.id, original.request.id)); expect(request).toMatchObject({ status: "in_progress", fulfilledAt: null });
     const [artifact] = await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, request!.id));
     const after = artifact!.body as { outcomes: Array<{ scope: string; outcome: string; pendingJobs?: string[] }> };
@@ -44,6 +45,14 @@ describe.runIf(hasDatabase)("reopen original erasure receipts", () => {
     const both = (await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, request!.id)))[0]!.body as { outcomes: Array<{ scope: string; pendingJobs?: string[] }> };
     expect(both.outcomes.find(outcome => outcome.scope === "contact.notes")!.pendingJobs).toEqual([first.jobId, second.jobId]);
     expect(await reopenErasureJob.call(input(original.request.id), { kind: "system" })).toMatchObject({ jobId: first.jobId, changed: false });
+  });
+  it("does not coalesce new evidence into an active source job", async () => {
+    const original = await completed();
+    const first = await reopenErasureJob.call(input(original.request.id), { kind: "system" });
+    await db().execute(sql`update pgboss.job set state = 'active' where id = ${first.jobId}::uuid`);
+    const second = await reopenErasureJob.call({ ...input(original.request.id), idempotencyKey: "fictional-evidence-during-active-work" }, { kind: "system" });
+    expect(second.jobId).not.toBe(first.jobId);
+    expect(second).toMatchObject({ changed: true, recoveryRequired: false });
   });
   it("requires restoration of a missing original artifact without fabricating one", async () => {
     const original = await completed();

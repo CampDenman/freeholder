@@ -29,6 +29,7 @@ import { requireCsrf } from "@/core/http/csrf";
 import { siteOrigin } from "@/core/seo/origin";
 import { CONTRACT, PLATFORM_VERSION } from "@/core/platform";
 import { ready } from "@/core/runtime";
+import { logUnhandledFailure } from "@/core/safe-failure-log";
 import {
   DEFAULT_JSON_BODY_LIMIT,
   readBoundedText,
@@ -40,6 +41,7 @@ import {
   type Actor,
 } from "@/core/service";
 import { hiddenFromMcp, serviceForTool, toolsFor } from "@/mcp/tools";
+import { previewCredentialRefusal } from "@/core/preview/route-gate";
 
 /** The revision this implements. Echoed back when a client asks for it. */
 export const PROTOCOL_VERSION = "2025-06-18";
@@ -148,9 +150,8 @@ async function callTool(
         ? error.message
         : "Something went wrong running that tool.";
     if (!(error instanceof ServiceError)) {
-      // A non-ServiceError can carry a query or a connection string; it goes to
-      // the log, never to the caller.
-      console.error(`[mcp] ${service.def.name} failed`, error);
+      // Neither the untrusted error nor the requested tool name enters logs.
+      logUnhandledFailure("mcp");
     }
     return result(request.id, {
       content: [{ type: "text", text: message }],
@@ -276,6 +277,8 @@ export async function handleMcp(
   const refused = refuseUnsafeTransport(request);
   if (refused) return refused;
   const actor = await actorFromRequest(request);
+  const previewRefusal = previewCredentialRefusal(request, actor);
+  if (previewRefusal) return previewRefusal;
 
   let body: unknown;
   try {

@@ -1,0 +1,5 @@
+---
+"freeholder": patch
+---
+
+The customer app's dependency audit now names its exceptions instead of being all-or-nothing. One advisory in its tree has no patched version at all — every published release of the package is affected, and the tooling's own suggested fix is a major-version downgrade that does not resolve it — so the audit step failed on every build. `npm audit` has no per-advisory allowance, which left only bad options: raise the severity threshold until the step stopped meaning anything, or drop it and lose every other advisory across roughly six hundred packages, including any that would reach a customer's device. The step now runs a gate that keeps the real severity and names each exception with a reviewer, a reason and an expiry. An advisory that is not named fails the build whatever it is; an allowance past its expiry fails rather than being inherited; and an allowance that no longer matches anything also fails, so the day upstream publishes a fix the entry has to be removed instead of quietly outliving the problem it was written for. The stricter workspace audit, where high and critical severities have no bypass of any kind, is unchanged.

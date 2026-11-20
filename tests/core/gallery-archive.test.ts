@@ -18,6 +18,7 @@ import { inflateSync } from "node:zlib";
 import { db } from "@/core/db";
 import { ready } from "@/core/runtime";
 import { storage } from "@/adapters/storage";
+import { fixtureStorage } from "../helpers/raw-storage";
 import { assets } from "@/core/media/schema";
 import { createContact } from "@/core/contacts/service";
 import { updateBusiness } from "@/core/settings/service";
@@ -151,7 +152,7 @@ describe.runIf(hasDatabase)("packaging a gallery", { timeout: 90_000 }, () => {
 
   async function storedImage(filename: string, body: string) {
     const key = `test/${crypto.randomUUID()}.jpg`;
-    await storage().put(key, bytes(body), "image/jpeg");
+    await fixtureStorage().put(key, bytes(body), "image/jpeg");
     const [created] = await db()
       .insert(assets)
       .values({
@@ -238,7 +239,9 @@ describe.runIf(hasDatabase)("packaging a gallery", { timeout: 90_000 }, () => {
     const { gallery: made } = await gallery();
     const one = await storedImage("one.jpg", "FIRST-IMAGE");
     await addGalleryItem.call({ galleryId: made.id, assetId: one.id }, OWNER);
-    await storage().delete(one.storageKey);
+    // Arranging the "object vanished underneath us" case, not exercising the
+    // product's removal path, so it uses the fixture provider too.
+    await fixtureStorage().delete(one.storageKey);
 
     await db().insert(galleryArchives).values({ galleryId: made.id, state: "building" });
     const built = await buildGalleryArchive.call({ galleryId: made.id }, { kind: "system" });

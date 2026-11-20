@@ -1,14 +1,14 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C3.38: the owner reaches a private intake attachment from its project.
-import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { eq } from "drizzle-orm";
-import { storage } from "@/adapters/storage";
+import { createLocalStorage } from "@/adapters/storage/local";
 import { closeDb, db } from "@/core/db";
 import { contacts } from "@/core/contacts/schema";
 import { THEME_COOKIE } from "@/core/design/theme";
+import { CSRF_COOKIE, CSRF_HEADER } from "@/core/http/csrf";
 import { assets } from "@/core/media/schema";
 import { forms, formSubmissionFiles, formSubmissions } from "@/modules/forms/schema";
 import { projectLinks, projects } from "@/modules/projects/schema";
@@ -17,7 +17,12 @@ import { resetBrowserDatabase } from "./database";
 
 test("a private intake file downloads from the project and stays private", async ({ page, context }) => {
   test.setTimeout(120_000);
-  await useOwnerSession(context, await seedC11Owner("Intake file qualification"));
+  const ownerToken = await seedC11Owner("Intake file qualification");
+  await useOwnerSession(context, ownerToken);
+  await page.request.get("/api/auth/session");
+  const csrf = (await context.cookies()).find(cookie => cookie.name === CSRF_COOKIE)?.value;
+  expect(csrf).toBeTruthy();
+  const apiHeaders = { authorization: `Bearer ${ownerToken}`, [CSRF_HEADER]: csrf! };
   const bytes = new Uint8Array(48);
   const view = new DataView(bytes.buffer);
   bytes.set(new TextEncoder().encode("RIFF"));
@@ -32,20 +37,34 @@ test("a private intake file downloads from the project and stays private", async
   view.setUint16(34, 8, true);
   bytes.set(new TextEncoder().encode("data"), 36);
   view.setUint32(40, 4, true);
-  const key = `tests/intake/${randomUUID()}.wav`;
-  await storage().put(key, bytes, "audio/wav");
+  let key: string | undefined;
   try {
+    const reserved = await page.request.post("/api/media/uploads", {
+      headers: apiHeaders,
+      data: {
+        filename: "episode-owner.wav", contentType: "audio/wav", bytes: bytes.byteLength,
+        provenance: { purpose: "form" }, metadata: {},
+      },
+    });
+    expect(reserved.status()).toBe(200);
+    const reservation = await reserved.json() as { id: string };
+    const uploaded = await page.request.post("/api/media", {
+      headers: apiHeaders,
+      multipart: {
+        uploadId: reservation.id,
+        file: { name: "episode-owner.wav", mimeType: "audio/wav", buffer: Buffer.from(bytes) },
+      },
+    });
+    expect(uploaded.status()).toBe(200);
+    const asset = await uploaded.json() as { id: string; storageKey: string };
+    key = asset.storageKey;
     const [contact] = await db().insert(contacts).values({ name: "Intake customer", email: "intake@example.test" }).returning();
     const [form] = await db().insert(forms).values({ slug: "episode-intake", name: "Episode intake", fields: [] }).returning();
-    const [asset] = await db().insert(assets).values({
-      kind: "audio", storageKey: key, filename: "episode-owner.wav", mime: "audio/wav",
-      legacyBytes: bytes.length, bytes: bytes.length, isPrivate: true, provenance: { purpose: "form" },
-    }).returning();
     const [submission] = await db().insert(formSubmissions).values({
-      formId: form!.id, contactId: contact!.id, data: { episode: { assetId: asset!.id } },
+      formId: form!.id, contactId: contact!.id, data: { episode: { assetId: asset.id } },
     }).returning();
     const [attachment] = await db().insert(formSubmissionFiles).values({
-      submissionId: submission!.id, fieldKey: "episode", assetId: asset!.id,
+      submissionId: submission!.id, fieldKey: "episode", assetId: asset.id,
     }).returning();
     const [project] = await db().insert(projects).values({
       title: "Edit the episode", slug: "edit-the-episode", contactId: contact!.id,
@@ -74,12 +93,12 @@ test("a private intake file downloads from the project and stays private", async
     } finally {
       await visitor.close();
     }
-    await db().update(assets).set({ status: "quarantined" }).where(eq(assets.id, asset!.id));
+    await db().update(assets).set({ status: "quarantined" }).where(eq(assets.id, asset.id));
     await page.reload();
     await expect(page.getByRole("link", { name: "episode-owner.wav", exact: true })).toHaveCount(0);
     expect((await page.request.get(`/admin/forms/files/${attachment!.id}`)).status()).toBe(404);
   } finally {
-    await storage().delete(key);
+    if (key) await createLocalStorage({ root: process.env.LOCAL_STORAGE_ROOT!, publicPath: "/media" }).delete(key);
   }
 });
 

@@ -11,7 +11,7 @@ const key="original/site/immutable.png",date=new Date("2026-11-12T00:00:00Z");
 function binding(bucket="source"):StorageBinding{return{kind:"s3",namespace:storageNamespace({id:"s3",endpoint:"https://objects.example.test",bucket}),location:{endpoint:"https://objects.example.test",bucket}};}
 function receipt(overrides:Partial<typeof mediaObjectWrites.$inferSelect>={}):typeof mediaObjectWrites.$inferSelect{return{
  id:"00000000-0000-4000-8000-000000000001",operation:"put",key,keyDigest:objectKeyDigest(key),namespace:binding().namespace,storageKind:"s3",storageLocation:binding().location,
- sha256:"a".repeat(64),bytes:5,contentType:"image/png",actor:"user:fixture",contactId:"00000000-0000-4000-8000-000000000010",state:"accepted",observedAcceptedAt:date,reviewedAt:null,reviewedBy:null,evidenceDigest:null,deletedAt:null,redactedAt:null,createdAt:date,updatedAt:date,...overrides};}
+ sha256:"a".repeat(64),bytes:5,contentType:"image/png",actor:"user:fixture",contactId:"00000000-0000-4000-8000-000000000010",state:"accepted",originalReservationId:null,writerProtocol:null,providerRevision:null,providerRevisionDigest:null,writerRuntimeId:null,writerFinishedAt:null,observedAcceptedAt:date,reviewedAt:null,reviewedBy:null,evidenceDigest:null,deletedAt:null,redactedAt:null,createdAt:date,updatedAt:date,...overrides};}
 describe("original storage transfer evidence",()=>{
  it("projects actual accepted source facts without rebasing either namespace",()=>{
   const row=receipt(),before=structuredClone(row),source=binding();

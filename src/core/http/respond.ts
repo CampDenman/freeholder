@@ -5,6 +5,7 @@
 // idea of how much to tell the caller.
 import { ServiceError, type Actor } from "@/core/service";
 import { RequestBodyError } from "@/core/http/body";
+import { logUnhandledFailure } from "@/core/safe-failure-log";
 
 const STATUS: Record<ServiceError["code"], number> = {
   validation: 400,
@@ -74,7 +75,7 @@ export function errorResponse(error: unknown, actor: Actor): Response {
       { headers },
     );
   }
-  console.error("unhandled error in a route handler", error);
+  logUnhandledFailure("http");
   return json(
     { error: { code: "internal", message: "Something went wrong." } },
     500,

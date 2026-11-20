@@ -1,0 +1,156 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "controlled_principal_debt_read88.v1",
+  "checklist": ["C12.38", "C11.05", "C1.08"],
+  "status": "FORWARD SOURCE CONTINUATION; one principal-plus-debt invocation replaces duplicate debt evaluation at four readiness callers; all predicates and freshness fences remain; not acceptance evidence",
+  "files": [
+    {
+      "path": "src/modules/invoicing/principal-authority.ts",
+      "beforeSha256": "ec29d2cfb96dd8b9aa99522dd633e79800bbd693df73710cd730d6ae4e4ef737",
+      "afterSha256": "e68831547ce930712ce0072d89b4dfb1d47a1794300a0538228c04b0ac1f4766",
+      "edits": [
+        {
+          "before": "export const originalPrincipalAuthority = defineService({ name: \"invoicing.originalPrincipalAuthority\", summary: \"Prove original customer principal and actual merchant route independently from still-owed fee or ancillary transfer settlement duties.\",\n  kind: \"query\", permission: \"system\", external: false, input: z.object({ paymentId: z.uuid() }), output: principalAuthorityResult,\n  handler: async ({ paymentId }, ctx) => {\n    const share = createOriginalCashClosureShare();\n    const { additionalFinancialDebtPending, ...proof } = await readOriginalPrincipalEvidence(ctx, paymentId, share);\n    const debt = getService(\"invoicing.merchantPaymentRecoveryDebt\");\n    const financialDebtPending = !debt || z.object({ pending: z.boolean() }).passthrough().parse(await readMerchantPaymentRecoveryDebt(ctx, paymentId, share)).pending;\n    return { ...proof, financialDebtPending: financialDebtPending || additionalFinancialDebtPending };\n  },\n});",
+          "after": "export async function readOriginalPrincipalAndDebt(ctx: ServiceContext, paymentId: string) {\n  const share = createOriginalCashClosureShare();\n  const { additionalFinancialDebtPending, ...proof } = await readOriginalPrincipalEvidence(ctx, paymentId, share);\n  const debtService = getService(\"invoicing.merchantPaymentRecoveryDebt\");\n  const debt = z.object({ pending: z.boolean() }).passthrough().parse(await readMerchantPaymentRecoveryDebt(ctx, paymentId, share));\n  const financialDebtPending = !debtService || debt.pending;\n  return { principal: { ...proof, financialDebtPending: financialDebtPending || additionalFinancialDebtPending }, debt };\n}\nexport const originalPrincipalAuthority = defineService({ name: \"invoicing.originalPrincipalAuthority\", summary: \"Prove original customer principal and actual merchant route independently from still-owed fee or ancillary transfer settlement duties.\",\n  kind: \"query\", permission: \"system\", external: false, input: z.object({ paymentId: z.uuid() }), output: principalAuthorityResult,\n  handler: async ({ paymentId }, ctx) => (await readOriginalPrincipalAndDebt(ctx, paymentId)).principal,\n});"
+        },
+        {
+          "before": "import { createOriginalCashClosureShare, type OriginalCashClosureShare } from \"./original-cash-closure-current\";",
+          "after": "import { createOriginalCashClosureShare, type OriginalCashClosureShare } from \"./original-cash-closure-current\";\nimport type { ControlledJournalComposition } from \"@/modules/subscriptions/controlled-provider-journal-composition\";"
+        },
+        {
+          "before": "export async function readOriginalPrincipalEvidence(ctx: ServiceContext, paymentId: string, share?: OriginalCashClosureShare) {",
+          "after": "export async function readOriginalPrincipalEvidence(ctx: ServiceContext, paymentId: string, share?: OriginalCashClosureShare, composition?: ControlledJournalComposition) {"
+        },
+        {
+          "before": "readOriginalCashPrincipalHistory(ctx, { kind: \"payment\", paymentId }, share)",
+          "after": "readOriginalCashPrincipalHistory(ctx, { kind: \"payment\", paymentId }, share, composition)"
+        },
+        {
+          "before": "export async function readOriginalPrincipalAndDebt(ctx: ServiceContext, paymentId: string) {\n  const share = createOriginalCashClosureShare();\n  const { additionalFinancialDebtPending, ...proof } = await readOriginalPrincipalEvidence(ctx, paymentId, share);",
+          "after": "export async function readOriginalPrincipalAndDebt(ctx: ServiceContext, paymentId: string, share?: OriginalCashClosureShare, composition?: ControlledJournalComposition) {\n  share ??= createOriginalCashClosureShare();\n  const { additionalFinancialDebtPending, ...proof } = await readOriginalPrincipalEvidence(ctx, paymentId, share, composition);"
+        }
+      ]
+    },
+    {
+      "path": "src/modules/invoicing/controlled-provider-financial-readiness.ts",
+      "beforeSha256": "e7da9fb1a4f28739792eaa2e8fafe6c593b86f061f1beb10a2cc48758a62dafc",
+      "afterSha256": "ea054d8196b61b8fe73671b4dc3c496cb3d1cc26a9afa4a91fcf2dae8262f45e",
+      "edits": [
+        {
+          "before": "import { creditNoteDisposition } from \"./credit-disposition\";",
+          "after": "import { creditNoteDisposition } from \"./credit-disposition\";\nimport { readOriginalPrincipalAndDebt } from \"./principal-authority\";"
+        },
+        {
+          "before": "  for(const payment of graph.money){\n   const state=z.object({pending:z.boolean()}).passthrough().parse(await ctx.callAsSystem(debt,{paymentId:payment.id}));if(state.pending)refuse();\n   if(payment.status===\"succeeded\"){\n    const actual=z.object({principalSafe:z.boolean(),financialDebtPending:z.boolean()}).passthrough().parse(await ctx.callAsSystem(principal,{paymentId:payment.id}));\n    if(!actual.principalSafe||actual.financialDebtPending)refuse();\n   }\n  }",
+          "after": "  for(const payment of graph.money){\n   if(payment.status===\"succeeded\"){\n    const{debt:state,principal:proof}=await readOriginalPrincipalAndDebt(ctx,payment.id),actual=z.object({principalSafe:z.boolean(),financialDebtPending:z.boolean()}).passthrough().parse(proof);\n    if(state.pending||!actual.principalSafe||actual.financialDebtPending)refuse();\n   }else{\n    const state=z.object({pending:z.boolean()}).passthrough().parse(await ctx.callAsSystem(debt,{paymentId:payment.id}));if(state.pending)refuse();\n   }\n  }"
+        }
+      ]
+    },
+    {
+      "path": "src/modules/invoicing/controlled-cash-application-evaluation.ts",
+      "beforeSha256": "2d770d673372e7ba5e86388cf1075981d105a61701c1be386f6dad54421264ef",
+      "afterSha256": "1303bc81f5e35d229d742e20e521d22a932cc4a46f73cd31ddceb2fd76c5fb21",
+      "edits": [
+        {
+          "before": "import { originalCreditFeeAllocation } from \"./credit-fee-origin\";",
+          "after": "import { originalCreditFeeAllocation } from \"./credit-fee-origin\";\nimport { readOriginalPrincipalAndDebt } from \"./principal-authority\";"
+        },
+        {
+          "before": "  for(const payment of allPayments){if([\"created\",\"processing\"].includes(payment.status))refuse();const financial=debtSchema.parse(await ctx.callAsSystem(debtReader,{paymentId:payment.id}));\n   const creditSources=canonical.funding.filter(row=>row.sourcePaymentId===payment.id);\n   if(financial.pending&&(!creditSources.length||financial.reasons.some(reason=>reason!==\"commission\")))refuse();\n   const current=payment.status===\"succeeded\"?principalSchema.parse(await ctx.callAsSystem(principalReader,{paymentId:payment.id})):null;",
+          "after": "  for(const payment of allPayments){if([\"created\",\"processing\"].includes(payment.status))refuse();const combined=payment.status===\"succeeded\"?await readOriginalPrincipalAndDebt(ctx,payment.id):null;\n   const financial=debtSchema.parse(combined?.debt??await ctx.callAsSystem(debtReader,{paymentId:payment.id}));\n   const creditSources=canonical.funding.filter(row=>row.sourcePaymentId===payment.id);\n   if(financial.pending&&(!creditSources.length||financial.reasons.some(reason=>reason!==\"commission\")))refuse();\n   const current=combined?principalSchema.parse(combined.principal):null;"
+        }
+      ]
+    },
+    {
+      "path": "src/modules/invoicing/controlled-provider-cash-application-parent.ts",
+      "beforeSha256": "27e92a0b7a635bdf676364be23bb97ee2c7f9c17537e04e96720c4e6ac4f6a70",
+      "afterSha256": "f1e98c22f980720ef3524000373b441ba57bb06d8a81e62e681602a158e168ec",
+      "edits": [
+        {
+          "before": "import { originalCreditFeeAllocation } from \"./credit-fee-origin\";",
+          "after": "import { originalCreditFeeAllocation } from \"./credit-fee-origin\";\nimport { readOriginalPrincipalAndDebt } from \"./principal-authority\";"
+        },
+        {
+          "before": " for(const payment of graph.money){\n  const financial=debt.parse(await ctx.callAsSystem(debtReader,{paymentId:payment.id}));if(financial.pending)refuse();\n  const current=payment.status===\"succeeded\"?principal.parse(await ctx.callAsSystem(principalReader,{paymentId:payment.id})):null;",
+          "after": " for(const payment of graph.money){\n  const combined=payment.status===\"succeeded\"?await readOriginalPrincipalAndDebt(ctx,payment.id):null;\n  const financial=debt.parse(combined?.debt??await ctx.callAsSystem(debtReader,{paymentId:payment.id}));if(financial.pending)refuse();\n  const current=combined?principal.parse(combined.principal):null;"
+        }
+      ]
+    },
+    {
+      "path": "src/modules/invoicing/controlled-provider-collection-authority.ts",
+      "beforeSha256": "810cc3aac96533145e86ca3abeda679b82efaf6fb37fb04b8dd56ad625f42815",
+      "afterSha256": "1c6ca55e9b1f68c3875d9ba867c4c2eb266db18cfd5ba186949d64f82bfd0c78",
+      "edits": [
+        {
+          "before": "import { originalCreditFeeAllocation } from \"./credit-fee-origin\";",
+          "after": "import { originalCreditFeeAllocation } from \"./credit-fee-origin\";\nimport { readOriginalPrincipalAndDebt } from \"./principal-authority\";"
+        },
+        {
+          "before": "   for(const payment of graph.money){\n    const actualDebt=debt.parse(await ctx.callAsSystem(debtReader,{paymentId:payment.id}));currentProofs.push({paymentId:payment.id,debt:actualDebt});\n    const creditSources=canonical.funding.filter(row=>row.sourcePaymentId===payment.id);\n    if(actualDebt.pending&&(!creditSources.length||actualDebt.reasons.some(reason=>reason!==\"commission\")))refuse();\n    if(payment.status===\"succeeded\"){\n     const actual=principal.parse(await ctx.callAsSystem(principalReader,{paymentId:payment.id}));currentProofs.push(actual);",
+          "after": "   for(const payment of graph.money){\n    const combined=payment.status===\"succeeded\"?await readOriginalPrincipalAndDebt(ctx,payment.id):null;\n    const actualDebt=debt.parse(combined?.debt??await ctx.callAsSystem(debtReader,{paymentId:payment.id}));currentProofs.push({paymentId:payment.id,debt:actualDebt});\n    const creditSources=canonical.funding.filter(row=>row.sourcePaymentId===payment.id);\n    if(actualDebt.pending&&(!creditSources.length||actualDebt.reasons.some(reason=>reason!==\"commission\")))refuse();\n    if(combined){\n     const actual=principal.parse(combined.principal);currentProofs.push(actual);"
+        }
+      ]
+    },
+    {
+      "path": "src/modules/invoicing/original-cash-closure-current.ts",
+      "beforeSha256": "432854b697e549d7c97d906b9728722aed9c301f77ec4eda06b97ce3c142d91c",
+      "afterSha256": "711064ec1258397b981edadc7bd00dc0184af07d2bc24dab265035beaac5209b",
+      "edits": [
+        {
+          "before": "import { legacyBankFeedbackMatchesInventory } from \"./legacy-bank-feedback-proof\";",
+          "after": "import { legacyBankFeedbackMatchesInventory } from \"./legacy-bank-feedback-proof\";\nimport type { controlledCashFinancialHistory } from \"./controlled-provider-financial-witness\";"
+        },
+        {
+          "before": "  controlledCashFinancialHistory: Array<{ tx: Tx; key: string; promise: Promise<unknown> }>;",
+          "after": "  controlledCashFinancialHistory: Array<{ tx: Tx; key: string; promise: Promise<unknown> }>;\n  currentControlled: Map<string, Awaited<ReturnType<typeof controlledCashFinancialHistory>>>;"
+        },
+        {
+          "before": "  return { closures: new Map(), originalMerchantRefundDebt: new Map(), controlledCashFinancialHistory: [] };",
+          "after": "  return { closures: new Map(), originalMerchantRefundDebt: new Map(), controlledCashFinancialHistory: [], currentControlled: new Map() };"
+        },
+        {
+          "before": "import type { controlledCashFinancialHistory } from \"./controlled-provider-financial-witness\";",
+          "after": "import type { controlledCashFinancialHistory } from \"./controlled-provider-financial-witness\";\nimport type { ControlledJournalComposition } from \"@/modules/subscriptions/controlled-provider-journal-composition\";"
+        },
+        {
+          "before": "  controlledCashFinancialHistory: Array<{ tx: Tx; key: string; promise: Promise<unknown> }>;",
+          "after": "  controlledCashFinancialHistory: Array<{ tx: Tx; key: string; composition?: ControlledJournalComposition; promise: Promise<unknown> }>;"
+        }
+      ]
+    },
+    {
+      "path": "src/modules/invoicing/merchant-payment-debt.ts",
+      "beforeSha256": "43d1a05f243e11bc56ba958ffb8c8779ff6094eb9b53cb97cbbd85eeabb281a1",
+      "afterSha256": "79c21fe5190a49819c391ec62f0d5b68d04e90ad6d743ac74f775b56e795d0fe",
+      "edits": [
+        {
+          "before": "    const controlledRows = await controlledFinancialWitness(ctx.tx, { paymentIds: [paymentId] });\n    const controlled = await controlledCashFinancialHistoryShared(ctx.tx, [...new Set([...controlledAliases.flatMap(row => row.id ? [row.id] : []), ...controlledRows.receiptIds])], controlledRows.history.resources.map(row => row.subscriptionId), share);",
+          "after": "    const currentControlled = share?.currentControlled.get(paymentId);\n    const controlledRows = currentControlled ?? await controlledFinancialWitness(ctx.tx, { paymentIds: [paymentId] });\n    const controlled = currentControlled ?? await controlledCashFinancialHistoryShared(ctx.tx, [...new Set([...controlledAliases.flatMap(row => row.id ? [row.id] : []), ...controlledRows.receiptIds])], controlledRows.history.resources.map(row => row.subscriptionId), share);"
+        }
+      ]
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-invoice-disposition.ts",
+      "beforeSha256": "fb2b7f7dc0c97f3b248a1e55f3e031cdd106d7b8bced4c544018521064bea327",
+      "afterSha256": "7eb89c9bd688b161f16be37f81a9c3981e36834a54cda7cc99e918a64f822fab",
+      "edits": [
+        {
+          "before": "import {principalAuthorityResult} from \"./principal-authority-contract\";",
+          "after": "import {principalAuthorityResult} from \"./principal-authority-contract\";\nimport {readOriginalPrincipalAndDebt} from \"./principal-authority\";\nimport {createControlledJournalComposition,finishControlledJournalComposition} from \"@/modules/subscriptions/controlled-provider-journal-composition\";"
+        },
+        {
+          "before": " let whole:Awaited<ReturnType<typeof controlledAtomicRefundTarget>>=null;\n for(const payment of successful){",
+          "after": " let whole:Awaited<ReturnType<typeof controlledAtomicRefundTarget>>=null;\n const journalComposition=createControlledJournalComposition();\n for(const payment of successful){"
+        },
+        {
+          "before": "principalAuthorityResult.parse(await ctx.callAsSystem(principalService,{paymentId:payment.id}))",
+          "after": "principalAuthorityResult.parse((await readOriginalPrincipalAndDebt(ctx,payment.id,undefined,journalComposition)).principal)"
+        },
+        {
+          "before": " if(whole&&whole.resources.length!==successful.length)refuse();",
+          "after": " await finishControlledJournalComposition(ctx.tx,journalComposition);\n if(whole&&whole.resources.length!==successful.length)refuse();"
+        }
+      ]
+    }
+  ]
+}

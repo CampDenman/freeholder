@@ -1,0 +1,30 @@
+// Copyright (C) 2026 Tony Aly
+// SPDX-License-Identifier: Apache-2.0
+// Pure contract controls only; actual DB/provider recovery acceptance is open.
+import {describe,expect,it} from "vitest";
+import type {TransferInventoryConfiguration,TransferInventoryEntry} from "../../scripts/media-transfer.mjs";
+import type {ActualOriginalProviderObject} from "@/core/media/provider-request-proof";
+import type {ReturnedOriginalCaller,OriginalPhysicalRequest} from "@/core/media/original-request-recovery-proof";
+import {requireOriginalPutRecoveryProof} from "@/core/media/original-request-recovery-proof";
+import {transferDigest} from "@/core/media/transfer-proof";
+const id="00000000-0000-4000-8000-000000000001",requestId="00000000-0000-4000-8000-000000000002",instance="00000000-0000-4000-8000-000000000003",key="private/original.bin",namespace="a".repeat(64),sha256="b".repeat(64);
+type RecoveryFixture={caller:ReturnedOriginalCaller;requests:OriginalPhysicalRequest[];actual:ActualOriginalProviderObject;first:{configuration:TransferInventoryConfiguration;entries:TransferInventoryEntry[]};confirmed:{configuration:TransferInventoryConfiguration;entries:TransferInventoryEntry[]}};
+function fixture():RecoveryFixture{
+ const runtimeIdentity={kind:"node"as const,instance,pid:123},descriptor={kind:"object.put"as const,binding:{kind:"s3"as const,namespace,location:{bucket:"original-private"}},key,sha256,bytes:6,createOnly:true},revision={kind:"etag"as const,key,namespace,value:'"actual-original"'},configuration={versioning:"disabled"as const,softDeleteSeconds:0,retentionSeconds:0};
+ const request={id:requestId,tokenDigest:"c".repeat(64),descriptor,descriptorDigest:transferDigest(descriptor),callId:id,runtimeIdentity,returnedAt:new Date("2026-11-13T00:00:00Z")},entries=[{kind:"object"as const,key,bytes:6,revision,current:true}];
+ return{caller:{id,runtimeIdentity,returnedAt:new Date("2026-11-13T00:00:00Z")},requests:[request],actual:{key,namespace,sha256,bytes:6,revision,requestProof:{id:requestId,tokenDigest:request.tokenDigest}},first:{configuration,entries},confirmed:{configuration:structuredClone(configuration),entries:structuredClone(entries)}};
+}
+describe("C1.12/C11.08 exact finished ordinary request recovery proof",()=>{
+ it("permits a portable actually finished original request only with its nonce, exact bytes/revision and matching complete inventories",()=>{const input=fixture();expect(requireOriginalPutRecoveryProof(input)).toEqual(input.actual.revision);});
+ it("refuses an active original caller despite an equal current object and stable inventories",()=>{const input=fixture();input.caller.returnedAt=null;expect(()=>requireOriginalPutRecoveryProof(input)).toThrow("Every actual original caller");});
+ it("refuses a missing physical request finish despite an actual logical closure",()=>{const input=fixture();input.requests[0]!.returnedAt=null;expect(()=>requireOriginalPutRecoveryProof(input)).toThrow("Every actual original caller");});
+ it("refuses absence or an empty request set as proof that no original writer can act later",()=>{const input=fixture();input.requests=[];expect(()=>requireOriginalPutRecoveryProof(input)).toThrow("Every actual original caller");});
+ it("refuses a second mutating request rather than hiding an unknown retry",()=>{const input=fixture();input.requests.push({...input.requests[0]!,id:"00000000-0000-4000-8000-000000000004"});expect(()=>requireOriginalPutRecoveryProof(input)).toThrow("one immutable mutating request");});
+ it("refuses a physical finish from another actual original runtime",()=>{const input=fixture();input.requests[0]!.runtimeIdentity={kind:"node",pid:123,instance:"00000000-0000-4000-8000-000000000004"};expect(()=>requireOriginalPutRecoveryProof(input)).toThrow("Every actual original caller");});
+ it("refuses a corrupt original first descriptor instead of rebinding the same current key",()=>{const input=fixture();input.requests[0]!.descriptor.bytes=7;expect(()=>requireOriginalPutRecoveryProof(input)).toThrow("Every actual original caller");});
+ it("refuses a current equal byte object tagged by another original request",()=>{const input=fixture();input.actual.requestProof!.id="00000000-0000-4000-8000-000000000004";expect(()=>requireOriginalPutRecoveryProof(input)).toThrow("exact original admitted write");});
+ it("refuses a retained old version even when both complete passes show an equal current original",()=>{const input=fixture();const retained={kind:"version"as const,key,bytes:6,revision:{...input.actual.revision,value:'"older-retained"',versionId:"older-retained-version"},current:false};input.first.entries.push(retained);input.confirmed.entries.push(structuredClone(retained));expect(()=>requireOriginalPutRecoveryProof(input)).toThrow("unknown retained versions");});
+ it("refuses retained soft-delete bytes or an unassigned session without deleting or adopting them",()=>{for(const kind of ["retained","session"]as const){const input=fixture(),entry={kind,key,bytes:6,current:false,...(kind==="session"?{sessionId:"unassigned-original-debt"}:{revision:{...input.actual.revision,value:'"soft-retained"'}})};input.first.entries.push(entry);input.confirmed.entries.push(structuredClone(entry));expect(()=>requireOriginalPutRecoveryProof(input)).toThrow("unknown retained versions");}});
+ it("refuses changed policy or physical membership between complete passes",()=>{const input=fixture();input.confirmed.configuration.retentionSeconds=60;expect(()=>requireOriginalPutRecoveryProof(input)).toThrow("inventories must agree");});
+ it("preserves unrelated keys outside this original resource lineage",()=>{const input=fixture(),foreign={kind:"object"as const,key:"unrelated/foreign.bin",bytes:9,revision:{...input.actual.revision,key:"unrelated/foreign.bin",value:'"foreign"'},current:true};input.first.entries.push(foreign);input.confirmed.entries.push(structuredClone(foreign));const before=structuredClone(input);expect(requireOriginalPutRecoveryProof(input)).toEqual(input.actual.revision);expect(input).toEqual(before);});
+});

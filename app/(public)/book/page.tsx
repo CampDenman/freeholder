@@ -6,6 +6,8 @@ import { randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { env } from "@/core/env";
+import { ServiceError } from "@/core/service";
+import { InvoiceIssuer } from "../../portal/invoices/InvoiceIssuer";
 import { actorFromToken } from "@/core/http/actor";
 import { availableSlots } from "@/core/scheduling/resolver-service";
 import { myProfile } from "@/core/portal/service";
@@ -24,7 +26,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
   return utilityPageMetadata({ path: "book", title: t("publicBooking.title"), description: t("publicBooking.intro"), index: false });
 }
-type Query = { service?: string; date?: string; mode?: string; seats?: string; error?: string; move?: string; seller?: string; calendar?: string; at?: string };
+type Query = { service?: string; date?: string; mode?: string; seats?: string; error?: string; move?: string; seller?: string; calendar?: string; at?: string; taxCountry?: string; taxRegion?: string; taxPostalCode?: string; taxCity?: string };
 const ERRORS: Record<string, string> = { conflict: "publicBooking.conflict", playgroundEmail: "publicBooking.error.playgroundEmail" };
 export default async function PublicBooking({ searchParams }: { searchParams: Promise<Query> }) {
   const [q,t,locale,business,jar] = await Promise.all([searchParams,getT(),getLocale(),currentBusiness(),cookies()]);
@@ -48,10 +50,13 @@ export default async function PublicBooking({ searchParams }: { searchParams: Pr
   let quote: Awaited<ReturnType<typeof publicBookingQuote.call>> | null = null;
   const slots = shown.slots;
   let unavailable = shown.unavailable;
+  let needsTaxDetails = false;
+  const taxFields = { taxCountry: q.taxCountry ?? "", taxRegion: q.taxRegion ?? "", taxPostalCode: q.taxPostalCode ?? "", taxCity: q.taxCity ?? "" };
+  const taxDestination = q.taxCountry ? { country: q.taxCountry, ...(q.taxRegion ? { region: q.taxRegion } : {}), ...(q.taxPostalCode ? { postalCode: q.taxPostalCode } : {}), ...(q.taxCity ? { city: q.taxCity } : {}) } : undefined;
   if (selected && !moving) try {
-    quote = await publicBookingQuote.call({productId:selected.productId,currency:catalog.currency,mode,seats},actor);
-  } catch { unavailable=true; }
-  const search = (extra: Record<string,string> = {}) => new URLSearchParams({service:selected?.productId??"",date,mode,seats:String(seats),...(q.move?{move:q.move}:{}),...(seller?{seller}:{}),...extra});
+    quote = await publicBookingQuote.call({productId:selected.productId,currency:catalog.currency,mode,seats,taxDestination},actor);
+  } catch (error) { if (seller && error instanceof ServiceError && error.code === "validation") needsTaxDetails = true; else unavailable=true; }
+  const search = (extra: Record<string,string> = {}) => new URLSearchParams({service:selected?.productId??"",date,mode,seats:String(seats),...taxFields,...(q.move?{move:q.move}:{}),...(seller?{seller}:{}),...extra});
   // A time is chosen before anybody is asked to prove an email (C6.19): the
   // choice rides through sign-in in the return address and comes back chosen.
   const chosen = chosenSlot(slots, q.calendar, q.at);
@@ -68,7 +73,7 @@ export default async function PublicBooking({ searchParams }: { searchParams: Pr
   const time = (d:Date) => new Intl.DateTimeFormat(locale,{timeZone:zone,timeStyle:"short"}).format(d);
   const day = (d:Date) => new Intl.DateTimeFormat(locale,{timeZone:zone,dateStyle:"full"}).format(d);
   const label = (slot: (typeof slots)[number]) => manyCalendars ? `${time(slot.startsAt)} · ${slot.calendarName}` : time(slot.startsAt);
-  const hidden = (slot: (typeof slots)[number]) => Object.entries({productId:selected?.productId??"",currency:quote?.currency??catalog.currency,mode,seats:String(seats),date,calendarId:slot.calendarId,startsAt:slot.startsAt.toISOString(),termsHash:quote?.termsHash??"",requestKey,seller:seller??""}).map(([name,value])=><input key={name} type="hidden" name={name} value={value} />);
+  const hidden = (slot: (typeof slots)[number]) => Object.entries({productId:selected?.productId??"",currency:quote?.currency??catalog.currency,mode,seats:String(seats),date,calendarId:slot.calendarId,startsAt:slot.startsAt.toISOString(),termsHash:quote?.termsHash??"",requestKey,seller:seller??"",...taxFields,taxQuoteDigest:quote?.merchant?.taxQuoteDigest??"",commercialQuoteDigest:quote?.merchant?.commercialQuoteDigest??""}).map(([name,value])=><input key={name} type="hidden" name={name} value={value} />);
   const ordered = chosen ? [chosen,...slots.filter(s=>s!==chosen)] : slots;
   return <div className="mx-auto grid max-w-3xl gap-6 px-6 py-12"><h1 className="text-3xl font-semibold">{t(moving?"portal.record.reschedule":"publicBooking.title")}</h1><p className="text-ink-muted">{t("publicBooking.intro")}</p>
     {!selected ? <Callout>{t("publicBooking.empty")}</Callout> : <>
@@ -78,11 +83,17 @@ export default async function PublicBooking({ searchParams }: { searchParams: Pr
         <Field label={t("publicBooking.service")} htmlFor="service"><Select id="service" name="service" defaultValue={selected.productId}>{catalog.services.map(s=><option key={s.productId} value={s.productId}>{s.name}</option>)}</Select></Field>
         <Field label={t("publicBooking.date")} htmlFor="date"><Input type="date" name="date" id="date" defaultValue={date} required /></Field>
         <Field label={t("publicBooking.seats")} htmlFor="seats"><Input type="number" name="seats" id="seats" min={1} max={100} defaultValue={seats} required /></Field>
-        <Field label={t("publicBooking.payment")} htmlFor="mode"><Select id="mode" name="mode" defaultValue={mode}>{selected.modes.map(m=><option key={m} value={m}>{t(`publicBooking.${m}`)}</option>)}</Select></Field><Button type="submit">{t("publicBooking.find")}</Button>
+        <Field label={t("publicBooking.payment")} htmlFor="mode"><Select id="mode" name="mode" defaultValue={mode}>{selected.modes.map(m=><option key={m} value={m}>{t(`publicBooking.${m}`)}</option>)}</Select></Field>{seller && !moving ? <fieldset className="grid gap-3 md:col-span-2"><legend className="text-sm font-medium">{t("publicBooking.taxLocation")}</legend>
+          <Field label={t("store.checkout.country")} htmlFor="taxCountry"><Input id="taxCountry" name="taxCountry" autoComplete="billing country" minLength={2} maxLength={2} pattern="[A-Za-z]{2}" defaultValue={taxFields.taxCountry} /></Field>
+          <Field label={t("store.checkout.region")} htmlFor="taxRegion"><Input id="taxRegion" name="taxRegion" autoComplete="billing address-level1" maxLength={100} defaultValue={taxFields.taxRegion} /></Field>
+          <Field label={t("store.checkout.postalCode")} htmlFor="taxPostalCode"><Input id="taxPostalCode" name="taxPostalCode" autoComplete="billing postal-code" maxLength={30} defaultValue={taxFields.taxPostalCode} /></Field>
+          <Field label={t("store.checkout.city")} htmlFor="taxCity"><Input id="taxCity" name="taxCity" autoComplete="billing address-level2" maxLength={200} defaultValue={taxFields.taxCity} /></Field>
+        </fieldset> : null}<Button type="submit">{t("publicBooking.find")}</Button>
       </form>
       {q.error ? <Callout tone="danger">{t(ERRORS[q.error] ?? "common.somethingWentWrong")}</Callout> : null}
+      {needsTaxDetails ? <Callout>{t("publicBooking.taxLocation")}</Callout> : null}
       {unavailable ? <Callout>{t("publicBooking.unavailable")}</Callout> : quote || moving ? <>
-        {moving ? <Callout>{t("publicBooking.moveTerms")}</Callout> : quote ? <section className="grid gap-2"><h2 className="text-xl font-semibold">{quote.name}</h2><p>{t("publicBooking.summary",{minutes:quote.durationMin,amount:formatMoney(quote.totalMinor,quote.currency,locale)})}</p><p>{t("publicBooking.due",{amount:formatMoney(quote.dueNowMinor,quote.currency,locale),balance:formatMoney(quote.balanceMinor,quote.currency,locale)})}</p><p className="text-sm text-ink-muted">{t("publicBooking.tax")}</p>{quote.policy ? <details><summary>{t("publicBooking.policy")}</summary><div className="grid gap-2 text-sm"><p>{quote.policy.name}</p><p>{t("publicBooking.freeUntil",{hours:quote.policy.freeUntilHours})}</p><p>{t(`publicBooking.fee.${quote.policy.feeType}`,{amount:formatMoney(quote.policy.feeValue??0,quote.currency,locale),percent:(quote.policy.feeValue??0)/10000})}</p><p>{t("publicBooking.rescheduleLimit",{count:quote.policy.rescheduleLimit})}</p><p>{t("publicBooking.noShow",{amount:formatMoney(quote.policy.noShowFeeMinor,quote.currency,locale)})}</p></div></details> : <p className="text-sm text-ink-muted">{t("publicBooking.noPolicy")}</p>}</section> : null}
+        {moving ? <Callout>{t("publicBooking.moveTerms")}</Callout> : quote ? <section className="grid gap-2"><h2 className="text-xl font-semibold">{quote.name}</h2><p>{t("publicBooking.summary",{minutes:quote.durationMin,amount:formatMoney(quote.totalMinor,quote.currency,locale)})}</p><p>{t("publicBooking.due",{amount:formatMoney(quote.dueNowMinor,quote.currency,locale),balance:formatMoney(quote.balanceMinor,quote.currency,locale)})}</p>{quote.merchant ? <><InvoiceIssuer issuer={{issuerIsMerchant:true,issuerName:quote.merchant.name,issuerSupport:quote.merchant.support}} businessName="" locale={locale} t={t} /><p>{t("publicBooking.taxTotal",{amount:formatMoney(quote.merchant.taxMinor,quote.currency,locale)})}</p></> : <p className="text-sm text-ink-muted">{t("publicBooking.tax")}</p>}{quote.policy ? <details><summary>{t("publicBooking.policy")}</summary><div className="grid gap-2 text-sm"><p>{quote.policy.name}</p><p>{t("publicBooking.freeUntil",{hours:quote.policy.freeUntilHours})}</p><p>{t(`publicBooking.fee.${quote.policy.feeType}`,{amount:formatMoney(quote.policy.feeValue??0,quote.currency,locale),percent:(quote.policy.feeValue??0)/10000})}</p><p>{t("publicBooking.rescheduleLimit",{count:quote.policy.rescheduleLimit})}</p><p>{t("publicBooking.noShow",{amount:formatMoney(quote.policy.noShowFeeMinor,quote.currency,locale)})}</p></div></details> : <p className="text-sm text-ink-muted">{t("publicBooking.noPolicy")}</p>}</section> : null}
         {profile ? <p>{t("publicBooking.as",{email:profile.email??""})}</p> : !moving && !chosen && slots.length ? <Callout>{t(playground?"publicBooking.pickFirstPlayground":"publicBooking.pickFirst")}</Callout> : null}
         {!verified && chosen ? <section id="reserve" className="grid gap-3 rounded-lg border border-accent bg-surface p-4" aria-labelledby="reserve-heading">
           <h2 id="reserve-heading" className="text-xl font-semibold">{t("publicBooking.chosen")}</h2>
@@ -93,7 +104,7 @@ export default async function PublicBooking({ searchParams }: { searchParams: Pr
             <Field label={t("publicBooking.name")} htmlFor="booking-name"><Input id="booking-name" name="name" autoComplete="name" maxLength={200} /></Field>
             <Field label={t("publicBooking.email")} htmlFor="booking-email"><Input id="booking-email" type="email" name="email" autoComplete="email" required /></Field>
             <span className="text-xs text-ink-muted">{t("publicBooking.playgroundEmailHint")}</span>
-            <label className="flex items-start gap-2"><input type="checkbox" name="acceptedTerms" required /><span>{t("publicBooking.accept")}</span></label>
+            <label className="flex items-start gap-2"><input type="checkbox" name="acceptedTerms" required /><span>{t(quote?.merchant?"publicBooking.acceptMerchant":"publicBooking.accept")}</span></label>
             <Button type="submit">{t("publicBooking.reserve")}</Button>
           </form> : <p><a className="font-semibold text-accent underline" href={href(`/portal/login?returnTo=${encodeURIComponent(returnTo)}`)}>{t("publicBooking.signInChosen")}</a></p>}
         </section> : null}
@@ -101,7 +112,7 @@ export default async function PublicBooking({ searchParams }: { searchParams: Pr
         {!slots.length ? <p>{t("publicBooking.noTimes")}</p> : verified ? ordered.map(slot=><form key={`${slot.calendarId}:${slot.startsAt.toISOString()}`} action={moving?moveBookingAction:bookServiceAction} className={cx("grid gap-3 rounded-lg border bg-surface p-4", slot===chosen ? "border-accent" : "border-rule")}>
           {moving?<input type="hidden" name="move" value={q.move}/>:null}
           {hidden(slot)}
-          <p className="font-medium">{label(slot)}</p><label className="flex items-start gap-2"><input type="checkbox" name="acceptedTerms" required /><span>{t(moving?"publicBooking.acceptMove":"publicBooking.accept")}</span></label><Button type="submit">{t(moving?"portal.record.reschedule":"publicBooking.reserve")}</Button>
+          <p className="font-medium">{label(slot)}</p><label className="flex items-start gap-2"><input type="checkbox" name="acceptedTerms" required /><span>{t(moving?"publicBooking.acceptMove":quote?.merchant?"publicBooking.acceptMerchant":"publicBooking.accept")}</span></label><Button type="submit">{t(moving?"portal.record.reschedule":"publicBooking.reserve")}</Button>
         </form>) : <ul className="flex list-none flex-wrap gap-2 p-0">{slots.map(slot=>{
           const current = slot===chosen;
           return <li key={`${slot.calendarId}:${slot.startsAt.toISOString()}`}><a href={href(`/book?${search({calendar:slot.calendarId,at:slot.startsAt.toISOString()})}#reserve`)} aria-current={current ? "true" : undefined} aria-label={t("publicBooking.choose",{time:label(slot)})} className={cx("inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold", current ? "bg-accent text-on-accent shadow-press" : "border border-rule text-ink hover:border-accent")}>{label(slot)}</a></li>;

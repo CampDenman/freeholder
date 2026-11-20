@@ -309,7 +309,13 @@ describe("the pipeline stays out of the public deploy surface", () => {
   it("runs only as a confirmed Forgejo job, pinned to immutable actions", () => {
     const workflow = readFileSync(".forgejo/workflows/deploy-production.yml", "utf8");
     expect(workflow).toContain('test "$CONFIRMATION" = "DEPLOY PRODUCTION"');
-    expect(workflow).toContain("runs-on: freeholder-release");
+    // `freeholder-release` was carried by NO runner on the fleet, so a
+    // dispatch queued forever instead of failing. This assertion pinned that
+    // bug in place. The fleet-wide label is the correct target; a bespoke one
+    // narrows the gate and reserves nothing, because Forgejo has no label
+    // priority (site-registry docs/forgejo-ci-runners.md).
+    expect(workflow).toContain("runs-on: ubuntu-latest");
+    expect(workflow).not.toContain("runs-on: freeholder-release");
     expect(workflow).toContain("cancel-in-progress: false");
     expect(workflow).not.toContain("github.event");
     const uses = [...workflow.matchAll(/^ {8}uses: (\S+)/gm)].map((match) => match[1]);

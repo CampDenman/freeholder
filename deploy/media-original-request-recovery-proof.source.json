@@ -1,0 +1,32 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_original_request_recovery_proof.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Exact finished ordinary request-recovery proof controls pass; actual database/provider recovery acceptance remains open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "3928d91b22801934cbba161e0fab11af9441263b4ab8c9b4fa8da05dc1d4fda5" },
+    { "path": "tests/core/media-original-request-recovery-proof.test.ts", "sha256": "175d242c8f43e436a5b42345d1811e897e3f2069269fb3be7d106b200657bd84" }
+  ],
+  "controls": {
+    "final": { "passed": 12, "failed": 0, "durationSeconds": 0.718 },
+    "coverage": ["portable finished original request requires exact nonce, bytes, revision and matching inventories", "active original caller refused despite equal current object", "missing physical request finish refused despite logical closure", "empty request set does not prove future inactivity", "second mutating request cannot hide unknown retry", "physical finish from another runtime refused", "corrupt original descriptor cannot rebind current key", "equal bytes tagged by another original request refused", "retained old version refused", "retained soft-delete bytes and unassigned sessions refused", "policy or physical membership changes refused", "unrelated resources remain outside lineage"],
+    "runtimeChanges": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "3928d91b22801934cbba161e0fab11af9441263b4ab8c9b4fa8da05dc1d4fda5",
+      "beforeSha256": "672d0a739394eb287ccaf4877de96a542fc1663c813027bfbee2e1c47ffbf6dc",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  retirement acceptance remains open.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  retirement acceptance remains open.\n  Original request-recovery proof qualification2026-11-16: all12 controls pass.\n  Exact original nonce, bytes, revision, runtime and matching complete inventories\n  are required; active callers, missing frames, extra mutations, foreign request\n  tags, retained debt and changed policy are refused without adopting unrelated\n  resources. Focused lint passes. See\n  `deploy/media-original-request-recovery-proof.source.json`. Actual DB/provider\n  recovery acceptance remains open.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_storage_recovery_browser_current.v1",
+  "checklist": ["C1.12", "C11.08", "C11.17"],
+  "status": "Genuine current ordinary-absence and multipart-refusal browser journeys pass in four locales after fixture repair; hosted and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "bd1af9db602873bcdd55df319e18c634fe3ed88eb63895ba995d4b0ce53fa2cc" },
+    { "path": "tests/browser/media-storage-recovery.spec.ts", "sha256": "0497358f17008127862fe9a17ac891b2c939578e20dd677e50ba8c2f0aec4849" },
+    { "path": "tests/fixtures/media-browser-multipart-debt.config.ts", "sha256": "f2ecd32b7e6c634bdff25b582666bcacdf29d7002d2e17b0df09f41959e5ee42" },
+    { "path": "tests/fixtures/media-browser-multipart-debt.probe.ts", "sha256": "7c02cf94d7aa1d314ee1bfdfeec533fbadd8f0f5a3241d0afd3fe7ac99ae8210" },
+    { "path": "playwright.a11y.config.ts", "sha256": "17b351cd4fd2ddbc5e773062237c504b07b2e5bf313cc88337066c275e133590" }
+  ],
+  "controls": {
+    "database": "browser_media_storage_recovery_a11y_final_20261116",
+    "browser": "Chromium via Playwright",
+    "native": { "passed": 4, "failed": 0, "locales": ["en", "es", "fr", "ar"] },
+    "coverage": ["genuine failed original PUT with occupied request sidecar and physical absence", "genuine lost multipart CREATE produced in a separate current Vitest process with UUID-only handoff", "multipart replacement recovery refused", "ordinary receipt reaches confirmed_absent and pending pointer is removed", "media.applyOriginalPutRecovery audit binds exact owner/receipt without private evidence", "fresh step-up, 320px, RTL, both themes, Axe and anonymous API refusal"],
+    "failedIntermediateCohorts": [
+      { "database": "browser_media_storage_recovery_a11y_20261116", "reason": "Original direct NULL-birth SQL inserts refused by current guards" },
+      { "database": "browser_media_storage_recovery_a11y_fixed_20261116", "reason": "Multipart direct NULL-birth insert refused after ordinary fixture repair" },
+      { "database": "browser_media_storage_recovery_a11y_genuine_20261116", "reason": "Direct Playwright service call cannot boot the genuine multipart path" },
+      { "database": "browser_media_storage_recovery_a11y_external_20261116", "reason": "Ordinary setup failed before physical dispatch and could not prove not_applied" },
+      { "database": "browser_media_storage_recovery_a11y_external4_20261116", "reason": "Real PUT had a positive ACK, so not_applied was invalid; shared diagnostic confirmed the exact mismatch" },
+      { "database": "browser_media_storage_recovery_a11y_external5_20261116", "reason": "Recovery succeeded; stale assertion expected retired media.applyStorageRecovery instead of media.applyOriginalPutRecovery" }
+    ],
+    "temporaryDiagnosticsRemoved": true,
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false,
+    "productCodeChanged": false,
+    "remaining": "Hosted provider, clean-room, independent review and checklist acceptance remain open"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "bd1af9db602873bcdd55df319e18c634fe3ed88eb63895ba995d4b0ce53fa2cc",
+      "beforeSha256": "c65c9b486a7738d9e5771d79111ea250b7f944eface866258a923ebe408406cd",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  `deploy/production-build-20261116.source.json`. Hosted startup and C11.17 remain open.\n  Raster-fixture qualification2026-11-16 (C1.12/C11.10): the full file passes15/15",
+          "after": "  `deploy/production-build-20261116.source.json`. Hosted startup and C11.17 remain open.\n  Recovery-browser current qualification2026-11-16 (C1.12/C11.08/C11.17): the old\n  fixture's direct NULL-birth PUT/resource inserts were correctly refused by current\n  guards. Genuine failed ordinary PUT evidence now uses the native sidecar/absence\n  pattern, and genuine lost-CREATE evidence comes from a separate current Vitest producer\n  with UUID-only handoff. The stale audit assertion names applyOriginalPutRecovery.\n  Final Chromium PASSes4/4 across en/es/fr/ar with step-up,320px/RTL,both themes,Axe,\n  exact recovery, private audit and anonymous refusal. TypeScript/focused lint pass. See\n  `deploy/media-storage-recovery-browser-current.source.json`. No product code or C row changes.\n  Raster-fixture qualification2026-11-16 (C1.12/C11.10): the full file passes15/15",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

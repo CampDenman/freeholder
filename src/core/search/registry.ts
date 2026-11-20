@@ -69,9 +69,14 @@ export function clipSnippet(value: string | null | undefined): string | null {
  * Completeness is asserted in `tests/core/c11-14-search.test.ts`.
  */
 export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
+  merchant_tax_profiles: "Private original business tax configuration; each member reads their own declarations through authorized tax services, never contact search.",
+  booking_market_policies: "Original accepted member commercial policy and private contact owner; controlled by shared booking/money and privacy services.",
+  booking_merchant_scopes: "Private original booking account and tax destination witness; personal copies minimized by original buyer and merchant rights, never content-search data.",
+  order_commercial_parties: "Private original order business, account and tax authority; permitted invoice and seller services expose only the appropriate commercial identity.",
   invoice_market_policies: "Original merchant ownership and private financial routing; read through authorized invoice documents, never as separate search hits.",
   invoice_merchant_allocations: "Original private seller portions of an invoice; money facts use authorized invoice and payout services, never searchable contact hits.",
   subscription_market_policies: "Frozen merchant agreement identity and private routing; reached through authorized agreements.",
+  media_storage_transfer_subjects: "Private original transfer ownership pointer; shared contact merge and exact storage/privacy recovery own access, never a separate content-search hit.",
   media_object_writes:"Private physical-operation receipts; inspect through human storage recovery, not global search.",
   media_uploads:"Private original upload reservations and ownership; accessed through their authorized upload capability.",
   media_objects:"Private physical ownership pointers; the authorized library asset is the searchable record.",

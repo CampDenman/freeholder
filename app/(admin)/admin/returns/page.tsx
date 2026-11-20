@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Return / RMA queue (C5.19).
 
+import { RETURN_BANK_REPLACEMENT_CONFIRMATION } from "@/modules/catalog/legacy-return-bank-recovery";
 import { randomUUID } from "node:crypto";
 import { ArrowUUpLeft, WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { listLocations } from "@/core/locations/service";
@@ -130,7 +131,7 @@ export default async function ReturnsPage({
                 <div><Button type="submit">{t("catalog.returns.receive")}</Button></div>
               </form>
             ) : null}
-            {canManage && selected.return.status === "received" && !plan?.prepared ? (
+            {canManage && selected.return.status === "received" && !plan?.prepared && !plan?.bankReview ? (
               <form action={productAction} className="grid gap-3">
                 <input type="hidden" name="intent" value="prepareReturnRefund" />
                 <input type="hidden" name="id" value={selected.return.id} />
@@ -140,10 +141,26 @@ export default async function ReturnsPage({
                 <Button type="submit">{t("catalog.returns.reviewRefund")}</Button>
               </form>
             ) : null}
+            {plan?.bankReview ? <Callout tone="warning">{t("catalog.returns.bankReviewHelp")}</Callout> : null}
+            {canManage && plan?.canCheckBankRefunds ? (
+              <form action={productAction}>
+                <input type="hidden" name="intent" value="recoverReturnBankRefunds" /><input type="hidden" name="id" value={selected.return.id} />
+                <input type="hidden" name="returnTo" value={`/admin/returns?id=${selected.return.id}`} />
+                <Button type="submit">{t("catalog.returns.checkBankRefunds")}</Button>
+              </form>
+            ) : null}
+            {canManage && plan?.canReplaceBankRefunds ? (
+              <form action={productAction} className="grid gap-3">
+                <input type="hidden" name="intent" value="replaceReturnBankRefunds" /><input type="hidden" name="id" value={selected.return.id} />
+                <input type="hidden" name="returnTo" value={`/admin/returns?id=${selected.return.id}`} />
+                <label className="flex items-start gap-2 text-sm"><input type="checkbox" name="confirmation" value={RETURN_BANK_REPLACEMENT_CONFIRMATION} required className="mt-1" />{t("catalog.returns.replaceBankConfirmation")}</label>
+                <Button type="submit">{t("catalog.returns.replaceBankRefunds")}</Button>
+              </form>
+            ) : null}
             {canManage && selected.return.status === "received" && plan?.prepared ? (
               <div className="grid gap-6">
               <dl className="grid gap-2 text-sm"><div><dt className="font-medium">{t("catalog.returns.totalRefund")}</dt><dd>{formatMoney(plan.amountMinor,plan.currency,locale)}</dd></div><div><dt className="font-medium">{t("catalog.returns.offlineRemaining")}</dt><dd>{formatMoney(offlineRemaining,plan.currency,locale)}</dd></div><div><dt className="font-medium">{t("catalog.returns.onlineRemaining")}</dt><dd>{formatMoney(Math.max(0,plan.onlineMinor-plan.onlineConfirmedMinor),plan.currency,locale)}</dd></div></dl>
-              {plan.onlineMinor>0 ? (
+              {plan.onlineMinor>0 && (!plan.bankReview || plan.canResumeOriginalRefunds) ? (
               <form action={productAction} className="grid gap-3">
                 <input type="hidden" name="intent" value="submitReturnProviderRefund" />
                 <input type="hidden" name="id" value={selected.return.id} />

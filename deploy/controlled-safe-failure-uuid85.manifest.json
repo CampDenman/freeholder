@@ -1,0 +1,29 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C11.10",
+    "C1.08"
+  ],
+  "base": "2225b9b2bf9c14c2716092a542888dfffa101844",
+  "status": "SOURCE ONLY; original seven boundary controls preserved plus one malformed-generator control; UNRUN",
+  "edits": [
+    {
+      "path": "src/core/safe-failure-log.ts",
+      "beforeSha256": "716877ed1d290730e414f9d7e3083652f87b7c4ce5a95b91caf0d25d9b7ce05f",
+      "afterSha256": "03c341858f3bfe56afa41570408bb9c3062d7ed86ec1480cf9b570b19dcfc8c8",
+      "start": 482,
+      "before": "console.error({ event: \"unhandled_failure\", surface: surface === \"http\" ? \"http\" : \"mcp\", category: \"internal\", code: \"internal\" });\n    return",
+      "after": "throw new Error(\"Cannot allocate an internal failure reference.\")",
+      "wholeReversalExact": true
+    },
+    {
+      "path": "tests/core/safe-failure-log.test.ts",
+      "beforeSha256": "f30cd0922e8485cefe6d4569bf8056258cf9695f8442dbd02dcdc45458b00d7e",
+      "afterSha256": "87a4c35e42648eadf5f1d4fcb88f0a1cff11150e11eb69234a9dcf49ed19c6dc",
+      "start": 436,
+      "before": "=>({call:vi.fn()}));\nvi.mock(\"@/core/runtime\",()=>({ready:async()=>undefined}));\nvi.mock(\"@/core/http/actor\",()=>({actorFromRequest:async()=>({kind:\"anonymous\"})}));\nvi.mock(\"@/mcp/tools\",()=>({hiddenFromMcp:()=>false,toolsFor:()=>[],serviceForTool:()=>({def:{name:\"canary.tool\"},call:seam.call})}));\nimport { handleMcp } from \"@/mcp/server\";\nconst privateCanary=\"PRIVATE_provider_secret_query_params_stack_cause\";\nfunction hostile() {\n const value={query:privateCanary,params:[privateCanary],cause:{provider:{body:privateCanary}},stack:privateCanary};\n Object.defineProperties(value,{name:{get(){throw new Error(privateCanary);}},code:{get(){throw new Error(privateCanary);}},message:{get(){throw new Error(privateCanary);}}});\n return value;\n}\nafterEach(()=>vi.restoreAllMocks());\nfunction safeRecord(calls:unknown[][],surface:string) {\n expect(calls).toHaveLength(1);expect(calls[0]).toHaveLength(1);\n const event=z.object({event:z.literal(\"unhandled_failure\"),surface:z.enum([\"http\",\"mcp\"]),category:z.literal(\"internal\"),code:z.literal(\"internal\"),requestId:z.uuid()}).strict().parse(calls[0]?.[0]);\n expect(event.surface).toBe(surface);\n expect(JSON.stringify(calls)).not.toContain(privateCanary);\n}\ndescribe(\"fixed unhandled-failure logging\",()=>{",
+      "after": ":{call:ReturnType<typeof vi.fn>;uuid?:string}=>({call:vi.fn()}));\nvi.mock(\"node:crypto\",async original=>{const actual=await original<typeof import(\"node:crypto\")>();return{...actual,randomUUID:()=>seam.uuid??actual.randomUUID()};});\nvi.mock(\"@/core/runtime\",()=>({ready:async()=>undefined}));\nvi.mock(\"@/core/http/actor\",()=>({actorFromRequest:async()=>({kind:\"anonymous\"})}));\nvi.mock(\"@/mcp/tools\",()=>({hiddenFromMcp:()=>false,toolsFor:()=>[],serviceForTool:()=>({def:{name:\"canary.tool\"},call:seam.call})}));\nimport { handleMcp } from \"@/mcp/server\";\nconst privateCanary=\"PRIVATE_provider_secret_query_params_stack_cause\";\nfunction hostile() {\n const value={query:privateCanary,params:[privateCanary],cause:{provider:{body:privateCanary}},stack:privateCanary};\n Object.defineProperties(value,{name:{get(){throw new Error(privateCanary);}},code:{get(){throw new Error(privateCanary);}},message:{get(){throw new Error(privateCanary);}}});\n return value;\n}\nafterEach(()=>{vi.restoreAllMocks();delete seam.uuid;});\nfunction safeRecord(calls:unknown[][],surface:string) {\n expect(calls).toHaveLength(1);expect(calls[0]).toHaveLength(1);\n const event=z.object({event:z.literal(\"unhandled_failure\"),surface:z.enum([\"http\",\"mcp\"]),category:z.literal(\"internal\"),code:z.literal(\"internal\"),requestId:z.uuid()}).strict().parse(calls[0]?.[0]);\n expect(event.surface).toBe(surface);\n expect(JSON.stringify(calls)).not.toContain(privateCanary);\n}\ndescribe(\"fixed unhandled-failure logging\",()=>{\n it(\"throws a fresh fixed failure without logging a malformed generator value\",()=>{\n  const log=vi.spyOn(console,\"error\").mockImplementation(()=>undefined);seam.uuid=privateCanary;\n  expect(()=>logUnhandledFailure(\"http\")).toThrowError(\"Cannot allocate an internal failure reference.\");expect(log).not.toHaveBeenCalled();\n });",
+      "wholeReversalExact": true
+    }
+  ]
+}

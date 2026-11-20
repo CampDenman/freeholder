@@ -14,8 +14,9 @@ export default defineModule({
   jobs: () => import("./jobs"),
   onboarding: () => import("./onboarding"),
   events: {
-    listens: { "refund.succeeded": "onReturnRefundSucceeded" },
+    listens: { "refund.succeeded": "onReturnRefundSucceeded", "refund.bankStateChanged": "onReturnBankRefundStateChanged" },
     emits: [
+      "catalog.returnRefundNeedsAttention",
       "catalog.productCreated",
       "catalog.productUpdated",
       "catalog.productActivated",

@@ -10,10 +10,11 @@
 // their own email and password or passkey.
 import { promises as dns } from "node:dns";
 import { existsSync } from "node:fs";
-import { readFile, rename } from "node:fs/promises";
+import { lstat, readFile, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isPinned, resolveEdgeImage } from "./image.js";
+import { namespaceOriginInstallation } from "./namespace-origin.js";
 import { SpacesClient } from "./s3.js";
 import { claimLink, generateSecrets, Redactor } from "./secrets.js";
 import { readEnv, readState, siteDirectory, writeEnv, writeState } from "./state.js";
@@ -101,6 +102,10 @@ export async function runLaunch(options: LaunchOptions, deps: LaunchDeps): Promi
       printPlan(options, state, envPath, out, preflight.cost);
       return LAUNCH_EXIT.ok;
     }
+    if (!state) {
+      const archived = await recoverPreviouslyDestroyedOrigin(dir);
+      if (archived) progress(`Storage recovery records from the previously destroyed launch are kept as ${archived}.`);
+    }
     state ??= { version: 1, name: options.name, provider: options.provider, domain: options.domain, region: options.region, size: options.size, done: [] };
     state.sshKeyId = preflight.sshKeyId;
     const save = async (patch: Partial<LaunchState>, envPatch?: Record<string, string>) => {
@@ -138,7 +143,7 @@ export async function runLaunch(options: LaunchOptions, deps: LaunchDeps): Promi
     }
     await finish("secrets", `Secrets generated and written to ${envPath} (mode 600).`);
 
-    if (pending("spaces")) await deps.provider.storage(options, state, save);
+    if (pending("spaces") || state.namespaceOrigin) await deps.provider.storage(options, state, save, join(dir, "namespace-origin"));
     await finish("spaces", `Storage ready: ${state.buckets!.media} and ${state.buckets!.backups} (versioned), with a key scoped to just those two.`);
 
     const userData = await readFile(join(recipeDirectory(), "cloud-init.yml"), "utf8");
@@ -161,6 +166,19 @@ export async function runLaunch(options: LaunchOptions, deps: LaunchDeps): Promi
       const recipe = recipeDirectory();
       await remote.upload(["compose.yml", "Caddyfile", "backup.sh"].map((f) => ({ local: join(recipe, f), remote: `/opt/freeholder/${f}` })));
       await remote.writeFile("/opt/freeholder/.env", (await readFile(envPath, "utf8")), "600");
+      if (state.namespaceOrigin) {
+        const origin = await namespaceOriginInstallation(join(dir, "namespace-origin"), state.dropletId!);
+        // Private independent trust, never owner claim/API/CREDENTIAL keys.
+        // Prepare before app startup. The consuming initialization/write fence
+        // must be completed before activating the full storage protocol.
+        const prepared = await remote.run("install -d -m 750 -o root -g 1001 /opt/freeholder/namespace-origin && install -d -m 700 -o 1001 -g 1001 /opt/freeholder/namespace-origin-state");
+        if (prepared.code !== 0) throw new LaunchFailure("The storage recovery records could not be installed.", "Keep the launch records and check server permissions before starting the site.", LAUNCH_EXIT.failed);
+        await remote.writeFile("/opt/freeholder/namespace-origin/public.pem", origin.publicKey, "640");
+        await remote.writeFile("/opt/freeholder/namespace-origin/receipt.json", origin.receipt, "640");
+        await remote.writeFile("/opt/freeholder/namespace-origin/installation.json", origin.installation, "640");
+        const secured = await remote.run("chown root:1001 /opt/freeholder/namespace-origin/public.pem /opt/freeholder/namespace-origin/receipt.json /opt/freeholder/namespace-origin/installation.json && chmod 640 /opt/freeholder/namespace-origin/public.pem /opt/freeholder/namespace-origin/receipt.json /opt/freeholder/namespace-origin/installation.json");
+        if (secured.code !== 0) throw new LaunchFailure("The storage recovery record permissions could not be secured.", "Keep the launch records and check server permissions before starting the site.", LAUNCH_EXIT.failed);
+      }
       const started = await remote.run("cd /opt/freeholder && chmod +x backup.sh && docker compose pull --quiet && docker compose up -d");
       if (started.code !== 0) throw new LaunchFailure("The site did not start on the server.", `Look at \`ssh root@${state.ip} 'cd /opt/freeholder && docker compose logs --tail 50'\`, then run the same command again.`, LAUNCH_EXIT.failed);
     }
@@ -231,7 +249,7 @@ function printPlan(options: LaunchOptions, state: LaunchState | null, envPath: s
     preflight: "check the account, SSH key, region and size",
     image: options.image ? `pin ${options.image}` : "pin the current edge build's linux/amd64 digest",
     secrets: `generate BOOTSTRAP_SECRET, SESSION_SECRET, CREDENTIAL_KEY and POSTGRES_PASSWORD into ${envPath}`,
-    spaces: `create ${options.name}-media and ${options.name}-backups (versioned) in ${options.region}, and a key scoped to both`,
+    spaces: `create ${state?.buckets?.media ?? "a private media bucket with a new random suffix"} and ${state?.buckets?.backups ?? `${options.name}-backups`} (backups versioned) in ${options.region}, and a key scoped to both`,
     droplet: `create droplet ${options.name} (${options.size}, ${options.region}, Ubuntu 24.04, monitoring on)`,
     "cloud-init": "wait for the server to finish setting itself up",
     host: options.temporaryHost ? "use a temporary <ip>.sslip.io address" : `serve ${options.domain} if it already points at the server, otherwise a temporary <ip>.sslip.io address`,
@@ -327,13 +345,63 @@ async function cutover(options: LaunchOptions, deps: LaunchDeps, dir: string, st
   throw new LaunchFailure(`https://${host} did not come up after the cutover.`, "Caddy may still be getting a certificate; run the cutover again in a few minutes.", LAUNCH_EXIT.failed);
 }
 
+function missingFile(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "ENOENT";
+}
+
+async function unusedArchivePath(path: string): Promise<string> {
+  for (let generation = 1; ; generation++) {
+    const archive = generation === 1 ? `${path}.destroyed` : `${path}.destroyed-${generation}`;
+    try {
+      await lstat(archive);
+    } catch (error) {
+      if (missingFile(error)) return archive;
+      throw error;
+    }
+  }
+}
+
+async function recoverPreviouslyDestroyedOrigin(dir: string): Promise<string | null> {
+  let destroyed: LaunchState;
+  try {
+    destroyed = JSON.parse(await readFile(join(dir, "state.destroyed.json"), "utf8")) as LaunchState;
+  } catch (error) {
+    if (missingFile(error)) return null;
+    throw new LaunchFailure("The previous launch's destruction record could not be read.", "Keep the launch records and restore a readable state.destroyed.json before launching again.", LAUNCH_EXIT.failed);
+  }
+  if (!destroyed.namespaceOrigin) return null;
+  const origin = join(dir, "namespace-origin");
+  try {
+    await lstat(origin);
+  } catch (error) {
+    if (missingFile(error)) return null;
+    throw error;
+  }
+  let admission: { body?: { binding?: { bucket?: string } } };
+  try {
+    admission = JSON.parse(await readFile(join(origin, "admission.json"), "utf8")) as typeof admission;
+  } catch {
+    throw new LaunchFailure("The previous launch's storage origin could not be read.", "Keep the original namespace-origin records and restore admission.json before launching again.", LAUNCH_EXIT.failed);
+  }
+  if (admission.body?.binding?.bucket !== destroyed.namespaceOrigin.bucket) throw new LaunchFailure("The retained storage origin does not belong to the destroyed launch.", "Keep both sets of launch records and recover their original association; nothing was replaced.", LAUNCH_EXIT.failed);
+  const archive = await unusedArchivePath(origin);
+  await rename(origin, archive);
+  return archive;
+}
+
+async function archiveDestroyedLaunch(dir: string): Promise<string> {
+  const archive = await unusedArchivePath(dir);
+  await rename(dir, archive);
+  return archive;
+}
+
 async function destroy(options: LaunchOptions, deps: LaunchDeps, dir: string, state: LaunchState | null, progress: (l: string) => void): Promise<number> {
   if (!state) throw new LaunchFailure(`There is no launch record for ${options.name}.`, "Pass the --name you launched with. Nothing was deleted.", LAUNCH_EXIT.failed);
   const answer = options.confirm ?? (options.nonInteractive || !deps.prompt ? "" : await deps.prompt(`This deletes the server for ${state.domain} and its Spaces key (buckets only if empty). Type ${options.name} to confirm: `));
   if (answer.trim() !== options.name) throw new LaunchFailure("Not confirmed. Nothing was deleted.", `Type the site name, or pass --confirm ${options.name}.`, LAUNCH_EXIT.failed);
   await deps.provider.destroy(state, progress);
-  await rename(join(dir, "state.json"), join(dir, "state.destroyed.json"));
-  progress(`The launch record is kept as ${join(dir, "state.destroyed.json")}; ${join(dir, "freeholder.env")} is kept too.`);
+  const archive = await archiveDestroyedLaunch(dir);
+  progress(`The destroyed launch, including its storage recovery records and freeholder.env, is kept as ${archive}.`);
   progress("DigitalOcean bills Spaces as a subscription (at least $5/month) until you cancel Spaces in its console; deleting buckets does not cancel it.");
   return LAUNCH_EXIT.ok;
 }

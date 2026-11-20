@@ -20,13 +20,11 @@ import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { IMAGE, REPOSITORY, SIGNER_WORKFLOW, attestationArguments, assertReleaseAttestation } from "../packages/cli/src/launch/image-admission.mjs";
 
 const execFileAsync = promisify(execFile);
 
-export const IMAGE = "ghcr.io/campdenman/freeholder";
-export const REPOSITORY = "CampDenman/freeholder";
-export const SIGNER_WORKFLOW =
-  "https://github.com/CampDenman/freeholder/.github/workflows/ci.yml@refs/heads/main";
+export { IMAGE, REPOSITORY, SIGNER_WORKFLOW, attestationArguments, assertReleaseAttestation };
 const DIGEST = /^sha256:[a-f0-9]{64}$/;
 const PIN = /^ghcr\.io\/campdenman\/freeholder@sha256:[a-f0-9]{64}$/;
 const INDEX_TYPES = new Set([
@@ -112,59 +110,6 @@ export async function resolvePublishedDigest(revision, fetchImpl = globalThis.fe
   const body = await manifestResponse.json();
   const digest = selectLinuxAmd64Digest({ mediaType, headerDigest, body });
   return { ...parsed, digest, pin: `${IMAGE}@${digest}` };
-}
-
-export function attestationArguments(pin) {
-  if (!PIN.test(pin)) throw new Error("refusing to verify a pin that is not an immutable image digest");
-  return [
-    "attestation",
-    "verify",
-    `oci://${pin}`,
-    "--repo",
-    REPOSITORY,
-    "--cert-identity",
-    SIGNER_WORKFLOW,
-    "--cert-oidc-issuer",
-    "https://token.actions.githubusercontent.com",
-    "--format",
-    "json",
-  ];
-}
-
-export function assertReleaseAttestation(payload, { pin, gitSha }) {
-  if (!Array.isArray(payload) || payload.length !== 1) {
-    throw new Error("expected exactly one attestation for the published image");
-  }
-  const result = payload[0]?.verificationResult;
-  const certificate = result?.signature?.certificate;
-  const subject = result?.statement?.subject?.[0];
-  const digest = subject?.digest?.sha256;
-  if (subject?.name !== IMAGE || digest !== pin.slice(pin.indexOf("sha256:") + "sha256:".length)) {
-    throw new Error("attestation subject is not the linux/amd64 image being pinned");
-  }
-  if (result?.statement?.predicateType !== "https://slsa.dev/provenance/v1") {
-    throw new Error("attestation is not SLSA provenance");
-  }
-  if (certificate?.sourceRepositoryURI !== "https://github.com/CampDenman/freeholder") {
-    throw new Error("attestation was not produced by this repository");
-  }
-  if (certificate?.sourceRepositoryRef !== "refs/heads/main") {
-    throw new Error("attestation was not produced from refs/heads/main");
-  }
-  if (certificate?.githubWorkflowTrigger !== "push") {
-    throw new Error("attestation was not produced by a push to main");
-  }
-  if (certificate?.buildSignerURI !== SIGNER_WORKFLOW) {
-    throw new Error("attestation was not signed by the main CI workflow");
-  }
-  const source = certificate?.sourceRepositoryDigest;
-  if (typeof source !== "string" || !/^[a-f0-9]{40}$/.test(source)) {
-    throw new Error("attestation did not name the source commit");
-  }
-  if (gitSha != null && source !== gitSha && !source.startsWith(gitSha)) {
-    throw new Error("attestation commit does not match the requested revision");
-  }
-  return source;
 }
 
 export function assertHealthUrl(value) {

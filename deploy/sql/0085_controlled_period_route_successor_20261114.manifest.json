@@ -1,0 +1,28 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "MATERIALIZED_PREPARED_UNRUN",
+  "prefix": {
+    "path": "db/migrations/0085_controlled_collection_application.sql",
+    "bytes": 614412,
+    "sha256": "007a545f3daf5e32fe3effe2b83125c7b0bca1d70b9981d05cb909835a52438c",
+    "entirePrefixMustRemainUnchanged": true
+  },
+  "fragment": {
+    "path": "deploy/controlled-period-route-lineage84.fragment.sql",
+    "bytes": 9775,
+    "sha256": "c48a2ab692193ae36c46bb3be9b390423faf65a687503e1326d4614ce22ac0d2"
+  },
+  "assembled": {
+    "bytes": 624213,
+    "sha256": "9b6144a71e1a898406f048a441df6178c89a8de0f8073fa3557191525a57f901"
+  },
+  "functionsReplaced": 2,
+  "newFunctions": 0,
+  "newModels": 0,
+  "newTriggers": 0,
+  "journalCount": 86,
+  "failure": "/tmp/freeholder-current-full86-application-full-native-v7-20261114-result.json",
+  "wholeFrozenLegacyAndReadyBodyReversals": "deploy/controlled-period-route-lineage84.manifest.json",
+  "sourceTestPrefixContinuation": "Earlier amount-source test continues to assert the complete frozen614412 bytes, checking its own suffix only within that exact boundary; whole normal/owned equality remains mandatory. Additive later suffix is admitted without changing prior body/predicate oracles.",
+  "acceptance": "Pending source, fresh normal/strict full-function-origin inventories and original native; V31 preserved with no payment/admission commit; all stable gates open."
+}

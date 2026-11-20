@@ -1,0 +1,40 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "next_security_performance_20261116.v1",
+  "checklist": ["C11.10", "C11.17"],
+  "status": "Next.js 16.4.6 security update passes dependency, performance, production-artifact and package-consumer controls; full source renewal and independent review remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "a52835c139d0495be50650c3a9f067fb1227f2f4c5ad4fb90553168d6ecbefd3" },
+    { "path": "package.json", "sha256": "31db8e0400084cd839dcd66caf07fa2e26aca1ac1f396cc88b33974637072a4d" },
+    { "path": "pnpm-lock.yaml", "sha256": "f2c2057868d4f8ea14a0c72453d04e6a2ec838335bfe17020696aef6694ab6fb" },
+    { "path": ".changeset/next-security-2026-11.md", "sha256": "fc8f862bcb543d33d7323e7baa41f6370fb4fd3d90f0e018fb6cafcbce56089b" },
+    { "path": "scripts/performance-budgets.mjs", "sha256": "3b9c1867b3b452a2ab530032d3843f8ce4c3bda129b7c92e5746d68c11049d39" }
+  ],
+  "controls": {
+    "officialSource": "https://nextjs.org/blog/november-2026-security-release",
+    "nextVersion": { "before": "16.4.2", "patchedRelease": "16.4.5", "installed": "16.4.6" },
+    "dependencyAudit": { "before": "undocumented GHSA-mfr8-8qww-v76h", "after": "no known advisories" },
+    "performance": { "database": "performance_budgets_test_20261116", "dataset": "small", "passed": 10, "failed": 0, "verifiedCounts": { "contacts": 50, "messages": 200, "orders": 20, "products": 10, "assets": 20 } },
+    "productionBuild": { "nextVersion": "16.4.6", "exitCode": 0, "artifactFiles": 4399, "artifactBytes": 152787678, "sourceOrEnvironmentLeakage": false },
+    "packageConsumers": { "passed": 7, "failed": 0 },
+    "sourceContinuation": { "affectedFilesPassed": 2, "affectedFilesFailed": 0, "passed": 52, "failedAssertions": 0 },
+    "fullSourceRenewal": { "filesPassed": 601, "filesFailed": 0, "filesSkipped": 361, "passed": 5127, "failed": 0, "skipped": 3806, "durationSeconds": 662.16 },
+    "guardsWeakened": false,
+    "remaining": "Independent security review, hosted acceptance, clean-room and owner signoff remain open"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "a52835c139d0495be50650c3a9f067fb1227f2f4c5ad4fb90553168d6ecbefd3",
+      "beforeSha256": "795d014a44069051321c86fecfbf0876b72bffb381fcf5b26e90900057b75fe6",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  acceptance remain open; no C row closes.\n  Recovery-browser current qualification2026-11-16 (C1.12/C11.08/C11.17): the old",
+          "after": "  acceptance remain open; no C row closes.\n  Framework security/performance qualification2026-11-16 (C11.10/C11.17): Next.js\n  moves16.4.2→16.4.6, including the official November security fixes\n  (https://nextjs.org/blog/november-2026-security-release). The dependency audit now\n  reports no known advisories. Small-dataset performance PASSes10/10 on a fresh database;\n  the patched build/artifact gate passes with4399 files/152787678 bytes and no leakage;\n  all7 package consumers pass again. A source-continuation entry covers the exact Next\n  version delta and its two affected contracts PASS52/52. Final full source PASSes601\n  files/5127 cases with zero failures in662.16s, preserving361 files/3806 explicit skips.\n  See `deploy/next-security-performance-20261116.source.json`. No independent\n  security review or stable acceptance follows.\n  Recovery-browser current qualification2026-11-16 (C1.12/C11.08/C11.17): the old",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

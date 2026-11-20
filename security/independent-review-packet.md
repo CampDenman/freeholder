@@ -51,6 +51,42 @@ one.
 Prepared 2026-09-12 from the tree at this change. Threat surfaces, existing
 tests, and known residuals only — no claim that the list is empty.
 
+## 2026-11-13 actual original inspection stop component
+
+Protected main fdba2817 contains the multipart part-signing containment (#702),
+with44 PR checks and43 merge-group jobs passed. The broader current candidate
+1bf950f7 has a new separate immutable inspection-stop model. Review exact
+whole-row admission binding, process birth/actual death checks, fresh-person
+step-up and refusal of keys/agents, SQL late-finish/observation refusal, private
+HMAC receipts and safe financial/export/privacy composition. A stopped caller
+never means a returned bank read. Only a new genuinely completed read supplies
+current bank evidence. The public SDK includes the human review operation;
+its recovery-plan helper stays private.
+
+All nine local actual stop/capture/current-bank/original-cash journeys and
+independent ledger/journal/profile/client-drain checks pass; see
+`deploy/current-full82-integration-2026-11-13.md`. Original process death is
+real and local; provider HTTP is synthetic. The failed startup dataset and
+logs are preserved. Current source has411 distinct controls in70 complete
+files; source-only native skips are explicit. Fresh84 migration and strict143
+model checks pass. Actual owner UI, positive controlled money application,
+full media protocol/recovery, real provider/platform acceptance and final
+byte recovery remain open; these component proofs are not independent review
+or the final candidate signature.
+
+Owner recovery UI follow-up (2026-11-14 UTC):4349a5a9 additionally passes the
+actual standalone production build/scrub and four en/es/fr/ar owner browser
+journeys in both themes at320px with keyboard, zero Axe violations and Arabic
+RTL. Each genuine child admission/death is reviewed through the actual shared
+owner action. All27 financial/admission/finish table hashes stay unchanged;
+NULL original finish remains NULL, one authentic stop and minimized audit are
+proved independently alongside all84 journal hashes and drained clients. The
+fresh sign-in factor is an explicit fictional fixture, and no actual bank or
+external provider is called. Review the private pending-list aggregate bounds,
+stop authentication, current plan/stale revision, live/unobservable refusal and
+server action service boundary. Full C12.38, provider/cross-host recovery,
+independent review and final owner signature remain open.
+
 ## 2026-11-10 review assignment and alert remediation
 
 Tony Aly selected himself to perform the review and requested completion of
@@ -134,6 +170,54 @@ ambiguity, process-loss recovery, later bank
 returns and recipient/fee reconciliation remain explicit unfinished scope.
 These are agent-authored proofs; Tony's review and real-provider acceptance
 remain open, and no sign-off is inferred.
+
+## Current original billing and privacy follow-up (2026-11-12)
+
+Protected main now includes the original live-refund caller repair (#694,
+`bad846e4`) and selective-erasure core framework (#695, `81271622`), each
+through the ordinary protected merge queue with all44 merge-group checks
+successful. The latter adds the optional source hook and real receipt/job
+convergence behavior, without schema/domain activation. Neither merge closes
+C1.08, full financial acceptance or this independent review.
+
+The isolated current financial/subscription candidate (`81e42159` plus test-only
+`885a37f2`) is broader than that protected baseline. Review its original
+physical resource/caller inventory, independent positive-money facts, frozen
+accepted terms, scope-limited merge witnesses, current retention holds, canonical
+artifact hashes and original queued money/customer job identities together.
+The fresh SQL881a database/model checks and four actual buyer-erasure controls
+are supporting evidence, with their exact limitations in
+`deploy/current-subscription-terms80-source-2026-11-12.md`. Provider factory HTTP
+is intercepted; a synthetic prior-create journal does not establish actual
+provider-account acceptance or a newly accepted agreement.
+
+Two additional recovery controls genuinely failed on the earlier candidate: a restored local billing-mode change hides an active original resource
+from agreement erasure, and a missing original money-finisher queue payload
+rolls back the recovery receipt transition despite a pending original resource
+cohort. Both populated failures are independently preserved with thirteen
+original table hash/count goldens and unchanged schema journal. The reviewer
+must check the eventual minimal source repairs against the unchanged AFTER
+controls and inspect missing/restored inventories without inferring original
+payloads from current mutable rows. No repair or independent approval is implied
+by the initial packet update. Minimal current-source repair8f06564c now passes
+both unchanged failing controls(6.047/5.888s), all four directly affected original
+journeys, types/lint and41 source controls. Independent per-case readbacks confirm
+retained pending credentials/work or committed explicit recovery as appropriate.
+The two actual populated failing clones remain immutable. The reviewer must
+inspect these fixes and their preserved-history limitations; these local passes
+supply no independent approval. Actual provider, complete financial/recovery
+acceptance and Tony's signed review remain required.
+
+The retained untagged customer-task path subsequently exposed a separate
+unpublished candidate defect: an actual intercepted DELETE and false completed
+receipt while the original billing resource stayed active. All-task preflight
+99f566b9/356306b7 now passes the unchanged preserved-history oracle with0 I/O,
+plus actual queued safe-legacy, missing-hash and later-hold controls. Both
+original13-table goldens remain untouched. See
+`deploy/subscription-original-customer-preflight-20261113.md` for exact provenance
+and the still-open full regression, post-admission hold/caller and provider
+acceptance boundaries. The actual accepted manual terms/own-versus-foreign
+profile-child controls also pass; these do not supply the independent review.
 
 ## Payment-provider privacy cleanup repair (2026-11-11)
 
@@ -1077,3 +1161,22 @@ no-DDL completion guard does not erase immutable index rows or repair old
 completed receipts. Full guarded minimization and historical recovery remain
 required. This coding-agent finding and repair supply no independent C11.10
 sign-off.
+
+
+## Uploaded index and saved HTTP source candidate (C1.08/C3.47/C11.10)
+
+The current80/import81 source is type/lint/static-contract qualified, with no
+applied81/native AFTER or independent sign-off. Exact evidence and unapplied
+SQL identities are in `deploy/import-upload-index-erasure-source-2026-11-13.md`.
+Review the first-fulfillment scope/member/chunk capture and its known-empty
+boundary; the actual task/artifact/current-hold preflight; accepted and later
+ownership refusal; physical PUT/DELETE namespace binding; guarded minimization
+and same-transaction ACK; deferred whole-scope closure; and explicit recovery
+for missing old membership. Rollback releases a mutable descriptor and does not
+itself authorize cleanup. Original IDs/ranges/SHA facts remain immutable.
+
+The ordinary79 containment proof remains in
+`deploy/import-wxr-index-privacy-2026-11-13.md`. The81 candidate requires the
+stronger unchanged original full-erasure oracle. Two actual independent-index
+processes, public API/MCP/SDK and four-locale owner journeys are prepared but
+unrun. Source audits and this handoff do not provide C11.10 approval.

@@ -1,0 +1,40 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_transfer_quota_unknown_target.v1",
+  "checklist": ["C1.12", "C10.32", "C11.08"],
+  "status": "The genuine attempted-unknown target cohort preserves its pending charge and refuses release; unattempted-retry and late-original controls remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "47f8d62f067ef804a8af357dcd52b21e49efc402c60b99c43c96893ae2dd450a" },
+    { "path": "tests/helpers/media-transfer-provider.ts", "sha256": "bdac3d725dc9b54917f18a35b4ba016fdbcad6fb02c38988a06a431b5fb3857b" },
+    { "path": "tests/fixtures/media-transfer-quota-role.config.ts", "sha256": "99500d56d992e4b591d7e2be71454b9d35fe806ab0143beb64f09384eaa1f8bf" },
+    { "path": "tests/fixtures/media-transfer-quota-role.probe.ts", "sha256": "e32f8bb7de047a99b7b94c3e74aab297ee67311a337885fb9b1a7b3b80a2386c" },
+    { "path": "tests/core/media-transfer-quota-role-lifecycle.test.ts", "sha256": "bfa9a8f4700405036319098652c79cb8c488bcbbf8e6f96c08e12b794f05934e" }
+  ],
+  "controls": {
+    "database": "media_quota_role_unknown_final_20261116",
+    "producer": { "passed": 1, "failed": 0 },
+    "native": { "passed": 1, "failed": 0, "selectedSkips": 8 },
+    "physicalFault": "The actual target PUT bytes reach the private TCP provider, then its reply socket is destroyed before a response can be observed",
+    "evidence": "The unknown admitted request frame and failed caller finish are required; a valid no-response cohort needs no fabricated observation row and never accepts a not-attempted fact",
+    "release": "Refused; token, charge, caller and request history remain unchanged",
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false,
+    "productCodeChanged": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "47f8d62f067ef804a8af357dcd52b21e49efc402c60b99c43c96893ae2dd450a",
+      "beforeSha256": "c7605fdaf70e9991507466b5e6f43de22fce5e5b8e4db4b3d8692ccf705134b6",
+      "continue": true,
+      "edits": [
+        {
+          "before": "`media-privacy-descendant-recovery.md`. Hosted/provider and checklist acceptance remain open.\n\n\nSource-only continuation, 2026-11-14 (C1.12/C11.08): the idle multipart",
+          "after": "`media-privacy-descendant-recovery.md`. Hosted/provider and checklist acceptance remain open.\n\nUnknown-target quota qualification2026-11-16 (C1.12/C10.32/C11.08): a genuine\nTCP reply loss after physical dispatch retains an unknown request/caller, pending token\nand charge. The evidence assertion now recognizes a valid failed call with no response\nobservation while requiring its unknown frame/finish and rejecting any not-attempted\nfact; release refusal and unchanged-state checks are intact. Producer and native control\npass1/1 each; TypeScript/lint pass. See\n`deploy/media-transfer-quota-unknown-target.source.json`. The unattempted-retry and\nlate-original cohorts remain open; no C-item closes.\n\n\nSource-only continuation, 2026-11-14 (C1.12/C11.08): the idle multipart",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

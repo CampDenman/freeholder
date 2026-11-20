@@ -1,0 +1,32 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_multipart_create_baseline_proof.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "First original multipart pre-dispatch baseline controls pass; no session, FIN or remote terminal acceptance is claimed",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "e419c2600ace123fa82e1662aeb3afbfc58cdcc053e602b08d30b86310cd5e79" },
+    { "path": "tests/core/media-multipart-create-baseline-proof.test.ts", "sha256": "a2eb15c25326ce103fb65bcf245259701e224c13a9f122de7ec53b014a1ed52c" }
+  ],
+  "controls": {
+    "final": { "passed": 12, "failed": 0, "durationSeconds": 0.716 },
+    "coverage": ["both exact complete policy/object/version/session passes required", "existing original object/version/delete-marker/session refused despite current-key404", "namespace policy change between passes refused", "complete cursor ancestry retained and empty/looping pages refused", "parsed page under wrong digest or duplicate request identity refused", "wrong provider family or reordered pass refused", "unrelated-page digest/count retained without private locators", "sealed first baseline never refilled or rewritten"],
+    "runtimeChanges": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "e419c2600ace123fa82e1662aeb3afbfc58cdcc053e602b08d30b86310cd5e79",
+      "beforeSha256": "dbd1aacd3adf3eefe56faaa947895978c20dc953136a441904c1da1b6ba27466",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  declarations grant no provider receipt, FIN or actual I/O acceptance.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  declarations grant no provider receipt, FIN or actual I/O acceptance.\n  CREATE-baseline qualification2026-11-16: all12 controls pass. Sealing requires\n  both exact complete policy/object/version/session passes with cursor and request\n  ancestry. Existing physical resources, policy changes, truncated loops, duplicate\n  requests and sealed rewrites are refused without copying foreign private locators.\n  Focused lint passes. See `deploy/media-multipart-create-baseline-proof.source.json`.\n  No session assignment, FIN or remote terminal acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

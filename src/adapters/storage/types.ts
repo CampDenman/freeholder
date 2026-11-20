@@ -9,6 +9,9 @@
 // Deliberately small. Every method here is one an owner's files genuinely
 // need; anything vendor-specific stays behind the implementation.
 
+import type {TransferRequestObserver} from "../../../scripts/media-transfer.mjs";
+import type {OriginalPartCapabilityProof} from "../../../scripts/media-part-capability.mjs";
+
 export type StorageId = "s3" | "replit" | "local";
 
 /** Stable resource names only; no credentials or bearer capabilities. */
@@ -16,6 +19,19 @@ export interface StorageBinding {
   kind: StorageId;
   namespace: string;
   location: Readonly<Record<string, string>>;
+}
+
+/** Actual original provider result; never derived from a later HEAD. */
+export interface StoredObjectRevision {
+  kind: "etag" | "generation";
+  key: string;
+  namespace: string;
+  value: string;
+  versionId?: string;
+}
+export interface StorageWriteObservation {
+  request?:TransferRequestObserver;
+  onAccepted?: (result?: { revision?: StoredObjectRevision }) => Promise<void>;
 }
 
 export interface StoredObject {
@@ -35,11 +51,23 @@ export interface MultipartPart {
   partNumber: number;
   etag: string;
   bytes?: number;
+  /** Actual SHA256 returned for this part, base64; never an object ETag. */
+  checksumSha256?:string;
 }
 export type MultipartInspection = { state: "open"; parts: MultipartPart[] } | { state: "absent" };
 export interface MultipartObservation {
+  /** Only the original COMPLETE caller may verify its immutable manifest. */
+  expectedParts?:MultipartPart[];
+  request?:TransferRequestObserver;
   /** Commit the positive provider fact before subsequent inspection can fail. */
-  onAccepted?: (result?: { uploadId: string }) => Promise<void>;
+  onAccepted?: (result?: { uploadId: string;revision?:StoredObjectRevision }) => Promise<void>;
+}
+export interface MultipartPartSignatureObservation {
+ request?:TransferRequestObserver;sha256:string;bytes:number;expiresAt:string;
+}
+export interface SignedMultipartPart {
+ url:string;method:"PUT";headers?:Record<string,string>;expiresAt?:string;
+ capabilityDigest?:string;proof?:OriginalPartCapabilityProof;
 }
 
 /** Optional capability: only object stores that really support it expose it. */
@@ -50,10 +78,11 @@ export interface DirectMultipartStorage {
     uploadId: string,
     partNumber: number,
     expiresIn?: number,
-  ): Promise<{ url: string; method: "PUT" }>;
-  listParts(key: string, uploadId: string): Promise<MultipartPart[]>;
+    observation?:MultipartPartSignatureObservation,
+  ): Promise<SignedMultipartPart>;
+  listParts(key: string, uploadId: string, observation?:MultipartObservation): Promise<MultipartPart[]>;
   /** Absence is authoritative NoSuchUpload, not an empty object HEAD. */
-  inspect?(key: string, uploadId: string): Promise<MultipartInspection>;
+  inspect?(key: string, uploadId: string, observation?:MultipartObservation): Promise<MultipartInspection>;
   /** Complete exact-key inventory, including uploads whose CREATE reply was lost. */
   listUploadsForKey?(key: string): Promise<string[]>;
   complete(
@@ -76,6 +105,8 @@ export interface SignedUrlOptions {
 
 export interface StorageAdapter {
   readonly id: StorageId;
+  /** Protocol actually used by new PUT admissions; never inferred for history. */
+  readonly writeProtocol?: "single-put-v1" | "nonresumable-put-v1";
   /** Resolve before admission/provider writes, never inside a business TX. */
   binding?(): Promise<StorageBinding>;
 
@@ -98,7 +129,7 @@ export interface StorageAdapter {
     key: string,
     body: Uint8Array<ArrayBuffer>,
     contentType: string,
-    observation?: { onAccepted?: () => Promise<void> },
+    observation?: StorageWriteObservation,
   ): Promise<StoredObject>;
 
   get(key: string): Promise<Uint8Array<ArrayBuffer> | undefined>;
@@ -118,6 +149,8 @@ export interface StorageAdapter {
   ): Promise<AsyncIterable<Uint8Array<ArrayBuffer>> | undefined>;
 
   delete(key: string): Promise<void>;
+  /** Complete physical absence, never current-key404 alone. */
+  verifyPhysicalAbsence?(key:string):Promise<void>;
 
   /**
    * A URL a browser can fetch. For a private bucket this is signed and

@@ -1,0 +1,18 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "original_caller_lifecycle_fixture.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Scoped original ordinary-provider caller lifecycle fixture qualified locally; ingress, worker, provider-account, stopped-writer and complete-erasure acceptance remain open",
+  "artifacts": [
+    { "path": "tests/core/media-original-provider-caller-lifecycle.test.ts", "sha256": "ec7d7fa16296a3b793c2ad6ab86b093c72b143ea69a3db55acb6ae1622617b1b" }
+  ],
+  "controls": {
+    "before": { "database": "original_caller_lifecycle_audit_20261115", "passed": 0, "failed": 3, "unhandledErrors": 1, "cause": "The fixture configured a loopback S3 endpoint without the synthetic AWS-to-TCP transport mapping required by conditional-write authority" },
+    "after": { "database": "original_caller_lifecycle_repaired_20261115", "passed": 3, "failed": 0, "durationSeconds": 30.48 },
+    "fixture": "The configured AWS endpoint is preserved for admission and authority checks; only fetch transport is redirected to the private fictional TCP provider",
+    "guardsWeakened": false,
+    "runtimeDefectFound": false,
+    "focusedLint": "passed",
+    "diffCheck": "passed"
+  }
+}

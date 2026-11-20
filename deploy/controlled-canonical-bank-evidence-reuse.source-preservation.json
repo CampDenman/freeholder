@@ -1,0 +1,28 @@
+{
+  "domain": "freeholder.controlled-canonical-bank-evidence-reuse.v1",
+  "files": [
+    {
+      "path": "src/modules/invoicing/controlled-canonical-bank-principal.ts",
+      "beforeSha256": "a8777b636d160bd56e6aea861c885eecfc07f130125aeffc32c23d516d533936",
+      "afterSha256": "d085baafdfdc46842b03053cabb2499ca361ef7536698ff871ea30dacbe917c4",
+      "finiteDelta": [
+        {
+          "before": "import type { payments } from \"./schema\";",
+          "after": "import type { payments } from \"./schema\";\nimport type {ControlledAtomicRefundTarget,controlledAtomicFeeOwner} from \"./controlled-atomic-refund-target\";\ntype KnownCanonicalBankEvidence={target:ControlledAtomicRefundTarget|null;owner:NonNullable<Awaited<ReturnType<typeof controlledAtomicFeeOwner>>>};"
+        },
+        {
+          "before": "export async function readControlledCanonicalBankPrincipal(ctx: ServiceContext, payment: typeof payments.$inferSelect, cash: MerchantRefundCashOrigin) {",
+          "after": "export async function readControlledCanonicalBankPrincipal(ctx: ServiceContext, payment: typeof payments.$inferSelect, cash: MerchantRefundCashOrigin, known?:KnownCanonicalBankEvidence) {"
+        },
+        {
+          "before": "  const retainedFee = await originalMerchantFeeTarget(ctx, payment, routing);",
+          "after": "  const retainedFee = await originalMerchantFeeTarget(ctx, payment, routing, known?.target);"
+        },
+        {
+          "before": "    ? await (await import(\"./controlled-atomic-refund-target\")).controlledAtomicFeeOwner(ctx, payment.id) : null;",
+          "after": "    ? known?.owner??await (await import(\"./controlled-atomic-refund-target\")).controlledAtomicFeeOwner(ctx, payment.id) : null;"
+        }
+      ]
+    }
+  ]
+}

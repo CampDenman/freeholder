@@ -5,7 +5,15 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import {listTrialSetupDispatches} from "@/modules/subscriptions/setup-reconciliation";
 import {reconcileTrialSetupDispatchAction} from "../../../subscription-actions";
-import { getSubscription } from "@/modules/subscriptions/service";
+import { CommercialAmendment } from "../../../../components/CommercialAmendment";
+import { GrossProration } from "../../../../components/GrossProration";
+import { grossProrationStatus } from "@/modules/subscriptions/proration-service";
+import { ControlledProviderRecovery } from "../../../../components/ControlledProviderRecovery";
+import { controlledProviderRecoveryPlan,controlledProviderResourceStatus } from "@/modules/subscriptions/controlled-provider-stop";
+import { ProviderReaderRecovery } from "../../../../components/ProviderReaderRecovery";
+import { providerReaderRecoveryPlan } from "@/modules/subscriptions/provider-reader-recovery";
+import { merchantAmendmentStatus } from "@/modules/subscriptions/commercial-amendments";
+import { getSubscription, listOfferedPlans } from "@/modules/subscriptions/service";
 import { getContact } from "@/core/contacts/service";
 import { currentBusiness } from "@/core/settings/read";
 import { hasModuleAccess, ServiceError } from "@/core/service";
@@ -17,7 +25,7 @@ import { requireStaffActor } from "../../guard";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 
-export default async function SubscriptionDetailPage({ params,searchParams }: { params: Promise<{ id: string }>;searchParams:Promise<{setupError?:string;setupReconciled?:string;setupAfter?:string}> }) {
+export default async function SubscriptionDetailPage({ params,searchParams }: { params: Promise<{ id: string }>;searchParams:Promise<{setupError?:string;setupReconciled?:string;setupAfter?:string;readerResult?:string;controlledResult?:string}> }) {
   const actor = await requireStaffActor("subscriptions");
   const { id } = await params;
   const query=await searchParams;
@@ -29,9 +37,14 @@ export default async function SubscriptionDetailPage({ params,searchParams }: { 
   const [t, locale, business, contact] = await Promise.all([getT(), getLocale(), currentBusiness(),
     domainOrNull(getContact.call({ id: subscription.contactId }, actor))]);
   const canRecover=hasModuleAccess(actor,"subscriptions","manage") && actor.kind==="user" && !actor.keyScopes;
+  const amendment = await merchantAmendmentStatus.call({id},actor);
+  const proration = await grossProrationStatus.call({id},actor);
+  const offered = canRecover && ["active","trialing"].includes(subscription.status) ? await listOfferedPlans.call({subscriptionId:id},actor) : [];
   const fresh=actor.kind==="user" && actor.security?.stepUpValid!==false;
   const cursor=query.setupAfter && /^[a-f0-9-]{36}$/i.test(query.setupAfter)?query.setupAfter:undefined;
   const recovery=canRecover && fresh?await listTrialSetupDispatches.call({subscriptionId:id,afterId:cursor},actor):null;
+  const readers=canRecover && fresh && amendment.commercial?await providerReaderRecoveryPlan.call({subscriptionId:id},actor):[];
+  const controlled=canRecover && fresh && amendment.commercial?await Promise.all([controlledProviderRecoveryPlan.call({subscriptionId:id},actor),controlledProviderResourceStatus.call({subscriptionId:id},actor)]):null;
   const date = (value: Date) => new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: business?.timezone ?? "UTC" }).format(value);
   return <div className="grid gap-6">
     <h1 className="text-xl font-bold tracking-tight">{plan?.name ?? t("admin.search.kind.subscription")}</h1>
@@ -44,6 +57,11 @@ export default async function SubscriptionDetailPage({ params,searchParams }: { 
     </dl></CardBody></Card>
     {query.setupError ? <Callout tone="danger">{t(`subscriptions.setup.error.${["validation","permission","conflict"].includes(query.setupError)?query.setupError:"conflict"}`)}</Callout>:null}
     {query.setupReconciled ? <Callout tone="success">{t("subscriptions.setup.saved")}</Callout>:null}
+    {query.readerResult ? <Callout tone={query.readerResult==="saved"?"success":"danger"}>{t(query.readerResult==="saved"?"subscriptions.reader.saved":"subscriptions.reader.failed")}</Callout>:null}
+    {query.controlledResult?<Callout tone={query.controlledResult==="saved"?"success":"danger"}>{t(query.controlledResult==="saved"?"subscriptions.reader.saved":"subscriptions.reader.failed")}</Callout>:null}
+    {controlled&&controlled[1].length?<a className="text-accent underline" href={`/admin/invoices/subscriptions/${id}`}>{t("subscriptions.controlled.title")}</a>:null}
+    {controlled?<ControlledProviderRecovery subscriptionId={id} calls={controlled[0]} resources={controlled[1]} locale={locale}/>:null}
+    {readers.length ? <ProviderReaderRecovery subscriptionId={id} rows={readers} locale={locale}/> : null}
     {canRecover && !fresh ? <Card><CardHeader title={t("subscriptions.setup.title")}/><CardBody><a className="text-accent underline" href={`/security/verify?returnTo=${encodeURIComponent(`/admin/subscriptions/${id}`)}`}>{t("subscriptions.setup.verify")}</a></CardBody></Card>:null}
     {recovery && (recovery.rows.length>0 || query.setupAfter) ? <Card><CardHeader title={t("subscriptions.setup.title")}/><CardBody>
       <p className="max-w-prose text-sm text-ink-muted">{t("subscriptions.setup.intro")}</p>
@@ -71,6 +89,7 @@ export default async function SubscriptionDetailPage({ params,searchParams }: { 
       </li>)}</ul>
       <div className="flex flex-wrap gap-4"><a className="text-sm text-accent underline" href={`/admin/subscriptions/${id}`}>{t("subscriptions.setup.firstPage")}</a>{recovery.nextCursor?<a className="text-sm text-accent underline" href={`/admin/subscriptions/${id}?setupAfter=${recovery.nextCursor}`}>{t("subscriptions.setup.nextPage")}</a>:null}</div>
     </CardBody></Card>:null}
+    {canRecover && amendment.commercial ? proration.prorating ? <GrossProration id={id} audience="owner" locale={locale} offered={offered} status={proration}/> : <CommercialAmendment id={id} audience="owner" locale={locale} offered={offered} status={amendment}/> : null}
     {hasModuleAccess(actor, "subscriptions", "manage") ? <a className="text-accent" href={`/admin/subscriptions?plan=${subscription.planId}`}>{t("subscriptions.detail.manage")}</a> : null}
     <a className="text-accent" href="/admin/search">{t("admin.search.title")}</a>
   </div>;

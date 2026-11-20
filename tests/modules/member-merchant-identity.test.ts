@@ -3,10 +3,12 @@
 // C12.38/C1.08: synthetic provider→agreement→invoice→receipt and data rights.
 import {afterAll,afterEach,beforeAll,beforeEach,describe,expect,it,vi} from "vitest";
 import {readFileSync} from "node:fs";
+import {randomUUID} from "node:crypto";
 import {eq,sql} from "drizzle-orm";
 import {db} from "@/core/db";
 import {users} from "@/core/auth/schema";
 import {contacts,contactMergeOperations} from "@/core/contacts/schema";
+import {lockContactIdentity} from "@/core/contacts/identity-lock";
 import {resolveContact,mergeContacts,undoContactMerge} from "@/core/contacts/service";
 import {ready} from "@/core/runtime";
 import {updateBusiness} from "@/core/settings/service";
@@ -22,6 +24,9 @@ import {refreshPayoutAccount,applyPayoutAccount,applyPayoutWebhook} from "@/modu
 import {memberPayoutAccounts,memberSettings} from "@/modules/members/schema";
 import {merchantIdentityErased} from "@/modules/members/merchant-identity-privacy";
 import {getSubscriptionMarketPolicy} from "@/modules/subscriptions/market-policy";
+import {quoteNewAgreement} from "@/modules/subscriptions/merchant-terms-quote";
+import {applyMerchantCollectionConfiguration} from "@/modules/invoicing/merchant-collection";
+import {saveMyMerchantTaxProfile} from "@/modules/invoicing/merchant-tax-profiles";
 import {renewDue,savePlan,subscribe} from "@/modules/subscriptions/service";
 import {plans,subscriptions,subscriptionMarketPolicies} from "@/modules/subscriptions/schema";
 import {getInvoiceMarketPolicy} from "@/modules/invoicing/market-policy";
@@ -33,6 +38,9 @@ import {ANONYMOUS,closeDb,CUSTOMER,failure,hasDatabase,OWNER,truncateSpine} from
 const SELLER=CUSTOMER,BUYER={...CUSTOMER,userId:"00000000-0000-4000-8000-0000000000c2"},SYSTEM={kind:"system"} as const;
 const support={email:"support@original-studio.example",phone:"+1 250 555 0123",url:"https://original-studio.example/help",address:{line1:"10 Public Studio Lane",line2:null,city:"Victoria",state:"BC",postalCode:"V8W 1P6",country:"CA"}};
 const replacement={...support,email:"replacement@studio.example",url:"https://replacement.example/help"};
+// A seller-merchant agreement needs the buyer's declared tax destination and a
+// verified collection platform. Neither is inferred from current configuration.
+const DESTINATION={country:"CA",region:"BC"} as const,PLATFORM_ACCOUNT="acct_fixturePlatform";
 
 describe.runIf(hasDatabase)("frozen merchant commercial identity (C12.38)",()=>{
  let buyerContact:string,sellerContact:string,currentSupport=support;
@@ -51,6 +59,13 @@ describe.runIf(hasDatabase)("frozen merchant commercial identity (C12.38)",()=>{
   await db().insert(memberPayoutAccounts).values({userId:SELLER.userId,adapter:"stripe_connect",externalAccountId:"acct_OriginalCommercial",status:"pending"});
   setPayoutProviderForTests("stripe_connect",createStripeConnect({secretKey:"synthetic-test-only",webhookSecrets:["synthetic-test-only"],fetch:async()=>Response.json({id:"acct_OriginalCommercial",payouts_enabled:true,charges_enabled:true,capabilities:{transfers:"active",card_payments:"active"},business_profile:{name:"Original Studio",support_email:currentSupport.email,support_phone:currentSupport.phone,support_url:currentSupport.url,support_address:{line1:currentSupport.address.line1,line2:null,city:"Victoria",state:"BC",postal_code:"V8W 1P6",country:"CA"}},email:"private-representative@example.test",individual:{address:{line1:"Private home address"}}})}));
   await refreshPayoutAccount.call({},SELLER);
+  // Internal fixture only: the owner-facing verification orchestrator reads a
+  // live provider, so record the platform identity it would have returned.
+  await applyMerchantCollectionConfiguration.call({collectionKind:"direct",providerPlatformAccountId:PLATFORM_ACCOUNT,initiatedBy:"merchant identity fixture"},SYSTEM);
+  // The merchant's own deliberate declaration. It collects no tax, so every
+  // original amount asserted below stays the plan's own money.
+  await saveMyMerchantTaxProfile.call({expectedVersion:0,idempotencyKey:randomUUID(),acceptPolicy:true,liability:"seller",origin:DESTINATION,
+   collectionStatus:"not_registered",nonCollectionReason:"This fixture merchant is below every declared registration threshold.",registrations:[]},SELLER);
  });
  afterEach(()=>{setPayoutProviderForTests("stripe_connect",null);vi.restoreAllMocks();});afterAll(closeDb);
 
@@ -60,12 +75,21 @@ describe.runIf(hasDatabase)("frozen merchant commercial identity (C12.38)",()=>{
   await savePlan.call({id:planId,productId:plan!.productId,name:plan!.name,interval:"month",status:"active",trialDays:14,billingMode:"manual"},OWNER);
   // Internal fixture only: public owner activation stays unavailable.
   await db().update(memberSettings).set({payoutModel:"seller_merchant"}).where(eq(memberSettings.id,1));
-  return subscribe.call({planId,contactId:buyerContact},OWNER);
+  const input={planId,contactId:buyerContact,taxDestination:DESTINATION};
+  const quote=await quoteNewAgreement.call(input,OWNER);
+  if(!quote)throw new Error("The original merchant quote unexpectedly selected legacy collection.");
+  return subscribe.call({...input,commercialTerms:{quoteDigest:quote.quoteDigest,locale:"en" as const,source:"owner_subscription" as const}},OWNER);
+ }
+ /** Let the accepted first period actually end, rather than rewriting it: an
+  * agreement's own immutable acceptance cannot be backdated under it. */
+ async function renew(subscriptionId:string){
+  const [before]=await db().select().from(subscriptions).where(eq(subscriptions.id,subscriptionId));
+  vi.useFakeTimers({toFake:["Date"]});vi.setSystemTime(before!.currentPeriodEnd.getTime()+60_000);
+  try{expect((await renewDue.call({},SYSTEM)).renewed).toBe(1);}finally{vi.useRealTimers();}
  }
  async function issued(){
   const started=await agreement();
-  await db().update(subscriptions).set({currentPeriodStart:new Date("2026-01-01T00:00:00Z"),currentPeriodEnd:new Date("2026-02-01T00:00:00Z"),trialEndsAt:new Date("2026-02-01T00:00:00Z")}).where(eq(subscriptions.id,started.subscription.id));
-  expect((await renewDue.call({},SYSTEM)).renewed).toBe(1);
+  await renew(started.subscription.id);
   const [invoice]=await db().select().from(invoices);return{started,invoice:invoice!};
  }
  async function request(kind:"export"|"erasure"){
@@ -81,12 +105,11 @@ describe.runIf(hasDatabase)("frozen merchant commercial identity (C12.38)",()=>{
   expect(await getSubscriptionMarketPolicy.call({subscriptionId:started.subscription.id},SYSTEM)).toMatchObject({merchantSupport:support,merchantContactId:sellerContact});
   currentSupport=replacement;await refreshPayoutAccount.call({},SELLER);
   expect(await myPayoutAccount.call({},SELLER)).toMatchObject({merchantSupport:replacement});
-  await db().update(subscriptions).set({currentPeriodStart:new Date("2026-01-01T00:00:00Z"),currentPeriodEnd:new Date("2026-02-01T00:00:00Z"),trialEndsAt:new Date("2026-02-01T00:00:00Z")}).where(eq(subscriptions.id,started.subscription.id));
-  expect((await renewDue.call({},SYSTEM)).renewed).toBe(1);
+  await renew(started.subscription.id);
   const [invoice]=await db().select().from(invoices);
   expect(await getInvoiceMarketPolicy.call({invoiceId:invoice!.id},SYSTEM)).toMatchObject({merchantSupport:support});
   const manual=paymentAdapters.createManualPayments();
-  const stripe={...manual,id:"stripe",capabilities:()=>({...manual.capabilities(),sellerMerchantCharges:true}),createCheckout:vi.fn<paymentAdapters.PaymentAdapter["createCheckout"]>().mockResolvedValue({providerRef:"cs_OriginalCommercial",url:"https://checkout.example.test/original",providerAccountId:"acct_OriginalCommercial"}),captureCheckout:vi.fn<paymentAdapters.PaymentAdapter["captureCheckout"]>().mockResolvedValue({providerRef:"pi_OriginalCommercial",status:"succeeded",amountMinor:1000,currency:"CAD",providerAccountId:"acct_OriginalCommercial",applicationFeeMinor:100})};
+  const stripe={...manual,id:"stripe",capabilities:()=>({...manual.capabilities(),sellerMerchantCharges:true}),createCheckout:vi.fn<paymentAdapters.PaymentAdapter["createCheckout"]>().mockResolvedValue({providerRef:"cs_OriginalCommercial",url:"https://checkout.example.test/original",providerAccountId:"acct_OriginalCommercial",providerPlatformAccountId:PLATFORM_ACCOUNT}),captureCheckout:vi.fn<paymentAdapters.PaymentAdapter["captureCheckout"]>().mockResolvedValue({providerRef:"pi_OriginalCommercial",status:"succeeded",amountMinor:1000,currency:"CAD",providerAccountId:"acct_OriginalCommercial",providerPlatformAccountId:PLATFORM_ACCOUNT,customerChargeVerified:true,applicationFeeMinor:100})};
   vi.spyOn(paymentAdapters,"paymentAdapter").mockImplementation(id=>id==="stripe"?stripe:manual);
   expect(await getCustomerInvoice.call({id:invoice!.id},BUYER)).toMatchObject({issuerName:"Original Studio",issuerSupport:support,issuerIsMerchant:true});
   await beginCustomerCheckout.call({id:invoice!.id},BUYER);const [payment]=await db().select().from(payments),input={token:paymentReturnToken(payment!)};
@@ -129,13 +152,20 @@ describe.runIf(hasDatabase)("frozen merchant commercial identity (C12.38)",()=>{
  it("redrives released financial identity after login deletion using its persistent contact ownership",async()=>{
   await issued();const id=await request("erasure"),exception=await addRetentionException.call({dataRequestId:id,scope:"members.merchantIdentity",reason:"accounting_tax",legalBasis:"Keep the original supplier identity until this specific accounting review ends."},OWNER);
   await fulfillDataRequest.call({id,confirmation:"ERASE"},OWNER);
-  expect(await db().select().from(users).where(eq(users.id,SELLER.userId))).toHaveLength(0);
-  expect((await db().select().from(contacts).where(eq(contacts.id,sellerContact)))[0]?.userId).toBeNull();
+  // This hold also reaches a login-requiring keeper (catalog.orderCommercial
+  // retains on members.merchantIdentity), so the minimal login parent stays —
+  // neutered, never usable — and the contact keeps its ownership pointer.
+  expect((await db().select().from(users).where(eq(users.id,SELLER.userId)))[0]).toMatchObject({email:`erased-${SELLER.userId}@erased.invalid`,passwordHash:null,otpSecret:null});
+  expect((await db().select().from(contacts).where(eq(contacts.id,sellerContact)))[0]?.userId).toBe(SELLER.userId);
   expect(await db().transaction(tx=>merchantIdentityErased(tx,SELLER.userId,sellerContact))).toBe(true);
   const source=contactPrivacySources().find(item=>item.scope==="members.merchantIdentity")!;
   expect(JSON.stringify(await db().transaction(tx=>source.exportData(tx,sellerContact)))).toContain(support.email);
   await removeRetentionException.call({id:exception.id},OWNER);
   await fulfillDataRequest.call({id:await request("erasure"),confirmation:"ERASE"},OWNER);
+  // Every hold released: now the login itself goes and the identity is released
+  // through the contact that still owns the financial record.
+  expect(await db().select().from(users).where(eq(users.id,SELLER.userId))).toHaveLength(0);
+  expect((await db().select().from(contacts).where(eq(contacts.id,sellerContact)))[0]?.userId).toBeNull();
   expect(JSON.stringify(await db().transaction(tx=>source.exportData(tx,sellerContact)))).not.toContain(support.email);
  });
  it("erases an unheld payout account when only the minimal login has a retention hold",async()=>{
@@ -214,7 +244,9 @@ describe.runIf(hasDatabase)("frozen merchant commercial identity (C12.38)",()=>{
   expect(await failure(undoContactMerge.call({operationId:merged.mergeOperationId},OWNER))).toMatchObject({code:"conflict"});
  });
  it("refuses late provider refresh and ignores personal copies in signed account feedback after the erasure marker",async()=>{
-  await db().update(contacts).set({source:"privacy-erasure"}).where(eq(contacts.id,sellerContact));
+  // The erasure marker is guarded: it may only be written while holding the
+  // same exclusive identity cutover lock the real erasure path takes.
+  await db().transaction(async tx=>{await lockContactIdentity(tx);await tx.update(contacts).set({source:"privacy-erasure"}).where(eq(contacts.id,sellerContact));});
   expect(await failure(applyPayoutAccount.call({adapter:"stripe_connect",externalAccountId:"acct_OriginalCommercial",status:"ready",chargesReady:true,merchantName:"Recreated Studio",merchantSupport:replacement},SELLER))).toMatchObject({code:"conflict"});
   await applyPayoutWebhook.call({provider:"stripe_connect",events:[{kind:"account",externalAccountId:"acct_OriginalCommercial",status:"ready",chargesReady:true,merchantName:"Recreated Studio",merchantSupport:replacement}]},SYSTEM);
   expect((await db().select().from(memberPayoutAccounts))[0]).toMatchObject({merchantName:"Original Studio",merchantSupport:support,chargesReady:false});

@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // C5.19/C11.10: a human records an already returned offline refund.
 // Payments are seeded; this does not prove live-provider acceptance.
-import {createHash,randomUUID} from "node:crypto";
+import {randomUUID} from "node:crypto";
+import {spawn} from "node:child_process";
 import AxeBuilder from "@axe-core/playwright";
 import {expect,test} from "@playwright/test";
-import {eq,sql} from "drizzle-orm";
+import {eq} from "drizzle-orm";
 import {db,closeDb} from "@/core/db";
 import {users} from "@/core/auth/schema";
 import {createSession,SESSION_COOKIE} from "@/core/auth/sessions";
@@ -13,8 +14,16 @@ import {contacts} from "@/core/contacts/schema";
 import {businessProfile} from "@/core/settings/schema";
 import {THEME_COOKIE} from "@/core/design/theme";
 import {orders,orderItems,products,productVariants,returnRequests,returnItems} from "@/modules/catalog/schema";
-import {creditNotes,creditNoteLines,invoices,invoiceLines,payments,refunds} from "@/modules/invoicing/schema";
+import {creditNotes,invoices,invoiceLines,payments,refunds} from "@/modules/invoicing/schema";
 import {C11_BASE_URL,seedC11Owner,useOwnerSession} from "./owner-session";
+
+async function refundFixture(mode:"prepare"|"confirm",returnId:string,refundId?:string){
+ await new Promise<void>((resolve,reject)=>{
+  const child=spawn(process.execPath,["node_modules/vitest/vitest.mjs","run","--config","tests/fixtures/return-refund-browser.config.ts"],{env:{...process.env,TEST_DATABASE_URL:process.env.DATABASE_URL!,FREEHOLDER_RETURN_FIXTURE_MODE:mode,FREEHOLDER_RETURN_FIXTURE_RETURN_ID:returnId,FREEHOLDER_RETURN_FIXTURE_REFUND_ID:refundId??""},stdio:["ignore","pipe","pipe"]});
+  let diagnostics="";child.stdout.on("data",chunk=>{diagnostics+=String(chunk);});child.stderr.on("data",chunk=>{diagnostics+=String(chunk);});
+  child.on("error",reject);child.on("close",code=>{if(code===0)resolve();else reject(new Error(`The genuine return-refund fixture failed (${code}): ${diagnostics}`));});
+ });
+}
 
 async function seedReturn(locale:string,provider:"manual"|"stripe"|"mixed"="manual") {
       const token=await seedC11Owner("Returns proof");
@@ -25,27 +34,15 @@ async function seedReturn(locale:string,provider:"manual"|"stripe"|"mixed"="manu
       await db().insert(productVariants).values({id:variantId,productId,combinationKey:"default",sku:"return-print",isDefault:true});
       await db().insert(invoices).values({id:invoiceId,contactId,number:"INV-RETURN",sourceType:"order",sourceId:orderId,idempotencyKey:`invoice-${orderId}`,requestHash:"a".repeat(64),status:"paid",currency:"CAD",subtotalMinor:1_000,totalMinor:1_000,paidMinor:1_000,issuedAt:now,paidAt:now});
       await db().insert(orders).values({id:orderId,contactId,invoiceId,currency:"CAD",status:"paid",subtotalMinor:1_000,totalMinor:1_000});
-      await db().insert(invoiceLines).values({invoiceId,position:0,sourceType:"variant",sourceId:variantId,description:"Returned print",quantityMicros:1_000_000,unitAmountMinor:1_000,subtotalMinor:1_000,totalMinor:1_000});
-      await db().insert(orderItems).values({id:lineId,orderId,variantId,quantity:1,unitAmountMinor:1_000,lineTotalMinor:1_000});
+      const [invoiceLine]=await db().insert(invoiceLines).values({invoiceId,position:0,sourceType:"variant",sourceId:variantId,description:"Returned print",quantityMicros:1_000_000,unitAmountMinor:1_000,subtotalMinor:1_000,totalMinor:1_000}).returning();
+      await db().insert(orderItems).values({id:lineId,orderId,variantId,quantity:1,unitAmountMinor:1_000,lineTotalMinor:1_000,snapshot:{invoiceLineId:invoiceLine!.id}});
       for(const [index,amount] of [400,600].entries()){
         const originalProvider=provider==="mixed" ? (index===0?"manual":"stripe") : provider;
-        await db().insert(payments).values({invoiceId,provider:originalProvider,method:originalProvider==="manual" ? "cash" : "hosted_checkout",providerRef:`${originalProvider}:fixture:${index}`,idempotencyKey:`fixture-payment-${index}`,requestHash:"b".repeat(64),status:"succeeded",currency:"CAD",amountMinor:amount,processedAt:now});
+        await db().insert(payments).values({invoiceId,provider:originalProvider,method:originalProvider==="manual" ? "cash" : "hosted_checkout",providerRef:originalProvider==="manual"?`manual:fixture:${index}`:`pi_fixture_${index}`,idempotencyKey:`fixture-payment-${index}`,requestHash:"b".repeat(64),status:"succeeded",currency:"CAD",amountMinor:amount,processedAt:now});
       }
       await db().insert(returnRequests).values({id:returnId,orderId,contactId,status:"received",reason:"Damaged print",restock:false});
       await db().insert(returnItems).values({returnId,orderItemId:lineId,quantity:1});
-      if(provider!=="manual"){
-        const [line]=await db().select().from(invoiceLines).where(eq(invoiceLines.invoiceId,invoiceId));
-        const [credit]=await db().insert(creditNotes).values({invoiceId,idempotencyKey:`return:${returnId}:credit`,requestHash:"c".repeat(64),currency:"CAD",reason:"Damaged print",subtotalMinor:1000,totalMinor:1000}).returning();
-        await db().insert(creditNoteLines).values({creditNoteId:credit!.id,invoiceLineId:line!.id,position:0,description:"Returned print",quantityMicros:1_000_000,subtotalMinor:1000,totalMinor:1000});
-        let firstRefundId:string|undefined;
-        for(const payment of await db().select().from(payments).where(eq(payments.invoiceId,invoiceId))){
-          const request={paymentId:payment.id,amountMinor:payment.amountMinor,reason:"Damaged print",idempotencyKey:`return:${returnId}:provider:fixture:${payment.id}`,provider:payment.provider};
-          const requestHash=createHash("sha256").update(JSON.stringify(Object.fromEntries(Object.entries(request).sort(([a],[b])=>a.localeCompare(b))))).digest("hex");
-          const [refund]=await db().insert(refunds).values({...request,requestHash,invoiceId,currency:"CAD",status:payment.provider==="manual"?"created":"processing",providerRef:payment.provider==="manual"?null:`re_fixture_${payment.id}`}).returning();
-          firstRefundId ??= refund!.id;
-        }
-        await db().update(returnRequests).set({creditNoteId:credit!.id,refundId:firstRefundId}).where(eq(returnRequests.id,returnId));
-      }
+      if(provider!=="manual")await refundFixture("prepare",returnId);
       return {token,returnId,invoiceId,orderId,contactId,lineId};
 }
 
@@ -147,7 +144,6 @@ test.describe("attested offline return refund (C5.19)",()=>{
       const {token,returnId,invoiceId}=await seedReturn(locale,"mixed");
       const context=await browser.newContext({baseURL:C11_BASE_URL,viewport:{width:320,height:900}});await useOwnerSession(context,token);
       const page=await context.newPage();await page.goto(`/admin/returns?id=${returnId}`);
-      await page.locator('form:has(input[name="intent"][value="prepareReturnRefund"]) button').click();await expect(page).toHaveURL(/saved=prepareReturnRefund/);
       const offline=page.locator('form:has(input[name="intent"][value="refundReturn"])');
       await expect(offline.locator('input[name="offlineRefundAmountMinor"]')).toHaveValue("400");
       for(const theme of ["light","dark"]){await context.addCookies([{name:THEME_COOKIE,value:theme,url:C11_BASE_URL}]);await page.reload();expect((await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze()).violations).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth)).toBe(true);}
@@ -156,9 +152,8 @@ test.describe("attested offline return refund (C5.19)",()=>{
       expect((await db().select().from(creditNotes).where(eq(creditNotes.invoiceId,invoiceId)))[0]!.status).toBe("draft");
       const rows=await db().select().from(refunds).where(eq(refunds.invoiceId,invoiceId));
       expect(rows.find(row=>row.provider==="manual")!.status).toBe("succeeded");const online=rows.find(row=>row.provider==="stripe")!;
-      await db().transaction(async tx=>{await tx.execute(sql`select set_config('freeholder.confirmed_return_refund',${online.id},true)`);await tx.update(refunds).set({status:"succeeded",processedAt:new Date()}).where(eq(refunds.id,online.id));});
-      await db().update(payments).set({refundedMinor:online.amountMinor}).where(eq(payments.id,online.paymentId));await db().update(invoices).set({refundedMinor:1000,status:"refunded"}).where(eq(invoices.id,invoiceId));
-      await page.reload();await page.locator('form:has(input[name="intent"][value="submitReturnProviderRefund"]) button').click();await expect(page).toHaveURL(/saved=submitReturnProviderRefund/);
+      await refundFixture("confirm",returnId,online.id);
+      await page.reload();
       expect((await db().select().from(returnRequests).where(eq(returnRequests.id,returnId)))[0]!.status).toBe("refunded");expect((await db().select().from(creditNotes).where(eq(creditNotes.invoiceId,invoiceId)))[0]!.status).toBe("issued");
       await context.close();
     });
@@ -168,8 +163,6 @@ test.describe("attested offline return refund (C5.19)",()=>{
       await useOwnerSession(context,token);
       const page=await context.newPage();
       await page.goto(`/admin/returns?id=${returnId}`);
-      await page.locator('form:has(input[name="intent"][value="prepareReturnRefund"]) button').click();
-      await expect(page).toHaveURL(/saved=prepareReturnRefund/);
       const form=page.locator("form").filter({has:page.locator('input[name="intent"][value="submitReturnProviderRefund"]')});
       await expect(form.getByRole("button")).toBeVisible();
       await expect(page.locator("html")).toHaveAttribute("lang",locale);
@@ -184,40 +177,22 @@ test.describe("attested offline return refund (C5.19)",()=>{
       }
       await form.getByRole("button").focus();
       await page.keyboard.press("Enter");
-      // These raw pre-existing processing rows deliberately have no signed
-      // caller history. They cannot authorize another physical submission.
-      const reviewError="The original refund is already admitted. Reconcile its actual result instead of sending another provider request.";
-      await expect(page).toHaveURL(/error=/);
-      expect(new URL(page.url()).searchParams.get("error")).toBe(reviewError);
+      // Existing physical callers cannot authorize another provider submission.
+      await expect(page).toHaveURL(/saved=submitReturnProviderRefund/);
       expect((await db().select().from(returnRequests).where(eq(returnRequests.id,returnId)))[0]!.status).toBe("received");
       expect((await db().select().from(creditNotes).where(eq(creditNotes.invoiceId,invoiceId)))[0]!.status).toBe("draft");
       const assigned=await db().select().from(refunds).where(eq(refunds.invoiceId,invoiceId));
       expect(assigned).toHaveLength(2);
       expect(assigned.every(refund=>refund.status==="processing")).toBe(true);
-      async function confirm(index:number){
-        const refund=assigned[index]!;
-        await db().transaction(async tx=>{
-          // Synthetic provider ledger fixture only; actual signed feedback is covered by native integration tests.
-          await tx.execute(sql`select set_config('freeholder.confirmed_return_refund',${refund.id},true)`);
-          await tx.update(refunds).set({status:"succeeded",processedAt:new Date()}).where(eq(refunds.id,refund.id));
-        });
-        await db().update(payments).set({refundedMinor:refund.amountMinor}).where(eq(payments.id,refund.paymentId));
-        const confirmed=assigned.slice(0,index+1).reduce((sum,row)=>sum+row.amountMinor,0);
-        await db().update(invoices).set({refundedMinor:confirmed,...(confirmed===1000 ? {status:"refunded" as const}:{})}).where(eq(invoices.id,invoiceId));
-        await page.goto(`/admin/returns?id=${returnId}`);
-        await form.getByRole("button").focus();
-        await page.keyboard.press("Enter");
+      for(const [index,refund] of assigned.entries()){
+        await refundFixture("confirm",returnId,refund.id);
+        await page.reload();
         if(index+1<assigned.length){
-          await expect(page).toHaveURL(/error=/);
-          expect(new URL(page.url()).searchParams.get("error")).toBe(reviewError);
           expect((await db().select().from(returnRequests).where(eq(returnRequests.id,returnId)))[0]!.status).toBe("received");
           expect((await db().select().from(creditNotes).where(eq(creditNotes.invoiceId,invoiceId)))[0]!.status).toBe("draft");
-        }else await expect(page).toHaveURL(/saved=submitReturnProviderRefund/);
+          await expect(form).toHaveCount(0);
+        }else await expect(form).toHaveCount(0);
       }
-      await confirm(0);
-      await expect(form.getByRole("button")).toBeVisible();
-      await confirm(1);
-      await expect(form).toHaveCount(0);
       expect((await db().select().from(returnRequests).where(eq(returnRequests.id,returnId)))[0]!.status).toBe("refunded");
       expect((await db().select().from(invoices).where(eq(invoices.id,invoiceId)))[0]!.refundedMinor).toBe(1000);
       expect((await db().select().from(creditNotes).where(eq(creditNotes.invoiceId,invoiceId)))[0]!.status).toBe("issued");

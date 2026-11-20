@@ -5,7 +5,8 @@ import { env } from "@/core/env";
 import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { storageKey } from "@/adapters/storage/types";
-import { storage } from "@/adapters/storage";
+import { putWithReceipt } from "@/core/media/write-ledger";
+import { deleteWithReceipt } from "@/core/media/delete-with-receipt";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { isUniqueViolation } from "@/core/db";
 import {
@@ -472,6 +473,7 @@ const RECORDING_EXTENSIONS: Record<string, string> = {
   "audio/ogg": "ogg",
 };
 const TRANSCRIPT_CONTENT_TYPE = "text/vtt";
+const SYSTEM = { kind: "system" } as const;
 
 const claimImport = defineService({
   name: "voiceVideo.claimImport",
@@ -571,10 +573,12 @@ export const importVoiceVideoRecording = defineOrchestratedService({
             providerRoomId: null, accountDomain: claimed.accountDomain, recordingId: claimed.recordingId! });
           const checksum = createHash("sha256").update(downloaded.bytes).digest("hex");
           const key = storageKey(`recording-${claimed.artifactId}.${RECORDING_EXTENSIONS[downloaded.contentType] ?? "bin"}`, claimed.createdAt, checksum.slice(0, 16));
-          // Content-addressed keys make retries converge on the same object:
-          // an already-complete put is detected by head and never duplicated.
-          const existing = await storage().head(key);
-          if (!existing || existing.bytes !== downloaded.bytes.byteLength) await storage().put(key, downloaded.bytes, downloaded.contentType);
+          // Content-addressed keys make retries converge on the same object,
+          // and putWithReceipt owns the idempotency: an accepted original
+          // receipt for the same bytes is reused rather than written again.
+          // A byte-length probe cannot decide that, because only the receipt
+          // says whether the object's own physical write actually finished.
+          await putWithReceipt({ key, body: downloaded.bytes, contentType: downloaded.contentType, role: "original" }, SYSTEM);
           stored.storageKey = key;
           stored.storageContentType = downloaded.contentType;
           stored.storageChecksumSha256 = checksum;
@@ -583,8 +587,7 @@ export const importVoiceVideoRecording = defineOrchestratedService({
           const bytes = new TextEncoder().encode(claimed.transcript);
           const checksum = createHash("sha256").update(bytes).digest("hex");
           const key = storageKey(`transcript-${claimed.artifactId}.vtt`, claimed.createdAt, checksum.slice(0, 16));
-          const existing = await storage().head(key);
-          if (!existing || existing.bytes !== bytes.byteLength) await storage().put(key, bytes, TRANSCRIPT_CONTENT_TYPE);
+          await putWithReceipt({ key, body: bytes, contentType: TRANSCRIPT_CONTENT_TYPE, role: "original" }, SYSTEM);
           stored.transcriptStorageKey = key;
         }
         await applyImport.call({ artifactId: claimed.artifactId, leaseToken: claimed.leaseToken, ...stored }, { kind: "system" });
@@ -592,7 +595,7 @@ export const importVoiceVideoRecording = defineOrchestratedService({
         // the previous objects; the deletes stay outside the apply transaction.
         for (const previous of [claimed.previousStorageKey, claimed.previousTranscriptStorageKey]) {
           if (previous && ![stored.storageKey, stored.transcriptStorageKey].includes(previous)) {
-            await storage().delete(previous).catch(() => undefined);
+            await deleteWithReceipt(previous).catch(() => undefined);
           }
         }
       } catch (error) {

@@ -10,10 +10,12 @@ export interface TransferRevision {
   key: string;
   namespace: string;
   value: string;
+  versionId?: string;
 }
 export interface VersionedTransferStore extends TransferStore {
-  binding: { kind: "s3" | "replit"; namespace: string; location: Readonly<Record<string,string>> };
-  readVersioned(key: string): Promise<{body:Uint8Array<ArrayBuffer>;contentType:string;revision:TransferRevision}|undefined>;
+  accounted?(observer:TransferRequestObserver):AccountedTransferStore;
+  binding: { kind: "s3" | "replit" | "local"; namespace: string; location: Readonly<Record<string,string>> };
+  readVersioned(key: string, expectedRevision?:TransferRevision, expectedBytes?:number): Promise<{body:Uint8Array<ArrayBuffer>;contentType:string;revision:TransferRevision;requestProof?:OriginalProviderRequestProof}|undefined>;
   deleteVersioned(key: string, revision: TransferRevision): Promise<void>;
 }
 
@@ -38,3 +40,35 @@ export function copyManifestObjects(options: {
   target: TransferStore;
   dryRun?: boolean;
 }): Promise<{ objects: number; bytes: number; dryRun: boolean; skipped: number }>;
+
+export interface TransferRequestDescriptor {
+ kind:"object.read"|"object.metadata"|"object.body"|"object.put"|"object.delete"|"bucket.metadata"|"inventory.objects"|"inventory.versions"|"inventory.sessions"|"inventory.retained"|"multipart.create"|"multipart.inspect"|"multipart.complete"|"multipart.abort"|"multipart.sign";
+ binding:VersionedTransferStore["binding"];key?:string;expectedRevision?:TransferRevision;
+ createOnly?:boolean;sha256?:string;bytes?:number;cursor?:Record<string,string>|null;
+ uploadId?:string;partsDigest?:string;contentType?:string;partNumber?:number;expiresAt?:string;checksumAlgorithm?:"SHA256";checksumType?:"COMPOSITE";
+}
+export interface OriginalProviderRequestProof {id:string;tokenDigest:string}
+export interface TransferRequestIdentity {id:string;token:string}
+export interface TransferRequestObservation {
+ stage:"response"|"metadata"|"body"|"accepted"|"absence"|"inventory"|"configuration"|"not_attempted"|"inventory_raw"|"session"|"response_body"|"capability"|"parts_verified";
+ status:number|null;uploadId?:string;requestProof?:OriginalProviderRequestProof;detailDigest?:string;revision?:TransferRevision;sha256?:string;bytes?:number;count?:number;expiresAt?:string;
+ partPageIds?:string[];
+ partsDigest?:string;
+ capabilityProof?:import('./media-part-capability.mjs').OriginalPartCapabilityProof;
+}
+export type TransferRequestObserver=<T>(descriptor:TransferRequestDescriptor,operation:(notify:(facts:TransferRequestObservation)=>Promise<void>,identity?:TransferRequestIdentity)=>Promise<T>)=>Promise<T>;
+export interface TransferInventoryEntry {
+ kind:"object"|"version"|"delete_marker"|"session"|"retained";key:string;bytes:number;
+ revision?:TransferRevision;versionId?:string;sessionId?:string;current:boolean;
+}
+export interface TransferInventoryPage {entries:TransferInventoryEntry[];next:Record<string,string>|null}
+export interface TransferInventoryConfiguration {versioning:"disabled"|"Enabled"|"Suspended";softDeleteSeconds:number;retentionSeconds:number}
+export interface AccountedTransferStore extends VersionedTransferStore {
+ inspectMultipart?(key:string,uploadId:string):Promise<{state:"open";parts:import("./media-multipart-readback.mjs").OriginalMultipartReadbackPart[]}|{state:"absent"}>;
+ metadataVersioned?(key:string,expectedRevision?:TransferRevision):Promise<{revision:TransferRevision;bytes:number;contentType:string;requestProof?:OriginalProviderRequestProof}|undefined>;
+ /** A complete original pinned body is hashed with bounded memory. This is
+  * read evidence, never completion/consumption or original caller FIN. */
+ readDigestVersioned?(key:string,revision:TransferRevision,maxBytes:number,originalParts?:readonly import("./media-multipart-readback.mjs").OriginalMultipartReadbackPart[]):Promise<{sha256:string;bytes:number;partsDigest?:string;contentType:string;revision:TransferRevision;requestProof?:OriginalProviderRequestProof}|undefined>;
+ inventoryPage(kind:"objects"|"versions"|"sessions"|"retained",cursor?:Record<string,string>|null):Promise<TransferInventoryPage>;
+ inventoryConfiguration():Promise<TransferInventoryConfiguration>;
+}

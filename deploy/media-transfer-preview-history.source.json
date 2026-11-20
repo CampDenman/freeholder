@@ -1,0 +1,49 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_transfer_preview_history.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Transfer-preview historical receipt fixtures now use genuine pre81 cohorts and real upgrades through108; all3 controls and static checks pass; provider, copy authority and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "6404640b457c277d763c74b5cb4fb3c2a62eb3b3818037608d34264f6febc097" },
+    { "path": "tests/core/media-storage-transfer-preview.test.ts", "sha256": "e3aee48502f53c28e9209a57e1a5c0fc11e7589000e82fa000abbe7cd5230974" }
+  ],
+  "defects": [
+    "The fixture attempted to create new reservation-less receipts under the current reservation guard",
+    "Seeding an unknown receipt before the initial read made the historical sequence internally inconsistent"
+  ],
+  "controls": {
+    "initial": { "parentDatabase": "media_transfer_preview_snapshots_20261116", "passed": 3, "failed": 0, "durationSeconds": 47.48 },
+    "final": { "parentDatabase": "media_transfer_preview_final_20261116", "passed": 3, "failed": 0, "durationSeconds": 47.63 },
+    "upgrade": "Each new scratch database runs the genuine0..81 prefix, commits explicit synthetic historical cohorts, then runs the genuine82..108 migration chain",
+    "coverage": ["one and repeated accepted receipt inventories", "unknown receipt refusal", "permission, duplicate, source and target refusal", "named privacy hold recheck", "no provider I/O or physical receipt mutation"],
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false,
+    "productCodeChanged": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "6404640b457c277d763c74b5cb4fb3c2a62eb3b3818037608d34264f6febc097",
+      "beforeSha256": "a494a9e4b6d161e993c2e28df32b08215915a1bb54ae55d67f8019dc0abb4d86",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  The full current-media run's remaining transfer-preview historical-receipt, late-\n  erasure and write-ownership fixture failures stay open; no C-item closes.",
+          "after": "  Transfer-preview historical-receipt fixture qualification follows below; no\n  C-item closes.",
+          "occurrences": 1
+        },
+        {
+          "before": "  Late-erasure and genuine historical preview fixtures remain open; no C closure follows.",
+          "after": "  No C closure follows.",
+          "occurrences": 1
+        },
+        {
+          "before": "  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  Transfer-preview historical cohort qualification2026-11-16 (C1.12/C11.08):\n  each new scratch database builds the genuine0..81 prefix, retains explicit accepted,\n  repeated and unknown historical receipts before the reservation guard, then runs the\n  real82..108 upgrade. All3 current preview controls pass47.63s: repeated receipts\n  change inventory proof, unknown history and wrong principals/resources stay refused,\n  named holds persist, and neither provider I/O nor receipt mutation occurs. TypeScript\n  and focused lint pass. See `deploy/media-transfer-preview-history.source.json`.\n  This test-only repair supplies no provider/copy/closure acceptance; no C-item closes.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

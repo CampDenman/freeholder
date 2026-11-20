@@ -1,0 +1,455 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "SIGNED_SOURCE_CHECKPOINT_ONLY_UNAPPLIED_UNQUALIFIED",
+  "checklist": [
+    "C12.38",
+    "C9.33",
+    "C1.08"
+  ],
+  "baseA": "af221ea3bc9dd71d301a9dfecfd8094712ec8540",
+  "preserve160": "6e87db53547bc1f91a814b36ba0e96a315775b20",
+  "preserveBankCausal": "dd3ea9b2cd1ef1ea2663fccac500dd97ae14833b",
+  "preserveBankAlias": "77f2c8183e2707ee8db67d9174542ea90b73fb37",
+  "exactAcyclicKeyLeaf": "77a77cba7af447a5d89f90b865c7e326513726b5",
+  "sourcePredecessorRootHead": "5f64717910a931159315308901ab17c40e946a4b",
+  "currentSourcePrefix85": {
+    "path": "db/migrations/0085_controlled_collection_application.sql",
+    "bytes": 1063073,
+    "sha256": "8b12245ceb657877e3ad4b739fb02c5c5efa3f3d412c7cf2b69d9d3e4b8ef6f8",
+    "use": "Preserve WHOLE current root file then append new owned B tail. Never copy branch old normal migration."
+  },
+  "rootAssembly": null,
+  "executionHead": null,
+  "journalPin": null,
+  "database": null,
+  "qualification": null,
+  "newModels": [
+    {
+      "export": "invoiceCreditFundingAtomicFeePartitions",
+      "table": "invoice_credit_funding_atomic_fee_partitions",
+      "parentPK": "funding_id",
+      "restrictFKs": 9,
+      "checks": 4,
+      "ordinaryIndexes": 5
+    },
+    {
+      "export": "invoiceCreditReservationAtomicFeePartitions",
+      "table": "invoice_credit_reservation_atomic_fee_partitions",
+      "parentPK": "reservation_id",
+      "restrictFKs": 5,
+      "checks": 4,
+      "ordinaryIndexes": 3
+    }
+  ],
+  "oldParentColumnChanges": [],
+  "backfill": false,
+  "newRegisteredServices": [],
+  "sourceNewFunctionSignatures": [
+    "freeholder_atomic_credit_fee_partition(uuid,uuid,bigint)",
+    "freeholder_atomic_credit_reservation_partition(uuid,bigint)",
+    "freeholder_guard_credit_atomic_fee_partition()",
+    "freeholder_guard_credit_atomic_reservation()",
+    "freeholder_credit_atomic_fee_birth_guard()",
+    "freeholder_credit_atomic_reservation_birth_guard()",
+    "freeholder_credit_atomic_fee_ready()"
+  ],
+  "wholeBusinessSuccessors": [
+    {
+      "signature": "freeholder_credit_fee_receipt()",
+      "beforeBodySha256": "fcc76d3684e78e2968c2f36472a6225b24d15283c50312b7bbaa377debb2e5bd",
+      "afterBodySha256": "603e87240f516be268c773240cb4f1b1caea437199f9883140fc503f6c2228e7"
+    },
+    {
+      "signature": "freeholder_credit_fee_is_collected(uuid,text)",
+      "beforeBodySha256": "a722a59e49688ea475439d68fa72d6156682b23471befcb5e99d227dcff9f414",
+      "afterBodySha256": "b0c528b93cad5cbbcdbdab52e74c14dcfd572a712e14bed617406b0b0383f21e"
+    },
+    {
+      "signature": "freeholder_guard_invoice_credit()",
+      "beforeBodySha256": "34750c60606f249477dc1dc8c565c38966317aebf6a7e6f4e23a108c90f71900",
+      "afterBodySha256": "257e9ff9cd6e027ee167eef9d96e43ba20edfcb8c5a6c6acfe8eecc053d234de"
+    },
+    {
+      "signature": "freeholder_subscription_proration_receipt()",
+      "beforeBodySha256": "4fb34f9f6ccd19b9a30e075f14d41b6acd3bffaab8043e5cdcacc0c9a4a05ddb",
+      "afterBodySha256": "7f1528a6b44ea1c47cd49f6479690ae42f2328c43d17ef2b13c017c4257d61c2"
+    }
+  ],
+  "newTriggers": [
+    {
+      "name": "credit_atomic_fee_partition_guard",
+      "table": "invoice_credit_funding_atomic_fee_partitions",
+      "function": "freeholder_guard_credit_atomic_fee_partition()",
+      "tgtype": 31,
+      "deferrable": false,
+      "initiallyDeferred": false,
+      "enabled": [
+        "O",
+        "A"
+      ]
+    },
+    {
+      "name": "credit_atomic_fee_funding_birth",
+      "table": "invoice_credit_funding",
+      "function": "freeholder_credit_atomic_fee_birth_guard()",
+      "tgtype": 5,
+      "deferrable": true,
+      "initiallyDeferred": true,
+      "enabled": [
+        "O",
+        "A"
+      ]
+    },
+    {
+      "name": "credit_atomic_reservation_partition_guard",
+      "table": "invoice_credit_reservation_atomic_fee_partitions",
+      "function": "freeholder_guard_credit_atomic_reservation()",
+      "tgtype": 31,
+      "deferrable": false,
+      "initiallyDeferred": false,
+      "enabled": [
+        "O",
+        "A"
+      ]
+    },
+    {
+      "name": "credit_atomic_reservation_birth",
+      "table": "invoice_credit_reservations",
+      "function": "freeholder_credit_atomic_reservation_birth_guard()",
+      "tgtype": 5,
+      "deferrable": true,
+      "initiallyDeferred": true,
+      "enabled": [
+        "O",
+        "A"
+      ]
+    }
+  ],
+  "readiness": "Exact source hashes/return types/columns/defaults/PK/FK/CHECK/index/trigger pins. CHECK deparser expressions UNRUN, exact mismatch refuses and requires source-backed qualification. No generic normalizer/exemption.",
+  "actualCentralConsumers": {
+    "adapter": "src/modules/invoicing/controlled-provider-financial-witness.ts",
+    "BLeaf": "src/modules/invoicing/atomic-credit-financial-integration.ts",
+    "existingRoutes": [
+      "invoice dependency fingerprint before no-route",
+      "refund dependency fingerprint",
+      "merchant profile tax privacy/merge/undo",
+      "current parent financial graph"
+    ],
+    "subscriptionPrivacyAndArchives": "src/modules/subscriptions/service.ts",
+    "shape": "Only nonempty purposes add archive shape; one table+UUID/domain5000 union; profile AND actual selected parents; internal ancestor purposes included, old parent families never recounted as new purposes."
+  },
+  "preparedNativeFiles": [
+    "tests/modules/atomic-credit-fee-persistence84.test.ts"
+  ],
+  "preparedNativeCases": [
+    "Actual full paid period/HTTP4199+1/current source/tiny whole refund/fee1/bank399 then genuine changed-price quote and canonical credit acceptance with actual PG purposes and safe exports",
+    "Caught actual child-writer fault rolls back whole canonical acceptance; this alone is not claimed as isolated B deferred proof",
+    "Actual queued B constraint event fired IMMEDIATE before its child: stronger validation, no guard disable, synthetic context, backfill or fabricated receipt"
+  ],
+  "allExecution": "UNRUN: full types/lint/all tests/parser/model imports/PG/migrations/provider/native/SDK. Only source reads, artifact rendering/hashing and git diff --check performed. No acceptance/readiness/stable claim.",
+  "requiredSeparateWork": [
+    "Actual applied-credit compensating successor-locked rebind/unwind preserving old applications/canonical historical paid/credited/fee rows",
+    "Own partial-refund residual capacity under exact real conservation",
+    "Noncash/unknown-stop/out-of-band recovery and genuine late-consent/effect continuations"
+  ],
+  "protected": {
+    "tests/modules/controlled-atomic-refund-residual84.test.ts": {
+      "bytes": 19097,
+      "sha256": "c627b8fb89a1cefbab815727157a16a430472733474a1eb1ff7971c32a21332f"
+    },
+    "deploy/controlled-atomic-refund-bank-record-alias84.fragment.sql": {
+      "bytes": 37960,
+      "sha256": "e4dab23bf49135e6718182d564635d47c94b721a777dd51a2bf3b060afa90f06"
+    },
+    "deploy/controlled-atomic-refund-bank-fence84.fragment.sql": {
+      "bytes": 37966,
+      "sha256": "6a57c2a0c216367f56593f5aa04116e12f99ffab118e42fe2ee3945677a2894a"
+    },
+    "deploy/atomic-auxiliary-fee84.fragment.sql": {
+      "bytes": 74684,
+      "sha256": "ee68ae91ef0d1a52166fe0cd7fc3dab63b14d05e1b95b7eb7ed118bcc5785c58"
+    },
+    "deploy/merchant-fee-invocation84.fragment.sql": {
+      "bytes": 48725,
+      "sha256": "335cfe04fcc4868e05952f8414cfbf835a46ef1238f0faf2298213f6ca96224d"
+    }
+  },
+  "files": {
+    ".changeset/original-atomic-credit-fee-partitions.md": {
+      "bytes": 376,
+      "sha256": "8c7d978f37eb5a6a21a1a364fabe5a579a09ebc3101e0a2a3e06f36e85746ff2"
+    },
+    "MASTER.md": {
+      "bytes": 1457616,
+      "sha256": "4748c2a59f9c9e55ddf422d6b4e9a1455afe109becbdb99083f74f23213fe65d"
+    },
+    "deploy/atomic-credit-fee-old-functions84.before.json": {
+      "bytes": 26302,
+      "sha256": "0317666679ed1270623f74dc7c6aab8bcd2b3cc0fd7c92c14ff016c4719aec37"
+    },
+    "deploy/atomic-credit-fee-partition84-source-20261114.md": {
+      "bytes": 8452,
+      "sha256": "1b2fb5f5713f752c603f22843f8a357101bbd27ab6effa61c949670f1f75f82e"
+    },
+    "deploy/atomic-credit-fee-partition84-wip-20261114.md": {
+      "bytes": 14425,
+      "sha256": "a3fcdae3ce172773bbf5ea870f35e154619d3ba2c1d0f4b57c03f8d0991a49bb"
+    },
+    "deploy/atomic-credit-fee-partition84.fragment.sql": {
+      "bytes": 238979,
+      "sha256": "a356812761a9f1cd08331fca6da5ee01b96da85821d473a0e8155568fc7d60e7"
+    },
+    "deploy/atomic-credit-fee-partition84.inventory.json": {
+      "bytes": 13055,
+      "sha256": "f23ae257a1d30959e8c336e16a0635dac48b5f610957e06910fee21844b221b9"
+    },
+    "deploy/atomic-credit-fee-readiness84.source.json": {
+      "bytes": 23032,
+      "sha256": "967edd8d21a15dca62a553eb94780150f46e98a8a5f2fc5a4cee66383ff3376d"
+    },
+    "deploy/atomic-credit-fee-successors84.wip.json": {
+      "bytes": 108948,
+      "sha256": "0c7c1206f5bf2a93fadf565fa3e87339fef13c3ccae60da6271da40ba23dae7e"
+    },
+    "deploy/atomic-credit-reservation-segments84-source-20261114.md": {
+      "bytes": 2881,
+      "sha256": "33a70ee6f9a604dfa68542970b299c033671dc67c4c28e3b1f8f887a1c6211c9"
+    },
+    "deploy/atomic-credit-reservation-segments84.inventory.json": {
+      "bytes": 16247,
+      "sha256": "713a8a9c7b23b5407c714c45285f0c7ad59475965a3d83673542fa00e41acbfb"
+    },
+    "src/core/retention/registry.ts": {
+      "bytes": 26894,
+      "sha256": "ec5142cbd9fc159b3038c06c7caf86dc7f83401cefba4c65c51a3a7a3ece851b"
+    },
+    "src/core/search/registry.ts": {
+      "bytes": 23564,
+      "sha256": "fbcfb6420d9e28b60d335d9aad4856d997c528c3ac82ec367eaf24e3a311211f"
+    },
+    "src/modules/invoicing/atomic-credit-before-image-contract.ts": {
+      "bytes": 1443,
+      "sha256": "9eae636cc888de91d127033bcac36edd12f590728f7749f4ded0aec7ca06dd93"
+    },
+    "src/modules/invoicing/atomic-credit-before-image.ts": {
+      "bytes": 5070,
+      "sha256": "8a6bf628be517163fbf69bf44ba7207fa7969fafc7d70aa4739f477c87651723"
+    },
+    "src/modules/invoicing/atomic-credit-fee-amounts.ts": {
+      "bytes": 6171,
+      "sha256": "acb2213f201b8e14626f3db0fdcae1219e5c5be795dd631aea0401cd327af5fc"
+    },
+    "src/modules/invoicing/atomic-credit-fee-ancestry.ts": {
+      "bytes": 17536,
+      "sha256": "8bde6054f3a8f0e32f2a62df9fc57e9d9089d3d45bbfce7f2a3da56e7389e99d"
+    },
+    "src/modules/invoicing/atomic-credit-fee-archive.ts": {
+      "bytes": 3089,
+      "sha256": "2bfbfbbbafe8296762315d6c12dadedaaa80bef773ee2440cea4236f77dcc4af"
+    },
+    "src/modules/invoicing/atomic-credit-fee-declaration-contract.ts": {
+      "bytes": 931,
+      "sha256": "7855cfa21d38218d990b00008458e2a6b60eb38e43c1cccbd848bef6263363fb"
+    },
+    "src/modules/invoicing/atomic-credit-fee-declaration-proof.ts": {
+      "bytes": 1681,
+      "sha256": "d028c3ca798ecbfff361f342cb44d45254abcfa71375653fe14f7ecb829f8a86"
+    },
+    "src/modules/invoicing/atomic-credit-fee-declaration-reader.ts": {
+      "bytes": 6054,
+      "sha256": "aec70011c8db23b5ba1d7e5b488811456226ed54b9fc5b61fe4d6f0d01013d2b"
+    },
+    "src/modules/invoicing/atomic-credit-fee-declaration.ts": {
+      "bytes": 4932,
+      "sha256": "367e2454896caecc4ec032c4db5f7b910257b7eed0bcfb8800134a50557dba61"
+    },
+    "src/modules/invoicing/atomic-credit-fee-financial.ts": {
+      "bytes": 22690,
+      "sha256": "61ad42dc8cbb484d9f4e26b37ef6e60eb24c9cc0b215b38a886d2ed6bd1f4299"
+    },
+    "src/modules/invoicing/atomic-credit-fee-partition-contract.ts": {
+      "bytes": 4379,
+      "sha256": "3c7a119985d89cae52c0ee863728a503362a3a2a06886d6c18194e2846fc1d7a"
+    },
+    "src/modules/invoicing/atomic-credit-fee-partition-proof.ts": {
+      "bytes": 7120,
+      "sha256": "f813e35acb77a95ac7f8712a3d013f05d6ee164e2898f264bf2aa43add616525"
+    },
+    "src/modules/invoicing/atomic-credit-fee-partition-retain.ts": {
+      "bytes": 4821,
+      "sha256": "52fca9891ca9ee9b6d89fdb87b54814e56cc67def7b10d12dd52bad8aae2aa88"
+    },
+    "src/modules/invoicing/atomic-credit-fee-partition-schema.ts": {
+      "bytes": 4735,
+      "sha256": "37459411002ac9f652ef2c9740770df58e1bb8c2fb4f0ede5a79b591e6715708"
+    },
+    "src/modules/invoicing/atomic-credit-fee-partition.ts": {
+      "bytes": 24014,
+      "sha256": "2fd347c3bc6fac178a7f8e12c1a9011a6199d88bacda5afc0bc0ffb036ba5339"
+    },
+    "src/modules/invoicing/atomic-credit-fee-protocol.ts": {
+      "bytes": 426,
+      "sha256": "3c4192b673506fdf3b8f6c1a52bce00c6f4f43659f83587370fd3de8dab0464d"
+    },
+    "src/modules/invoicing/atomic-credit-financial-integration.ts": {
+      "bytes": 6408,
+      "sha256": "ffa0f09bc351a7028f14ae461658b879fe5a2901669655e28d0ba884f21b7bb3"
+    },
+    "src/modules/invoicing/atomic-credit-financial-scope.ts": {
+      "bytes": 8726,
+      "sha256": "8f1c0b19c81efa0a326cb9d295b2ee5fa34654aaced3d9dd9aaeb8405adf617f"
+    },
+    "src/modules/invoicing/atomic-credit-invoice-disposition.ts": {
+      "bytes": 13465,
+      "sha256": "110a96c703943fc3f15ff0909e1d88cdf371dd69cb9526c58f02146baf3151d1"
+    },
+    "src/modules/invoicing/atomic-credit-legacy-application.ts": {
+      "bytes": 7016,
+      "sha256": "a16d63c1b000fb0bd88f05a335b6d8b12979abbaadb2cb20ba81f4f0b02b10cb"
+    },
+    "src/modules/invoicing/atomic-credit-reservation-contract.ts": {
+      "bytes": 2288,
+      "sha256": "7fcd989923dfe2b370feec0fb299a3ceed6605c14b797fddbe5db27a7009b07d"
+    },
+    "src/modules/invoicing/atomic-credit-reservation-proof.ts": {
+      "bytes": 5571,
+      "sha256": "9331395fba2d3cbf6e838cb1b9ef0e028e81c7ec36e93f535adad12611fac3ba"
+    },
+    "src/modules/invoicing/atomic-credit-reservation-reader.ts": {
+      "bytes": 2442,
+      "sha256": "a50c9cddc1a74a4f0b07b614353927c26e12ecf6cf725cefca0b416529542f0c"
+    },
+    "src/modules/invoicing/atomic-credit-reservation-schema.ts": {
+      "bytes": 4124,
+      "sha256": "0d419d16766b8e2beacac2ab2a2c9d9b7402c281c94d8abe8ef1cbcf9cb8ea72"
+    },
+    "src/modules/invoicing/atomic-credit-reservation-segments.ts": {
+      "bytes": 7089,
+      "sha256": "b202573c5679e10b6a409407b30bd926d7baeb630c722275dcb79f04d1500223"
+    },
+    "src/modules/invoicing/atomic-credit-reservation.ts": {
+      "bytes": 12313,
+      "sha256": "659118958ea2f6e90f81d84db9c96c832f8990bd152bea5d136a9532867f088e"
+    },
+    "src/modules/invoicing/atomic-credit-source-prefix.ts": {
+      "bytes": 11000,
+      "sha256": "02c2e33f3b995d874870396f2150ee7dab828340fdf811b14f63ae320624ee26"
+    },
+    "src/modules/invoicing/controlled-provider-financial-witness.ts": {
+      "bytes": 20639,
+      "sha256": "918a84f99958c21c6665677088f7c8fb93047563c10a0082be0eaab60a3da4a8"
+    },
+    "src/modules/invoicing/credit-application-service.ts": {
+      "bytes": 30573,
+      "sha256": "20a8f13ea61dc72f0714a9ca5740a9de7bf1849d75df99bf13e785936e88c960"
+    },
+    "src/modules/invoicing/credit-fee-origin.ts": {
+      "bytes": 8911,
+      "sha256": "f25ba8daf6d70e5deac0258a45c907e820bdc48e7ee66232cb44ba142f737c85"
+    },
+    "src/modules/invoicing/original-cash-evidence-keys.ts": {
+      "bytes": 635,
+      "sha256": "6aa89864b8ff32c88de32b1805f1a75ea850d1dfa9d4873749b2c65a99d67e09"
+    },
+    "src/modules/invoicing/original-cash-recovery-store.ts": {
+      "bytes": 9029,
+      "sha256": "1a3b230662a6847df7213a9d6c0ee6455e8df7bacdcee819ba07849072bfa67a"
+    },
+    "src/modules/invoicing/tables.ts": {
+      "bytes": 3365,
+      "sha256": "025e1d1be0ed25711174388e787bdfe90d5380285436f056be91fcda802bf09f"
+    },
+    "src/modules/subscriptions/controlled-provider-collection-schema.ts": {
+      "bytes": 11297,
+      "sha256": "4dded0e9edfc90ac0bc78e877f038bb4ac0dc752079025eb0f1781ebe8ae47e3"
+    },
+    "src/modules/subscriptions/controlled-provider-collection-state.ts": {
+      "bytes": 14557,
+      "sha256": "1830f6501b8fe3df6ee4086fa971810c4dbe67e89ca91bc51e5ac7e36bf1d2a1"
+    },
+    "src/modules/subscriptions/controlled-provider-private-review-contract.ts": {
+      "bytes": 762,
+      "sha256": "7fb101f7a6ebd6eb00ec707ffb0e0e51b75684a718dbbb93ef4c8a8bbb52be6e"
+    },
+    "src/modules/subscriptions/controlled-provider-proration-acceptance.ts": {
+      "bytes": 13661,
+      "sha256": "0ab295d18be26eeb2917d4b9c76bf384b5cc309726c30a406f3c5de0be1f2c54"
+    },
+    "src/modules/subscriptions/controlled-provider-proration-economics.ts": {
+      "bytes": 12954,
+      "sha256": "2d39be56e95b723fd99d75f6eb8ac4109445e6ac7dbf80f9152622b3bfcbbb04"
+    },
+    "src/modules/subscriptions/controlled-provider-proration-quote.ts": {
+      "bytes": 12113,
+      "sha256": "db3791b3b5acb4ebbfa2e2a8d1dc952ecb9d7d4942c5939a752b4b818c51135c"
+    },
+    "src/modules/subscriptions/controlled-provider-quote-proof.ts": {
+      "bytes": 6668,
+      "sha256": "cd2efe0425d82f3dc6e078ba96b58dbdbabb6aceea2330c6d934bf6c1875bb6a"
+    },
+    "src/modules/subscriptions/proration-basis.ts": {
+      "bytes": 11746,
+      "sha256": "5708ec2d3ce3741000694d22f3be75a9a4084fbc1367de49f7b0760fa8e59e6a"
+    },
+    "src/modules/subscriptions/proration-credit-owner.ts": {
+      "bytes": 8802,
+      "sha256": "4f888cb2de4e164ee4925964bd0bb464ab56224daac09b49022a4cff24d1e519"
+    },
+    "src/modules/subscriptions/service.ts": {
+      "bytes": 88947,
+      "sha256": "28f3f267929778df6a70f23851df4812eacc896c6eef68cfd178523bceaeb497"
+    },
+    "tests/core/atomic-credit-fee-source84.test.ts": {
+      "bytes": 6351,
+      "sha256": "9a716eb0c647e3d037dfbd7cd10d820665e2cad0b553d9199d2013f02c31fc3c"
+    },
+    "tests/helpers/actual-atomic-credit-source84.ts": {
+      "bytes": 6716,
+      "sha256": "027b1a2ee9254b9464ffbcb8931eebf125ea4f18edeac8c7950bc2cb808b1f22"
+    },
+    "tests/helpers/merchant-controlled-collection84.ts": {
+      "bytes": 25295,
+      "sha256": "766343bf0ee07cdf575ea5be3aedf13d1ea1893d0bf899116716184a5ca7ab6c"
+    },
+    "tests/modules/atomic-credit-before-image-contract.test.ts": {
+      "bytes": 2237,
+      "sha256": "308b4c76ba464559f878d3db01bb07f693834a281cb19249460e803f5508060a"
+    },
+    "tests/modules/atomic-credit-fee-amounts.test.ts": {
+      "bytes": 4106,
+      "sha256": "a46ab24cea4070fb58c598dde825f571ecad4fd6f3c8cf0c23089ed9d78fe16e"
+    },
+    "tests/modules/atomic-credit-fee-archive.test.ts": {
+      "bytes": 3672,
+      "sha256": "ab12510868169703bc2807c7f32754e50f388b8fe16c814410c247d661505051"
+    },
+    "tests/modules/atomic-credit-fee-declaration.test.ts": {
+      "bytes": 3575,
+      "sha256": "4db42911844644bcdb9b1b7d4da370ce24c0704ee3e21f9507851fc2278d5e2f"
+    },
+    "tests/modules/atomic-credit-fee-partition-proof.test.ts": {
+      "bytes": 4810,
+      "sha256": "81f0466ab3c42a95f68bd4a87b40c9ee2fb1967147cbbec02bce115bf3ef807c"
+    },
+    "tests/modules/atomic-credit-fee-persistence84.test.ts": {
+      "bytes": 12259,
+      "sha256": "d31f96db01533a22d8e7351c1fec33b72700318b438d03a7885a699742188ec4"
+    },
+    "tests/modules/atomic-credit-reservation-proof.test.ts": {
+      "bytes": 4555,
+      "sha256": "babcf1bfe613405765f667e8a47688687ff87700a765372aaf924edb564ef106"
+    },
+    "tests/modules/atomic-credit-reservation-segments.test.ts": {
+      "bytes": 5259,
+      "sha256": "93a3738e6ced94ed4bfb0e86fcb2428efe92079ab74e204ee548258532f90ca8"
+    },
+    "tests/modules/controlled-parent-financial-adapter.test.ts": {
+      "bytes": 10745,
+      "sha256": "db51f1ae0ac3f34e1b06cc15429808f77f6a16ffdcbe2210a0f5c57b70a2041d"
+    },
+    "tests/modules/member-merchant-identity-financial-adapter.test.ts": {
+      "bytes": 27345,
+      "sha256": "5e0c2dfafa0f33560fc44c481f58d4eafe5e28e6928d17c4834291d6cc548337"
+    }
+  }
+}

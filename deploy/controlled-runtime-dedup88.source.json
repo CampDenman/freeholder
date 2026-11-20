@@ -1,0 +1,23 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "controlled_runtime_dedup88.v1",
+  "checklist": ["C12.38", "C11.05", "C1.08"],
+  "status": "FORWARD SOURCE CONTINUATION; ordered lock keys are unchanged and acquired in one statement; not payment acceptance",
+  "files": [
+    {
+      "path": "src/modules/invoicing/controlled-provider-financial-parent.ts",
+      "beforeSha256": "a047098add9aaf4477c993df3ac3dcb5beda8385870c4a4b341606b363fa36b4",
+      "afterSha256": "f9cd1b929611733de28c2c2818a53a10a1c067af3e6182075b5edf472067a3c8",
+      "edits": [
+        {
+          "before": "  for(const id of graph.money.map(row=>row.id).sort())await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`payment:${id}`}))`);\n  for(const id of graph.fullInvoices.map(row=>row.id).sort())await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`invoice:${id}`}))`);\n  for(const id of graph.notes.map(row=>row.id).sort())await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`credit-note:${id}`}))`);",
+          "after": "  const keys=[...graph.money.map(row=>`payment:${row.id}`).sort(),...graph.fullInvoices.map(row=>`invoice:${row.id}`).sort(),...graph.notes.map(row=>`credit-note:${row.id}`).sort()];"
+        },
+        {
+          "before": "  for(const cash of cashNamespaces)await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`subscription-cash:${cash.platform}:${cash.account??\"\"}:${cash.ref}`}))`);",
+          "after": "  keys.push(...cashNamespaces.map(cash=>`subscription-cash:${cash.platform}:${cash.account??\"\"}:${cash.ref}`));\n  if(keys.length)await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(lock_key)) from unnest(array[${sql.join(keys.map(key=>sql`${key}`),sql`,`)}]) with ordinality as ordered(lock_key,position) order by position`);"
+        }
+      ]
+    }
+  ]
+}

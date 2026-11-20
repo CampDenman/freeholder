@@ -1,0 +1,33 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "original_retirement_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Scoped original conditional-retirement lifecycle qualified on fresh migration93 PostgreSQL; hosted/provider acceptance remains open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "ad15e300e4497a4a0129f263c3c41f10b9b71e9f0e35e438a322e9fab5b697ff" },
+    { "path": "tests/core/media-original-retirement-lifecycle.test.ts", "sha256": "68114eabded927184ae6f46766457108d9423442a4c994f34567367c926d0a8e" }
+  ],
+  "controls": {
+    "transportQualified": { "database": "original_retirement_audit_20261115", "passed": 6, "failed": 1, "cause": "The paused-writer fixture expected a throw although the cleanup contract correctly returned false without mutation" },
+    "final": { "database": "original_retirement_final_20261115", "passed": 7, "failed": 0, "durationSeconds": 68.33 },
+    "coverage": ["exact conditional DELETE and pinned absence", "retained version refusal", "retained session refusal", "paused original PUT refusal without mutation", "named privacy hold", "post-DELETE inventory continuation without replay", "unattempted caller and separate new caller with exactly one DELETE"],
+    "guardsWeakened": false,
+    "runtimeChanges": false,
+    "focusedLint": "passed"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "ad15e300e4497a4a0129f263c3c41f10b9b71e9f0e35e438a322e9fab5b697ff",
+      "beforeSha256": "a3ccccd45fcedafd0a508f90063235f0db958caf2273d743a868a8bbe62aeed0",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  No ingress, provider-account, worker or full-erasure acceptance follows.\n  Signing containment source2026-11-13",
+          "after": "  No ingress, provider-account, worker or full-erasure acceptance follows.\n  Original conditional retirement continuation2026-11-15: with genuine synthetic\n  AWS-to-TCP transport, six prepared controls passed immediately. The paused-PUT\n  control expected an exception although the actual non-throwing cleanup contract\n  correctly returned false before DELETE or receipt mutation; only that fixture\n  assertion changed. Final fresh migration93 execution passes7/7 for exact\n  conditional retirement, retained version/session and active-writer refusal,\n  privacy holds, and interrupted/unattempted continuation with no DELETE replay.\n  Focused lint passes. See `deploy/original-retirement-lifecycle.source.json`.\n  No runtime defect or hosted/provider acceptance follows.\n  Signing containment source2026-11-13",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

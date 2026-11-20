@@ -1,0 +1,32 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_multipart_idle_retirement_proof.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Idle original session retirement evidence controls pass; no real provider retirement or executor claim is made",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "289d09f845d64a97657b75e4f589a9f0c1b921bab498a35e3bc828de751c294d" },
+    { "path": "tests/core/media-multipart-idle-retirement-proof.test.ts", "sha256": "4ee6904346db99685e937780d9474cec07484484f2d9963aa89c7311dd53053a" }
+  ],
+  "controls": {
+    "final": { "passed": 7, "failed": 0, "durationSeconds": 0.711 },
+    "coverage": ["exact actual portable ABORT FIN and ACK accepted without evidence mutation", "404/no-ACK and unknown reply refused despite current absence", "active caller or missing physical FIN refused", "other session, runtime or rewritten descriptor refused", "exactly one original physical ABORT and exact parent finish required", "full agreeing absence leaves unrelated observations unadopted", "retained original object/version/session or policy difference refused after logical404"],
+    "runtimeChanges": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "289d09f845d64a97657b75e4f589a9f0c1b921bab498a35e3bc828de751c294d",
+      "beforeSha256": "418bbec7a12c01b2c59b0dbde3e4278051f282d7e71216040ffaff3a2e41605e",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  No remote ACK, provider absence, actual host stop or erasure completion follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  No remote ACK, provider absence, actual host stop or erasure completion follows.\n  Idle-retirement proof qualification2026-11-16: all7 controls pass. Exact actual\n  ABORT ACK/FIN and one original physical request are required;404, unknown replies,\n  active callers and changed identity cannot substitute. Full agreeing absence\n  accepts no retained original object/version/session or policy difference and does\n  not adopt unrelated observations. Focused lint passes. See\n  `deploy/media-multipart-idle-retirement-proof.source.json`. No real provider\n  retirement or executor claim follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_current_resumable_lifecycle.v1",
+  "checklist": ["C1.12", "C11.10"],
+  "status": "Current-runtime private-S3 resumable positive and expired-phone refusal controls pass; broad media acceptance remains incomplete",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "805109f411de80bbe2316343ddcf0bea6c9a586466007112e306639c9a27c44f" },
+    { "path": "tests/core/media.test.ts", "sha256": "da8908408e9fe9a658b81833296ab16e337614cd9795b30ea465a5836b4159f5" }
+  ],
+  "controls": {
+    "final": { "database": "media_resumable_bound_20261116", "passed": 2, "failed": 0, "skippedByNameFilter": 46, "durationSeconds": 61.64 },
+    "coverage": ["complete original-file declaration, admitted signing and body-bound browser PUT", "provider part inspection, conditional COMPLETE, original CREATE/readback request binding", "document validation, asset registration and idempotent completion retry", "expired phone capture link cannot attach a completed upload"],
+    "fixtureQualification": ["empty pre-CREATE baselines and exact bucket/key XML", "actual part checksum and original-part admission headers", "stored object revision and original CREATE request identity"],
+    "broadRun": { "database": "media_current_regression_20261116", "outcome": "timed_out", "timeoutSeconds": 600, "remaining": ["capture original-pointer retirement timed out and trailing resets failed", "three raster fixtures still attempted raw managed writes"] },
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "805109f411de80bbe2316343ddcf0bea6c9a586466007112e306639c9a27c44f",
+      "beforeSha256": "81938ba31cd423026692bcad6c4195345abffaad67c51ffdd63db2e6eed2e9b1",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  No provider, caller-terminal or checklist acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  No provider, caller-terminal or checklist acceptance follows.\n  Current resumable-media qualification2026-11-16 (C1.12/C11.10): the focused\n  private-S3 and expiring-phone controls pass2/2 on fresh migration108. The positive\n  control now exercises actual declaration, signing, body-bound PUT, inspection,\n  COMPLETE, exact original CREATE/readback binding, asset registration and idempotent\n  retry; all prior final assertions remain. TypeScript and focused lint pass. See\n  `deploy/media-current-resumable-lifecycle.source.json`. The earlier broad media run\n  TIMED OUT at600s; its initial fixture failures are superseded only for these two\n  cases. Capture timeout/trailing resets and raw-write raster fixtures remain open.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

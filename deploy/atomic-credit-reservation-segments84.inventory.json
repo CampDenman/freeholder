@@ -1,0 +1,292 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "SOURCE_IMPLEMENTED_ALL_EXECUTION_UNRUN",
+  "checklist": [
+    "C12.38",
+    "C9.33",
+    "C1.08"
+  ],
+  "predecessorInventory": "deploy/atomic-credit-fee-partition84.inventory.json",
+  "ownedTail": "deploy/atomic-credit-fee-partition84.fragment.sql",
+  "additionalParentColumns": [],
+  "additionalModels": [
+    {
+      "export": "invoiceCreditReservationAtomicFeePartitions",
+      "table": "invoice_credit_reservation_atomic_fee_partitions",
+      "primaryKey": [
+        "reservation_id"
+      ],
+      "protocol": "freeholder.atomic-credit-fee-reservation.v1",
+      "fields": {
+        "reservation_id": "uuid NOT NULL; exact actual inserted reservation PK",
+        "funding_id": "uuid NOT NULL; exact B funding-purpose child PK",
+        "root_funding_id": "uuid NOT NULL; actual original B funding-purpose ancestor for a payment epoch OR a positively proved legacy application-as-own-epoch, never guessed from amount/order",
+        "source_payment_id": "uuid NOT NULL; immutable original successful unreturned payment",
+        "source_application_id": "uuid NULL; exactly funding.source_application_id",
+        "protocol": "text NOT NULL",
+        "parent_fingerprint": "text NOT NULL; full actual PostgreSQL inserted reservation row SHA",
+        "funding_partition_fingerprint": "text NOT NULL; full actual funding purpose-child row SHA",
+        "economics": "jsonb NOT NULL; strict AtomicCreditReservationEconomics below",
+        "before_entries": "jsonb NOT NULL; complete typed-domain actual pre-insert physical parent/current bank/caller/credit graph, at most one combined 5000 identities",
+        "admission_transaction_id": "text NOT NULL; actual same transaction as reservation insertion",
+        "digest": "text NOT NULL; canonical exact signed body digest",
+        "authentication": "text NOT NULL; server HMAC purpose atomic_credit_fee_reservation.v1",
+        "created_at": "timestamptz NOT NULL DEFAULT now(); never ordering authority"
+      },
+      "foreignKeys": [
+        {
+          "name": "credit_atomic_reservation_parent_fk",
+          "columns": [
+            "reservation_id"
+          ],
+          "target": "invoice_credit_reservations",
+          "targetColumns": [
+            "id"
+          ],
+          "onDelete": "restrict"
+        },
+        {
+          "name": "credit_atomic_reservation_funding_fk",
+          "columns": [
+            "funding_id"
+          ],
+          "target": "invoice_credit_funding_atomic_fee_partitions",
+          "targetColumns": [
+            "funding_id"
+          ],
+          "onDelete": "restrict"
+        },
+        {
+          "name": "credit_atomic_reservation_root_fk",
+          "columns": [
+            "root_funding_id"
+          ],
+          "target": "invoice_credit_funding_atomic_fee_partitions",
+          "targetColumns": [
+            "funding_id"
+          ],
+          "onDelete": "restrict"
+        },
+        {
+          "name": "credit_atomic_reservation_payment_fk",
+          "columns": [
+            "source_payment_id"
+          ],
+          "target": "payments",
+          "targetColumns": [
+            "id"
+          ],
+          "onDelete": "restrict"
+        },
+        {
+          "name": "credit_atomic_reservation_application_fk",
+          "columns": [
+            "source_application_id"
+          ],
+          "target": "invoice_credit_applications",
+          "targetColumns": [
+            "reservation_id"
+          ],
+          "onDelete": "restrict",
+          "nullable": true
+        }
+      ],
+      "checks": [
+        "credit_atomic_reservation_protocol",
+        "credit_atomic_reservation_fingerprints",
+        "credit_atomic_reservation_economics",
+        "credit_atomic_reservation_before_entries"
+      ],
+      "indexes": [
+        {
+          "name": "credit_atomic_reservation_funding",
+          "columns": [
+            "funding_id",
+            "reservation_id"
+          ]
+        },
+        {
+          "name": "credit_atomic_reservation_root",
+          "columns": [
+            "source_payment_id",
+            "root_funding_id",
+            "reservation_id"
+          ]
+        },
+        {
+          "name": "credit_atomic_reservation_application",
+          "columns": [
+            "source_application_id",
+            "reservation_id"
+          ]
+        }
+      ],
+      "private": true,
+      "retention": "noTTL immutable financial purpose receipt; no contact/profile column; authority derives through actual reservation/funding/note/receipt graph"
+    }
+  ],
+  "economics": {
+    "name": "AtomicCreditReservationEconomics",
+    "root": [
+      "rootKind:payment|legacy_application",
+      "rootApplicationId:uuid|null",
+      "legacyApplicationRevision:sha256|null",
+      "rootFundingId:uuid",
+      "sourcePaymentId:uuid",
+      "originalPrincipalMinor:safe positive integer",
+      "originalFeeMinor:safe nonnegative integer",
+      "rootEconomicRevision:sha256"
+    ],
+    "funding": [
+      "fundingId:uuid",
+      "sourceApplicationId:uuid|null",
+      "fundingEconomicRevision:sha256",
+      "fundingNominalFeeMinor",
+      "fundingRetiredFeeMinor",
+      "fundingAssignedFeeMinor",
+      "fundingProvenCollectedMinor",
+      "fundingOwedFeeMinor"
+    ],
+    "segments": "ordered strict nonoverlapping half-open ABSOLUTE intervals in the ORIGINAL root coordinate (actual payment, or positively proved existing old application-as-own-epoch; never an invented payment offset); each {epochFundingId,epochStartMinor,epochEndMinor,epochAssignedFeeMinor,epochProvenCollectedMinor,startMinor,endMinor,nominalFeeMinor,retiredFeeMinor,assignedFeeMinor,provenCollectedMinor,owedFeeMinor}; original epoch/caps remain unchanged through nested slices; count bounded within complete 5000 identity/segment inventory",
+    "reservation": [
+      "amountMinor",
+      "nominalFeeMinor",
+      "retiredFeeMinor",
+      "assignedFeeMinor",
+      "provenCollectedMinor",
+      "owedFeeMinor",
+      "activeReservationIds:uuid[]",
+      "releasedReservationIds:uuid[]",
+      "currentSourceRevision:sha256",
+      "economicRevision:sha256"
+    ],
+    "ordering": "Economic coordinates are durable allocation proof, never alleged provider capture chronology. Actual authenticated predecessor membership and exact FK parent segment containment establish them; never timestamp/UUID/equal amount inference.",
+    "conservation": "For each exact parent segment: nominal=retired+assigned; assigned=proven+owed. Disjoint child intervals sum to their exact original cumulative-floor deltas. Every original nominal/retired/assigned/proven/owed unit remains in applied, reserved, genuinely released/unassigned or explicitly successor-locked capacity exactly once.",
+    "formula": "Within authenticated original epoch [s,e), ABSOLUTE t has N(t)=floor(rootFi*t/rootPrincipal)-floor(rootFi*s/rootPrincipal). A(t)=min(N(t), ORIGINAL epoch assigned capacity). P(t)=min(A(t), ORIGINAL epoch proven capacity). Absolute interval [a,b) carries differences N(b)-N(a), A(b)-A(a), P(b)-P(a); retirement=N-A and owed=A-P. Never add s to t again. Every nested slice preserves ORIGINAL epochStart/epochEnd/caps independently of the slice's own endpoints. root400/4199, epochStart100, [104,105) carries nominal1.",
+    "multipleSegments": "An exact new reservation may need multiple free intervals after a genuine unapplied release. Choose a deterministic ascending economic coordinate from authenticated available intervals under the actual complete source prefix. Preserve each interval separately; never collapse holes into a guessed prefix. A released interval's journal remains full and may be reused only when no actual application exists and exact release authority remains valid.",
+    "legacy": "Existing non-B reservation/application floor rules and immutable scalar amounts stay exact. No historical child backfill or conversion from opaque feeEvidenceDigest/createdAt. Known B ancestry lacking the mandatory proof refuses. Genuine pre-B source applications retain their own provable legacy epoch rather than inventing an original root offset."
+  },
+  "additionalFunctions": [
+    {
+      "signature": "freeholder_atomic_credit_reservation_partition(uuid,bigint)",
+      "arguments": [
+        "actual_funding_id uuid",
+        "take_minor bigint"
+      ],
+      "returns": [
+        "known boolean",
+        "funding_id uuid",
+        "root_funding_id uuid",
+        "source_payment_id uuid",
+        "source_application_id uuid",
+        "principal_minor bigint",
+        "nominal_fee_minor bigint",
+        "retired_fee_minor bigint",
+        "assigned_fee_minor bigint",
+        "collected_fee_minor bigint",
+        "owed_fee_minor bigint",
+        "segments jsonb",
+        "active_reservation_ids uuid[]",
+        "released_reservation_ids uuid[]",
+        "funding_partition_fingerprint text",
+        "evidence_fingerprint text"
+      ],
+      "meaning": "Independent current source/interval capacity before reservation insertion; take0 is read-only capacity, not a writer grant. Every physical SQL reference qualified against output/local variables."
+    },
+    {
+      "signature": "freeholder_guard_credit_atomic_reservation()",
+      "returns": "trigger",
+      "meaning": "Child immutable; exact inserted parent fullPG SHA, strict root containment/conservation and actual sameTX; normalize ONLY this actual newborn reservation against signed preimage, no other row/caller exclusion."
+    },
+    {
+      "signature": "freeholder_credit_atomic_reservation_birth_guard()",
+      "returns": "trigger",
+      "meaning": "Mandatory deferred child for EVERY new B reservation, including numeric coincidences, caught JavaScript errors and direct alternate SQL writers; actual final complete active/app/release graph checked."
+    }
+  ],
+  "existingApprovedBFunctionsExtendedBeforeFreeze": [
+    "freeholder_atomic_credit_fee_partition(uuid,uuid,bigint): carry root economic segments through funding and actual source-application reservation FK; no inherited assigned-total repricing",
+    "freeholder_credit_fee_receipt(): exact B reservation interval branch and application must equal its actual authenticated reservation fields; all old non-B branches reverse byte-for-byte",
+    "freeholder_credit_atomic_fee_ready(): pin exact full new bodies/return types/CHECKs/indexes/trigger OIDs/enabled/tgtype/deferral, all earlier A/160/current-bank/default pins retained"
+  ],
+  "triggers": [
+    {
+      "name": "credit_atomic_reservation_partition_guard",
+      "table": "invoice_credit_reservation_atomic_fee_partitions",
+      "function": "freeholder_guard_credit_atomic_reservation()",
+      "timing": "BEFORE",
+      "events": [
+        "INSERT",
+        "UPDATE",
+        "DELETE"
+      ],
+      "row": true,
+      "tgtype": 31,
+      "enabled": [
+        "O",
+        "A"
+      ]
+    },
+    {
+      "name": "credit_atomic_reservation_birth",
+      "table": "invoice_credit_reservations",
+      "function": "freeholder_credit_atomic_reservation_birth_guard()",
+      "timing": "AFTER",
+      "events": [
+        "INSERT"
+      ],
+      "row": true,
+      "deferrable": true,
+      "initiallyDeferred": true,
+      "tgtype": 5,
+      "enabled": [
+        "O",
+        "A"
+      ]
+    }
+  ],
+  "applicationDerivation": "Existing invoice_credit_applications.reservation_id is BOTH PRIMARY KEY and FK to invoice_credit_reservations.id. Exactly one application can derive one exact child through that actual key. Existing fee-receipt trigger requires application fee/state/unexpected fields equal reservation; B branch additionally authenticates reservation child. No new application-purpose model, guessed target/amount mapping or old application mutation.",
+  "writerOrder": [
+    "Authenticate target-derived whole source closure; shared contact identity then sorted complete source/target resources, parents, canonical/cash/callback keys; rediscover; no late foreign resource acquisition.",
+    "Independently current bank/fee/refund/caller/B funding/interval capacity and full beforeEntries immediately before first mutation; old funding/reservation graph remains full.",
+    "Parent BEFORE independently verifies actual current candidate without requiring not-yet-existing child.",
+    "Insert actual reservation (normal generated UUID), read actual fullPG SHA, insert exact HMAC child in SAME actual transaction.",
+    "Child BEFORE validates only its actual sameTX newborn parent delta; independent deferred parent birth requires child and proves whole final physical interval conservation; application keeps original existing actual FK and fields."
+  ],
+  "sourceFootprint": {
+    "new": [
+      "src/modules/invoicing/atomic-credit-reservation-schema.ts",
+      "src/modules/invoicing/atomic-credit-reservation-contract.ts",
+      "src/modules/invoicing/atomic-credit-reservation-segments.ts",
+      "src/modules/invoicing/atomic-credit-reservation-proof.ts"
+    ],
+    "extend": [
+      "atomic-credit-fee-partition-contract.ts",
+      "atomic-credit-fee-partition.ts",
+      "atomic-credit-fee-amounts.ts",
+      "atomic-credit-fee-ancestry.ts",
+      "atomic-credit-source-prefix.ts",
+      "atomic-credit-financial-scope.ts",
+      "credit-application-service.ts",
+      "credit-fee-origin.ts"
+    ],
+    "ordinaryAPI": [
+      "readAtomicCreditReservationPartition(real ServiceContext,{fundingId,amountMinor}) -> authenticated current plan or null ordinary; known B missing/invalid refuses",
+      "readAtomicCreditReservationProof(real Tx,reservationId) -> exact MAC/PG/FK economic receipt or null; no current-money grant",
+      "retainAtomicCreditReservationPartition(real ServiceContext,{reservationId,plan}) -> exact sameTX actual child; ordinary private helper, no registered service"
+    ],
+    "centralIntegration": "Table barrel + explicit private/noTTL + search no indexing; collector-free witness joins actual funding/reservation IDs selected by existing exact profile/invoice/subscription graph. Profile is restriction only; full actual source/target/credit ancestry and parent links. One deduplicated 5000 table+UUID/domain union before no-route exits; no new empty shape churn. Root owns central4 composition, helpers return full PG row SHA. Buyer export may expose actual IDs/principal/currency/status/target dates only; no private fee segments/preimages/HMAC/bank/actor/hosting bodies. Authorized merchant history explicit fee totals may be whitelisted, never whole private row spread."
+  },
+  "requiredPreparedControls": [
+    "4199/F400 retired1/current399 first21 carries original2, remaining4178 carries397; totals nominal400 retired1 assigned399",
+    "two split reservations/application inheritance preserve root offsets and all caps, not399/4199",
+    "multiple free intervals after genuine unused release, exact old release retained; applied interval cannot release/reuse",
+    "missing child numeric coincidence/direct SQL/caught JS orphan fail at actual deferred commit",
+    "foreign funding/root/payment/application/parentPG/HMAC/current namespace/caller refuse",
+    "overlap/hole/duplicated interval/proven-over-assigned/root cap tamper refuse",
+    "old valid legacy epoch and original hashes unchanged; known B never fallback",
+    "whole applied compensation stays consumed until independent C successor-locked protocol; no generic available refund/credit or owed-fee forgiveness"
+  ],
+  "implementationStatus": "Approved schema/contract/pure math/MAC readers, actual parent-first retainers, all candidate/BEFORE/deferred functions, exact readiness+triggers and real central witness/archive consumers now exist as UNRUN source. No activation, execution or qualification claim.",
+  "compensationBoundary": "C may reference this exact reservation-purpose child PK. A WHOLE old application remains physically and economically consumed. Any successor-applied and still-locked parts must be exact disjoint subsets of its authenticated interval/caps with whole nominal/retired/assigned/proven/owed sums conserved. C's own immutable compensation/rebind proof must account for the old consumption exactly once; it cannot pretend a legacy unknown offset or call generic release."
+}

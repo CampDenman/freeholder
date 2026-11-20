@@ -1,0 +1,142 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C11.10",
+    "C1.08",
+    "C12.38",
+    "C9.33"
+  ],
+  "status": "SOURCE INVENTORY for review BEFORE modifying two original adapter files; no lost old oracle counts as pass",
+  "oldFiles": [
+    {
+      "path": "tests/core/controlled-subscription-adapter.test.ts",
+      "sha256": "75c9a3f8c7062916c84963b06bacc913a87fec1a34d7947cd44316d5131c4d91"
+    },
+    {
+      "path": "tests/core/controlled-collection-adapter.test.ts",
+      "sha256": "0947420726ec59d70a55b9e1412a7e25b5f3ec9521a9f99b2270c04aea7c5ddd"
+    }
+  ],
+  "oldCases": [
+    {
+      "oldFile": "tests/core/controlled-subscription-adapter.test.ts",
+      "oldCase": "creates only an explicit zero item with atomic default_incomplete, retaining real ACK before interpretation and never rewriting accepted trial/anchor",
+      "genuineHarnessRole": "genuine bootstrap claim/SDK/FIN; exact default_incomplete/zero/no-trial-no-anchor forms",
+      "newNativeFile": "tests/modules/controlled-safe-response-adapter-oracles85.test.ts",
+      "privateExecution": "actual planControlledProviderOperation or actual planControlledCollectionOperation -> executeControlledOperation; real original call from claimControlledProviderCall; provider HTTP outside TX",
+      "expectedState": "PREPARED mapping only: source harness and actual prerequisite qualification required; not executed or counted passed"
+    },
+    {
+      "oldFile": "tests/core/controlled-subscription-adapter.test.ts",
+      "oldCase": "does not mistake a pause POST acknowledgment for an independently returned paused/zero inventory",
+      "genuineHarnessRole": "genuine pause claim followed by a DISTINCT genuine bootstrap GET claim; ACK cannot prove pause",
+      "newNativeFile": "tests/modules/controlled-safe-response-adapter-oracles85.test.ts",
+      "privateExecution": "actual planControlledProviderOperation or actual planControlledCollectionOperation -> executeControlledOperation; real original call from claimControlledProviderCall; provider HTTP outside TX",
+      "expectedState": "PREPARED mapping only: source harness and actual prerequisite qualification required; not executed or counted passed"
+    },
+    {
+      "oldFile": "tests/core/controlled-subscription-adapter.test.ts",
+      "oldCase": "retains an unexpected positive raw bootstrap response before refusing its unproved identity",
+      "genuineHarnessRole": "genuine actual bootstrap response ownership contradiction retained raw-first; no invented receipt or replay",
+      "newNativeFile": "tests/modules/controlled-safe-response-adapter-oracles85.test.ts",
+      "privateExecution": "actual planControlledProviderOperation or actual planControlledCollectionOperation -> executeControlledOperation; real original call from claimControlledProviderCall; provider HTTP outside TX",
+      "expectedState": "PREPARED mapping only: source harness and actual prerequisite qualification required; not executed or counted passed"
+    },
+    {
+      "oldFile": "tests/core/controlled-collection-adapter.test.ts",
+      "oldCase": "proves a renewal's genuine original price epoch separately from this next period's new canonical target",
+      "genuineHarnessRole": "two genuine canonical periods with an original accepted price epoch and a distinct next target; foreign epoch refusal",
+      "newNativeFile": "tests/modules/controlled-safe-response-adapter-oracles85.test.ts",
+      "privateExecution": "actual planControlledProviderOperation or actual planControlledCollectionOperation -> executeControlledOperation; real original call from claimControlledProviderCall; provider HTTP outside TX",
+      "expectedState": "PREPARED mapping only: source harness and actual prerequisite qualification required; not executed or counted passed"
+    },
+    {
+      "oldFile": "tests/core/controlled-collection-adapter.test.ts",
+      "oldCase": "refuses an equal-price annual current item against the explicitly bound monthly read without issuing a collection POST",
+      "genuineHarnessRole": "genuine current target whose actual original monthly item is externally contradicted by an equal-price annual read; zero collection POST",
+      "newNativeFile": "tests/modules/controlled-safe-response-adapter-oracles85.test.ts",
+      "privateExecution": "actual planControlledProviderOperation or actual planControlledCollectionOperation -> executeControlledOperation; real original call from claimControlledProviderCall; provider HTTP outside TX",
+      "expectedState": "PREPARED mapping only: source harness and actual prerequisite qualification required; not executed or counted passed"
+    },
+    {
+      "oldFile": "tests/core/controlled-collection-adapter.test.ts",
+      "oldCase": "retains actual positive invoice/PI facts during manifest recovery before a canceled calendar can refuse exact proof",
+      "genuineHarnessRole": "genuine retained target/cash followed by actual cancellation; genuine recovery read retains same original receipt before current exact proof refuses",
+      "newNativeFile": "tests/modules/controlled-safe-response-adapter-oracles85.test.ts",
+      "privateExecution": "actual planControlledProviderOperation or actual planControlledCollectionOperation -> executeControlledOperation; real original call from claimControlledProviderCall; provider HTTP outside TX",
+      "expectedState": "PREPARED mapping only: source harness and actual prerequisite qualification required; not executed or counted passed"
+    },
+    {
+      "oldFile": "tests/core/controlled-collection-adapter.test.ts",
+      "oldCase": "creates a nonautomatic isolated draft excluding unrelated pending items",
+      "genuineHarnessRole": "genuine accepted canonical target and original update/lineage, then actual draft create excludes unrelated pending items",
+      "newNativeFile": "tests/modules/controlled-safe-response-adapter-oracles85.test.ts",
+      "privateExecution": "actual planControlledProviderOperation or actual planControlledCollectionOperation -> executeControlledOperation; real original call from claimControlledProviderCall; provider HTTP outside TX",
+      "expectedState": "PREPARED mapping only: source harness and actual prerequisite qualification required; not executed or counted passed"
+    },
+    {
+      "oldFile": "tests/core/controlled-collection-adapter.test.ts",
+      "oldCase": "refuses finalize before the actual fixed dated tax/credit manifest is complete",
+      "genuineHarnessRole": "genuine canonical target with one genuinely missing component; real current lines GET; no finalize POST",
+      "newNativeFile": "tests/modules/controlled-safe-response-adapter-oracles85.test.ts",
+      "privateExecution": "actual planControlledProviderOperation or actual planControlledCollectionOperation -> executeControlledOperation; real original call from claimControlledProviderCall; provider HTTP outside TX",
+      "expectedState": "PREPARED mapping only: source harness and actual prerequisite qualification required; not executed or counted passed"
+    },
+    {
+      "oldFile": "tests/core/controlled-collection-adapter.test.ts",
+      "oldCase": "attaches exact locked canonical credit as a negative amount without creating a negative price or wallet credit",
+      "genuineHarnessRole": "genuine positive paid basis + issued original note/funding/reservation/application; exact accepted credit200 negative item, no negative price/wallet",
+      "newNativeFile": "tests/modules/controlled-safe-response-adapter-oracles85.test.ts",
+      "privateExecution": "actual planControlledProviderOperation or actual planControlledCollectionOperation -> executeControlledOperation; real original call from claimControlledProviderCall; provider HTTP outside TX",
+      "expectedState": "PREPARED mapping only: source harness and actual prerequisite qualification required; not executed or counted passed"
+    },
+    {
+      "oldFile": "tests/core/controlled-collection-adapter.test.ts",
+      "oldCase": "finalizes only the exact existing canonical gross/locked-credit/fixed-fee manifest, retaining its ACK separately",
+      "genuineHarnessRole": "genuine canonical NET1000/tax50/lockedcredit200/cash850/fee17 under actual shared engine/policy, then exact finalize ACK + independent read requirement",
+      "newNativeFile": "tests/modules/controlled-safe-response-adapter-oracles85.test.ts",
+      "privateExecution": "actual planControlledProviderOperation or actual planControlledCollectionOperation -> executeControlledOperation; real original call from claimControlledProviderCall; provider HTTP outside TX",
+      "expectedState": "PREPARED mapping only: source harness and actual prerequisite qualification required; not executed or counted passed"
+    },
+    {
+      "oldFile": "tests/core/controlled-collection-adapter.test.ts",
+      "oldCase": "refuses an unrelated customer balance before any physical collection POST",
+      "genuineHarnessRole": "genuine original customer financial GET with actual unrelated -200 balance before any pay POST; retain full source debt",
+      "newNativeFile": "tests/modules/controlled-safe-response-adapter-oracles85.test.ts",
+      "privateExecution": "actual planControlledProviderOperation or actual planControlledCollectionOperation -> executeControlledOperation; real original call from claimControlledProviderCall; provider HTTP outside TX",
+      "expectedState": "PREPARED mapping only: source harness and actual prerequisite qualification required; not executed or counted passed"
+    },
+    {
+      "oldFile": "tests/core/controlled-collection-adapter.test.ts",
+      "oldCase": "retains an original issued promise even when the customer aggregate balance is zero and refuses collection",
+      "genuineHarnessRole": "genuine issued original customer credit note in actual complete HTTP inventory with aggregate0; no pay POST",
+      "newNativeFile": "tests/modules/controlled-safe-response-adapter-oracles85.test.ts",
+      "privateExecution": "actual planControlledProviderOperation or actual planControlledCollectionOperation -> executeControlledOperation; real original call from claimControlledProviderCall; provider HTTP outside TX",
+      "expectedState": "PREPARED mapping only: source harness and actual prerequisite qualification required; not executed or counted passed"
+    },
+    {
+      "oldFile": "tests/core/controlled-collection-adapter.test.ts",
+      "oldCase": "retains genuine positive PI/cash before an auxiliary price failure after actual pay",
+      "genuineHarnessRole": "genuine pay operation and actual positive850 PI/receipt commit before a later actual price GET failure; no clipping/application/access",
+      "newNativeFile": "tests/modules/controlled-safe-response-adapter-oracles85.test.ts",
+      "privateExecution": "actual planControlledProviderOperation or actual planControlledCollectionOperation -> executeControlledOperation; real original call from claimControlledProviderCall; provider HTTP outside TX",
+      "expectedState": "PREPARED mapping only: source harness and actual prerequisite qualification required; not executed or counted passed"
+    }
+  ],
+  "newHelperFiles": [],
+  "newHarnessFiles": [
+    "tests/modules/controlled-safe-response-adapter-oracles85.test.ts"
+  ],
+  "oldFileChangesProposed": "Preserve complete before files/hashes. Direct UNBOUND new-version calls become explicit zero-HTTP refusal controls; relocate original positive HTTP/form/counter/ownership assertions byte-for-byte into corresponding genuine admitted native contexts. DTO selected-old-field comparisons only AFTER authentic same-call safe verification view and explicit unknown debt checks. No business-side stripping or unbound fallback.",
+  "schemaPrerequisites": "Current actual normal S0 forward schema plus genuine existing collection/canonical credit/fee ledger models. Credit250/850/17 positives stay explicitly open if real shared engines/config cannot create that sealed accepted graph; never fake manifest/FIN or select by amount. Held proration/B/current effect acceptance remains required independently.",
+  "coverageRule": "Each old case gets its own actual native result/explicit DB prerequisite skip and original HTTP/form assertion mapping; no source-only test or unbound-negative run supplies positive acceptance.",
+  "exactArchivedEconomics": {
+    "netMinor": 1000,
+    "taxMinor": 50,
+    "creditAppliedMinor": 200,
+    "cashDueMinor": 850,
+    "applicationFeeMinor": 17,
+    "lockedItemAmountMinor": -200,
+    "status": "archived original fixture constants; genuine shared producer required, no retuning"
+  }
+}

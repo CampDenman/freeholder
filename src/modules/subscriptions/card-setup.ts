@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: immutable first requests and agreement-specific saved-method proof.
+import type { MerchantChargeScope } from "@/adapters/payments";
 import {createHash,randomUUID} from "node:crypto";
 import {and,asc,desc,eq,inArray,sql} from "drizzle-orm";
 import {z} from "zod";
@@ -13,6 +14,9 @@ import {subscriptionCardSetups,subscriptionSetupDispatches,subscriptions} from "
 export const setupRequest=z.object({
  setupAttemptId:z.uuid(),subscriptionId:z.uuid(),contactId:z.uuid(),currency:z.string().regex(/^[A-Z]{3}$/),
  providerAccountId:z.string().regex(/^(?:|acct_[A-Za-z0-9]+)$/).max(200).optional(),
+ providerPlatformAccountId:z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200).optional(),
+ destinationAccountId:z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200).optional(),
+ settlementMerchantAccountId:z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200).optional(),
  customer:z.object({email:z.email(),name:z.string().max(200).optional()}),
  providerCustomerRef:z.string().min(1).max(500).optional(),
  successUrl:z.url(),cancelUrl:z.url(),idempotencyKey:z.string().min(8).max(240),
@@ -21,11 +25,11 @@ export type SetupRequest=z.infer<typeof setupRequest>;
 export type CardSetup=typeof subscriptionCardSetups.$inferSelect;
 export function originalSetupRequest(attempt:CardSetup):SetupRequest{
  const request=setupRequest.parse(attempt.request);
- if(request.setupAttemptId!==attempt.id || request.subscriptionId!==attempt.subscriptionId || (request.providerAccountId??"")!==attempt.providerAccountId || createHash("sha256").update(JSON.stringify(request)).digest("hex")!==attempt.requestHash) throw new ServiceError("conflict","Reconcile this card setup's immutable original request before retrying.");
+ if(request.setupAttemptId!==attempt.id || request.subscriptionId!==attempt.subscriptionId || (request.providerAccountId??"")!==attempt.providerAccountId || (request.providerPlatformAccountId??null)!==attempt.providerPlatformAccountId || createHash("sha256").update(JSON.stringify(request)).digest("hex")!==attempt.requestHash) throw new ServiceError("conflict","Reconcile this card setup's immutable original request before retrying.");
  return request;
 }
 
-export async function claimSetup(ctx:ServiceContext,input:{subscriptionId:string;contactId:string;provider:string;providerAccountId?:string;customer:{email:string|null;name:string};providerCustomerRef?:string;currency:string;successUrl:string;cancelUrl:string}){
+export async function claimSetup(ctx:ServiceContext,input:MerchantChargeScope & {subscriptionId:string;contactId:string;provider:string;customer:{email:string|null;name:string};providerCustomerRef?:string;currency:string;successUrl:string;cancelUrl:string}){
  const attempts=await ctx.tx.select().from(subscriptionCardSetups).where(eq(subscriptionCardSetups.subscriptionId,input.subscriptionId)).orderBy(desc(subscriptionCardSetups.createdAt),desc(subscriptionCardSetups.id)).for("update");
  const pending=attempts.find(attempt=>!attempt.confirmedAt&&!attempt.closedAt);
  let existing=pending;
@@ -37,7 +41,7 @@ export async function claimSetup(ctx:ServiceContext,input:{subscriptionId:string
   }
  }
  if(existing){
-  if(existing.provider!==input.provider || existing.providerAccountId!==(input.providerAccountId??""))throw new ServiceError("conflict","This card setup belongs to its original payment provider and account.");
+  if(existing.provider!==input.provider || existing.providerAccountId!==(input.providerAccountId??"") || existing.providerPlatformAccountId!==(input.providerPlatformAccountId??null))throw new ServiceError("conflict","This card setup belongs to its original payment provider and account.");
   const request=originalSetupRequest(existing);
   if(existing.erasureRequestId)throw new ServiceError("conflict","This original setup is awaiting privacy cleanup.");
   if(existing.confirmedMethodId)return {attempt:existing,request,url:request.successUrl,recover:false};
@@ -52,13 +56,13 @@ export async function claimSetup(ctx:ServiceContext,input:{subscriptionId:string
  }
  if(!input.customer.email)throw new ServiceError("conflict","Verify your email before saving a card.");
  const attemptId=randomUUID();
- const request=setupRequest.parse({setupAttemptId:attemptId,subscriptionId:input.subscriptionId,contactId:input.contactId,currency:input.currency,providerAccountId:input.providerAccountId,customer:{email:input.customer.email,name:input.customer.name.slice(0,200)},providerCustomerRef:input.providerCustomerRef??(attempts[0]?.closedReason==="provider_cancelled" && attempts[0]?.provider===input.provider && attempts[0]?.providerAccountId===(input.providerAccountId??"") ? attempts[0].providerCustomerRef??undefined:undefined),successUrl:input.successUrl,cancelUrl:input.cancelUrl,idempotencyKey:`trial-card:${input.subscriptionId}:${attemptId}`});
- const [attempt]=await ctx.tx.insert(subscriptionCardSetups).values({id:attemptId,subscriptionId:input.subscriptionId,provider:input.provider,providerAccountId:input.providerAccountId??"",request,requestHash:createHash("sha256").update(JSON.stringify(request)).digest("hex"),providerCustomerRef:request.providerCustomerRef??null}).returning();
+ const request=setupRequest.parse({setupAttemptId:attemptId,subscriptionId:input.subscriptionId,contactId:input.contactId,currency:input.currency,providerAccountId:input.providerAccountId,providerPlatformAccountId:input.providerPlatformAccountId,destinationAccountId:input.destinationAccountId,settlementMerchantAccountId:input.settlementMerchantAccountId,customer:{email:input.customer.email,name:input.customer.name.slice(0,200)},providerCustomerRef:input.providerCustomerRef??(attempts[0]?.closedReason==="provider_cancelled" && attempts[0]?.provider===input.provider && attempts[0]?.providerAccountId===(input.providerAccountId??"") && attempts[0]?.providerPlatformAccountId===(input.providerPlatformAccountId??null) ? attempts[0].providerCustomerRef??undefined:undefined),successUrl:input.successUrl,cancelUrl:input.cancelUrl,idempotencyKey:`trial-card:${input.subscriptionId}:${attemptId}`});
+ const [attempt]=await ctx.tx.insert(subscriptionCardSetups).values({id:attemptId,subscriptionId:input.subscriptionId,provider:input.provider,providerAccountId:input.providerAccountId??"",providerPlatformAccountId:input.providerPlatformAccountId??null,request,requestHash:createHash("sha256").update(JSON.stringify(request)).digest("hex"),providerCustomerRef:request.providerCustomerRef??null}).returning();
  return {attempt:attempt!,request,url:null,recover:false};
 }
 
 /** Called only inside authenticated provider application, never from a public caller. */
-export async function bindSetupEvidence(ctx:ServiceContext,input:{provider:string;providerAccountId:string;contactId?:string;customerRef?:string;methodRef:string;setup:{attemptId:string;subscriptionId:string;checkoutRef:string;setupIntentRef:string}}){
+export async function bindSetupEvidence(ctx:ServiceContext,input:{provider:string;providerAccountId:string;providerPlatformAccountId?:string;contactId?:string;customerRef?:string;methodRef:string;setup:{attemptId:string;subscriptionId:string;checkoutRef:string;setupIntentRef:string;settlementMerchantAccountId?:string}}){
  const [attempt]=await ctx.tx.select().from(subscriptionCardSetups).where(eq(subscriptionCardSetups.id,input.setup.attemptId)).for("update");
  // Erasure removes completed local setup copies. A late callback cannot recreate them.
  if(!attempt)return null;
@@ -66,7 +70,7 @@ export async function bindSetupEvidence(ctx:ServiceContext,input:{provider:strin
  if(attempt.closedAt)throw new ServiceError("conflict","This saved-card setup was already reconciled as closed.");
  const request=originalSetupRequest(attempt);
  const [sub]=await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id,attempt.subscriptionId));
- if(!sub || !attempt.providerCustomerRef || sub.id!==input.setup.subscriptionId || request.contactId!==input.contactId || attempt.provider!==input.provider || attempt.providerAccountId!==input.providerAccountId || !input.customerRef || (attempt.providerCustomerRef && attempt.providerCustomerRef!==input.customerRef) || (attempt.providerCheckoutRef && attempt.providerCheckoutRef!==input.setup.checkoutRef) || (attempt.providerSetupIntentRef && attempt.providerSetupIntentRef!==input.setup.setupIntentRef))throw new ServiceError("conflict","The saved card does not match its original setup request.");
+ if(!sub || !attempt.providerCustomerRef || sub.id!==input.setup.subscriptionId || request.contactId!==input.contactId || attempt.provider!==input.provider || attempt.providerAccountId!==input.providerAccountId || attempt.providerPlatformAccountId!==(input.providerPlatformAccountId??null) || (request.providerPlatformAccountId && request.settlementMerchantAccountId!==input.setup.settlementMerchantAccountId) || !input.customerRef || (attempt.providerCustomerRef && attempt.providerCustomerRef!==input.customerRef) || (attempt.providerCheckoutRef && attempt.providerCheckoutRef!==input.setup.checkoutRef) || (attempt.providerSetupIntentRef && attempt.providerSetupIntentRef!==input.setup.setupIntentRef))throw new ServiceError("conflict","The saved card does not match its original setup request.");
  if(attempt.confirmedMethodId){
   const [method]=await ctx.tx.select().from(paymentMethods).where(eq(paymentMethods.id,attempt.confirmedMethodId));
   if(!method || method.providerMethodRef!==input.methodRef)throw new ServiceError("conflict","This setup already confirmed a different saved method.");

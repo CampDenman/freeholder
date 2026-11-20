@@ -1,10 +1,11 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C5.25: customer capabilities never widen the owner's scoped money services.
+import { lockControlledOrdinaryCollectionParent } from "./controlled-ordinary-collection-parent";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
+import { invoiceOutstanding } from "./invoice-balance";
 import { paymentAdapter } from "@/adapters/payments";
-import { bookings } from "@/core/scheduling/schema";
 import { contacts } from "@/core/contacts/schema";
 import { env } from "@/core/env";
 import { formatMoney, translator } from "@/core/i18n";
@@ -12,57 +13,41 @@ import { localeForContact, localizeCustomerHref } from "@/core/i18n/customer";
 import { sendMail } from "@/core/mail/service";
 import { contactForActor } from "@/core/portal/service";
 import { actorString, defineOrchestratedService, defineService, ServiceError, type ServiceContext } from "@/core/service";
-import { customerCheckoutAllowed, requiresSavedMethod } from "./checkout-requirements";
+import { requiresSavedMethod } from "./checkout-requirements";
 import { invoiceRow, paymentRow } from "./contract";
 import { assertChargeEvidence, assertProviderAccount, paymentRouting, routingForPayment, verifiedCheckoutSession } from "./merchant-charge";
 import { getInvoiceMarketPolicy, verifyInvoiceMerchant } from "./market-policy";
 import { invoiceIssuer, publicInvoiceIssuer } from "./merchant-identity";
+import { nextCollectionAmount } from "./merchant-collection";
+import { invoicePaymentDueAmount } from "./invoice-payment-due";
+import { publicInvoiceMerchant, publicInvoiceMerchants, publicPaymentMerchant } from "./merchant-collection-public";
+import { merchantObservationRef, merchantPaymentEvidence, recordMerchantPaymentObservation } from "./merchant-payment-observations";
+import { originalProviderPlatform } from "./provider-platform-scope";
+import { invoiceRefundStateRows, publicRefundState } from "./merchant-refund-bank-state-service";
 import { createPayment, failPayment, markInvoiceViewed, settlePayment, startPayment } from "./invoice-service";
-import { invoiceLines, invoices, payments, paymentPlans, paymentPlanInstallments, paymentProviderCustomers } from "./schema";
-import { orderPaymentMilestones, orders } from "@/modules/catalog/schema";
-import { checkoutPaymentSchema } from "@/modules/catalog/checkout-policy";
+import { invoiceLines, invoices, payments, paymentProviderCustomers } from "./schema";
 import { customerInvoicePath, invoiceAccessToken, paymentReturnToken, validInvoiceToken, validPaymentReturnToken } from "./customer-tokens";
 
 const access = z.object({ id: z.string().uuid(), token: z.string().max(200).optional() }).strict();
 const receiptAccess = z.object({ token: z.string().min(1).max(200) }).strict();
 const payable = (invoice: typeof invoices.$inferSelect) =>
-  ["sent", "viewed", "partially_paid", "overdue"].includes(invoice.status) && invoice.totalMinor > invoice.paidMinor;
+  ["sent", "viewed", "partially_paid", "overdue"].includes(invoice.status) && invoiceOutstanding(invoice) > 0;
 const unavailable = () => new ServiceError("not_found", "That invoice link is not available.");
 
+
 async function customerCheckoutAmount(invoice: typeof invoices.$inferSelect, ctx: ServiceContext): Promise<number | null> {
-  if (!await customerCheckoutAllowed(ctx, invoice)) return null;
-  if (invoice.sourceType === "booking" && invoice.sourceId) {
-    const [booking] = await ctx.tx.select({status:bookings.status}).from(bookings).where(eq(bookings.id, invoice.sourceId)).limit(1);
-    if (!booking || ["cancelled", "no_show"].includes(booking.status)) return null;
+  const due = await invoicePaymentDueAmount(invoice, ctx);
+  if (due === null) return null;
+  const policy = await ctx.callAsSystem(getInvoiceMarketPolicy, { invoiceId: invoice.id });
+  if (policy?.collectionVersion !== 1) return due;
+  const active = await ctx.tx.select().from(payments).where(and(eq(payments.invoiceId, invoice.id), inArray(payments.status, ["created", "processing"])));
+  if (active.length) {
+    const payment = active[0]!;
+    const routing = await routingForPayment(ctx, payment.id);
+    if (active.length !== 1 || !routing.merchantAllocationId || payment.amountMinor > due) throw new ServiceError("conflict", "The existing merchant payment needs reconciliation before another portion can be collected.");
+    return payment.amountMinor;
   }
-  const [plan] = await ctx.tx.select({ id: paymentPlans.id }).from(paymentPlans).where(and(eq(paymentPlans.invoiceId, invoice.id), eq(paymentPlans.status, "active"))).limit(1);
-  if (plan) {
-    const stages = await ctx.tx.select().from(paymentPlanInstallments).where(eq(paymentPlanInstallments.planId, plan.id)).orderBy(asc(paymentPlanInstallments.position));
-    const next = stages.find(stage => !["paid", "waived"].includes(stage.status) && stage.amountMinor > stage.paidMinor);
-    return next ? Math.min(next.amountMinor-next.paidMinor, invoice.totalMinor-invoice.paidMinor) : null;
-  }
-  if (invoice.sourceType !== "order" || !invoice.sourceId) return invoice.totalMinor - invoice.paidMinor;
-  const [order] = await ctx.tx.select({ payment: orders.checkoutPaymentSnapshot })
-    .from(orders).where(eq(orders.id, invoice.sourceId)).limit(1);
-  if (!order) throw new ServiceError("conflict", "The order linked to this invoice needs the business to review it.");
-  if (!order.payment) return invoice.totalMinor - invoice.paidMinor;
-  const parsed = checkoutPaymentSchema.safeParse(order.payment);
-  if (!parsed.success || (parsed.data.mode === "milestones" && parsed.data.currency !== invoice.currency)) {
-    throw new ServiceError("conflict", "This order's payment terms need the business to review them.");
-  }
-  if (parsed.data.mode === "full") return invoice.totalMinor - invoice.paidMinor;
-  const stages = await ctx.tx.select().from(orderPaymentMilestones)
-    .where(eq(orderPaymentMilestones.orderId, invoice.sourceId)).orderBy(asc(orderPaymentMilestones.position));
-  if (!stages.length || stages.reduce((sum, stage) => sum + stage.amountMinor, 0) !== invoice.totalMinor) {
-    throw new ServiceError("conflict", "This order's payment milestones need the business to review them.");
-  }
-  let cumulative = 0;
-  for (const stage of stages) {
-    cumulative += stage.amountMinor;
-    if (invoice.paidMinor >= cumulative) continue;
-    return stage.releasedAt ? cumulative - invoice.paidMinor : null;
-  }
-  return null;
+  return (await nextCollectionAmount(ctx, invoice, due))?.amountMinor ?? null;
 }
 
 async function authorizedInvoice(input: z.infer<typeof access>, ctx: ServiceContext) {
@@ -86,8 +71,10 @@ const customerInvoice = z.object({
   id: z.string().uuid(), number: z.string(), status: z.string(), currency: z.string(),
   // Only public invoice identity is projected; routing and fees stay private.
   ...publicInvoiceIssuer.shape,
+  merchants: z.array(publicInvoiceMerchant),
   subtotalMinor: z.number().int(), discountMinor: z.number().int(), shippingMinor: z.number().int(),
   taxMinor: z.number().int(), totalMinor: z.number().int(), paidMinor: z.number().int(),
+  creditedMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   dueAt: z.date().nullable(), memo: z.string().nullable(), requiredTaxLegend: z.string().nullable(),
   // `amountMinor` is the line's share of the subtotal (before discount and
   // before tax — the invoice subtotal sums exactly these, and the discount is
@@ -102,6 +89,7 @@ const customerInvoice = z.object({
   canPay: z.boolean(), paymentMode: z.enum(["hosted", "manual", "unavailable"]),
   nextPaymentMinor: z.number().int().nullable(),
   awaitingRelease: z.boolean(),
+  refunds: z.array(publicRefundState),
 });
 
 export const getCustomerInvoice = defineService({
@@ -128,11 +116,13 @@ export const getCustomerInvoice = defineService({
     }
     const nextPaymentMinor = payable(invoice) ? await customerCheckoutAmount(invoice, ctx) : null;
     return { id: invoice.id, number: invoice.number!, status: invoice.status, currency: invoice.currency, ...issuer,
+      merchants: policy?.collectionVersion === 1 ? await publicInvoiceMerchants(ctx, invoice.id) : [],
       subtotalMinor: invoice.subtotalMinor, discountMinor: invoice.discountMinor, shippingMinor: invoice.shippingMinor,
-      taxMinor: invoice.taxMinor, totalMinor: invoice.totalMinor, paidMinor: invoice.paidMinor,
+      taxMinor: invoice.taxMinor, totalMinor: invoice.totalMinor, paidMinor: invoice.paidMinor, creditedMinor: invoice.creditedMinor,
       dueAt: invoice.dueAt, memo: invoice.memo, requiredTaxLegend: invoice.requiredTaxLegend, lines, canPay: nextPaymentMinor !== null,
       saveMethodRequired: await requiresSavedMethod(ctx, invoice),
       nextPaymentMinor, awaitingRelease: payable(invoice) && nextPaymentMinor === null,
+      refunds: (await invoiceRefundStateRows(ctx, invoice.id)).map(refund => publicRefundState.parse(refund)),
       paymentMode: !merchantAvailable || !adapter.status.available || adapter.id === "none" ? "unavailable" as const :
         adapter.id === "manual" ? "manual" as const : "hosted" as const };
   },
@@ -193,10 +183,11 @@ export const claimCustomerCheckout = defineService({
   name: "invoicing.claimCustomerCheckout", summary: "Authorize and durably reserve a customer payment before contacting its provider.",
   kind: "mutation", permission: "public", external: false, input: checkoutAccess, output: checkoutSource,
   handler: async (input, ctx) => {
-    // Serialize only customer claims; preserve the shared ledger's own lock
-    // order (payment idempotency, then invoice) to avoid cross-flow deadlocks.
-    await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`customer-checkout:${input.id}`}))`);
     const invoice = await authorizedInvoice(input, ctx);
+    await lockControlledOrdinaryCollectionParent(ctx.tx,invoice.id);
+    // Authenticate before target locks, then retain resource→parent order
+    // ahead of the ordinary checkout/idempotency/canonical money locks.
+    await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`customer-checkout:${input.id}`}))`);
     if (!payable(invoice)) throw new ServiceError("conflict", "This invoice is not open for payment.");
     const policy = await ctx.callAsSystem(getInvoiceMarketPolicy, { invoiceId: invoice.id });
     const adapter = paymentAdapter(policy?.model === "seller_merchant" ? "stripe" : undefined);
@@ -236,7 +227,7 @@ export const claimCustomerCheckout = defineService({
     });
     const savedCustomer = z.object({ customerEmail: z.string(), customerName: z.string() }).safeParse(payment?.metadata);
     const routing = payment ? await routingForPayment(ctx, payment.id) : {};
-    const [customer] = await ctx.tx.select().from(paymentProviderCustomers).where(and(eq(paymentProviderCustomers.contactId, invoice.contactId), eq(paymentProviderCustomers.provider, adapter.id), eq(paymentProviderCustomers.providerAccountId, routing.providerAccountId ?? ""))).limit(1);
+    const [customer] = await ctx.tx.select().from(paymentProviderCustomers).where(and(eq(paymentProviderCustomers.contactId, invoice.contactId), eq(paymentProviderCustomers.provider, adapter.id), originalProviderPlatform(paymentProviderCustomers.providerPlatformAccountId, routing.providerPlatformAccountId), eq(paymentProviderCustomers.providerAccountId, routing.providerAccountId ?? ""))).limit(1);
     return { routing, providerCustomerRef: customer?.providerCustomerRef ?? null, invoice, payment, email: savedCustomer.success ? savedCustomer.data.customerEmail : contact.email,
       name: savedCustomer.success ? savedCustomer.data.customerName : contact.name };
   },
@@ -298,6 +289,7 @@ export const beginCustomerCheckout = defineOrchestratedService({
         currency: payment.currency, amountMinor: payment.amountMinor, description: `Invoice ${source.invoice.number}`,
         customer: { email: source.email, name: source.name }, successUrl, cancelUrl: cancel.href,
         idempotencyKey: payment.idempotencyKey,
+        paymentAttemptId: payment.id,
         saveMethod: (payment.metadata as { saveMethodRequested?: boolean }).saveMethodRequested === true,
         providerCustomerRef: source.providerCustomerRef ?? undefined,
         ...source.routing,
@@ -319,10 +311,18 @@ async function authorizedPayment(token: string, ctx: ServiceContext) {
   if (!payment || !validPaymentReturnToken(payment, token)) throw unavailable();
   return payment;
 }
-const receipt = z.object({ status: paymentRow.shape.status, currency: z.string(), amountMinor: z.number().int(),...publicInvoiceIssuer.shape });
-async function receiptView(payment:typeof payments.$inferSelect,ctx:ServiceContext){
+const receipt = z.object({ status: paymentRow.shape.status, currency: z.string(), amountMinor: z.number().int(),...publicInvoiceIssuer.shape,
+  remainingMinor:z.number().int().min(0).optional(),continueUrl:z.string().nullable().optional(),
+});
+async function receiptView(payment:typeof payments.$inferSelect,ctx:ServiceContext):Promise<z.output<typeof receipt>>{
   const policy=await ctx.callAsSystem(getInvoiceMarketPolicy,{invoiceId:payment.invoiceId});
-  return{status:payment.status,currency:payment.currency,amountMinor:payment.amountMinor,...invoiceIssuer(policy)};
+  const original={status:payment.status,currency:payment.currency,amountMinor:payment.amountMinor,...(await publicPaymentMerchant(ctx,payment.id) ?? invoiceIssuer(policy))};
+  if(policy?.collectionVersion!==1)return original;
+  const [invoice]=await ctx.tx.select().from(invoices).where(eq(invoices.id,payment.invoiceId));
+  if(!invoice)throw unavailable();
+  const language=await localeForContact(ctx.tx,invoice.contactId);
+  return{...original,remainingMinor:invoiceOutstanding(invoice),
+    continueUrl:payable(invoice)?localizeCustomerHref(customerInvoicePath(invoice.id,invoiceAccessToken(invoice)),language.locale,language):null};
 }
 export const customerPaymentReceipt = defineService({
   name: "invoicing.customerPaymentReceipt", summary: "Read the original public supplier, payment status and amount from its private provider-return link.",
@@ -334,7 +334,18 @@ export const customerPaymentSource = defineService({
   kind: "query", permission: "public", external: false, input: receiptAccess, output: z.object({ payment: paymentRow, routing: paymentRouting }),
   handler: async (input, ctx) => { const payment = await authorizedPayment(input.token, ctx); return { payment, routing: await routingForPayment(ctx, payment.id) }; },
 });
-const capture = z.object({ providerAccountId: paymentRouting.shape.providerAccountId, applicationFeeMinor: paymentRouting.shape.applicationFeeMinor, providerRef: z.string().min(1), status: z.enum(["pending", "succeeded", "failed"]), amountMinor: z.number().int().optional(), currency: z.string().optional(), occurredAt: z.string().datetime().optional() });
+const capture = merchantPaymentEvidence;
+export const recordCustomerPaymentObservation = defineService({
+  name: "invoicing.recordCustomerPaymentObservation", summary: "Authorize and retain the original provider read before applying a customer payment.",
+  kind: "mutation", permission: "public", external: false, input: receiptAccess.extend({ response: capture }), output: z.object({ recorded: z.boolean() }),
+  handler: async (input, ctx) => {
+    const payment = await authorizedPayment(input.token, ctx);
+    const routing = await routingForPayment(ctx, payment.id);
+    if (!routing.providerPlatformAccountId) return { recorded: false };
+    const result = await ctx.callAsSystem(recordMerchantPaymentObservation, { paymentId: payment.id, providerEventRef: merchantObservationRef(input.response), evidence: input.response });
+    return { recorded: result.recorded };
+  },
+});
 export const applyCustomerPayment = defineService({
   name: "invoicing.applyCustomerPayment", summary: "Converge verified provider results through the shared payment ledger.",
   kind: "mutation", permission: "public", external: false, input: receiptAccess.extend({ response: capture }), output: receipt,
@@ -342,7 +353,14 @@ export const applyCustomerPayment = defineService({
     const payment = await authorizedPayment(input.token, ctx);
     if (payment.status === "succeeded") return receiptView(payment,ctx);
     const result = input.response;
-    assertChargeEvidence(await routingForPayment(ctx, payment.id), result);
+    const routing = await routingForPayment(ctx, payment.id);
+    if (routing.providerPlatformAccountId) {
+      if (routing.providerPlatformAccountId !== result.providerPlatformAccountId || (routing.providerAccountId ?? "") !== (result.providerAccountId ?? "")
+        || result.amountMinor !== payment.amountMinor || result.currency !== payment.currency || (result.status === "succeeded" && result.customerChargeVerified !== true)) throw new ServiceError("conflict", "The original provider charge needs reconciliation before applying its customer balance.");
+      // Its physical observation already committed in a separate transaction.
+      // Fee/recipient disagreement remains private settlement debt, without
+      // turning an actual paid customer charge into another charge offer.
+    } else assertChargeEvidence(routing, result);
     if ((result.amountMinor !== undefined && result.amountMinor !== payment.amountMinor) ||
         (result.currency !== undefined && result.currency !== payment.currency)) throw new ServiceError("conflict", "The payment provider amount does not match the invoice.");
     if (result.status === "succeeded") return receiptView(await ctx.callAsSystem(settlePayment, { id: payment.id, providerRef: result.providerRef, processedAt: result.occurredAt ? new Date(result.occurredAt) : new Date() }),ctx);
@@ -359,7 +377,8 @@ export const confirmCustomerPayment = defineOrchestratedService({
     if (payment.status === "succeeded" || payment.status === "failed" || payment.status === "cancelled") return customerPaymentReceipt.call(input,actor);
     if (!payment.providerCheckoutRef) throw new ServiceError("conflict", "This payment is not ready to confirm.");
     try {
-      const response = await paymentAdapter(payment.provider).captureCheckout({ checkoutRef: payment.providerCheckoutRef, idempotencyKey: `customer-confirm:${payment.id}`, providerAccountId: routing.providerAccountId });
+      const response = await paymentAdapter(payment.provider).captureCheckout({ checkoutRef: payment.providerCheckoutRef, idempotencyKey: `customer-confirm:${payment.id}`, paymentAttemptId: payment.id, ...routing });
+      if (routing.providerPlatformAccountId) await recordCustomerPaymentObservation.call({ ...input, response }, actor);
       return await applyCustomerPayment.call({ ...input, response }, actor);
     } catch (error) {
       if (error instanceof ServiceError) throw error;
@@ -369,4 +388,4 @@ export const confirmCustomerPayment = defineOrchestratedService({
 });
 
 export default [getCustomerInvoice, customerInvoiceLink, viewCustomerInvoice, sendInvoice, claimCustomerCheckout, applyCustomerCheckout,
-  beginCustomerCheckout, customerPaymentReceipt, customerPaymentSource, applyCustomerPayment, confirmCustomerPayment];
+  beginCustomerCheckout, customerPaymentReceipt, customerPaymentSource, recordCustomerPaymentObservation, applyCustomerPayment, confirmCustomerPayment];

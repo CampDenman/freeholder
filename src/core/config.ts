@@ -26,7 +26,7 @@ export const configSchema = z.object({
         .enum(["gmail", "outlook", "smtp", "console", "paradise"])
         .default("console"),
       mailBulk: z.enum(["resend", "postmark", "ses", "paradise", "none"]).default("none"),
-      storage: z.enum(["s3", "replit", "local"]).default("local"),
+      storage: z.enum(["s3", "spaces", "replit", "local"]).default("local"),
       calendar: z.enum(["google", "microsoft", "none"]).default("none"),
       sms: z.enum(["twilio", "none"]).default("none"),
       ai: z.enum(["anthropic", "openai", "none"]).default("none"),

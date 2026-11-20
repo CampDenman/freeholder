@@ -1,0 +1,39 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C0.08",
+    "C12.38",
+    "C11.10"
+  ],
+  "status": "ARCHIVAL_JSON_REPRESENTATION_ONLY_NO_PRODUCT_OR_TEST_CHANGE",
+  "path": "deploy/controlled-journal-validation84.source-preservation.json",
+  "beforeHead": "7d6676b6017c827f59d6c90df5bf003706d84409",
+  "beforeArtifactSha256": "eea59c4613fec61a6b2fef29a792fe4bd220507e3979a220621885a2f8fa46b9",
+  "afterArtifactSha256": "bd5900b0eed8bd231d3a0be37a7fd2e329756cfe90234b61c572408a4921a5c9",
+  "frozenOriginalCommit": "fc9533ef6d522804c03a230e0cdd7d3b1abfe4e6",
+  "reason": "The strict single-plan gate flags two retired filenames inside the quoted historical MASTER wholeBefore archive. Standard JSON Unicode escapes encode only their periods. No new planning file, authority, exception or allowlist is introduced.",
+  "archivalField": [
+    "existing",
+    0,
+    "wholeBefore"
+  ],
+  "finiteRawJsonEncoding": [
+    {
+      "beforeUtf8Hex": "524f41444d41502e6d64",
+      "afterUtf8Hex": "524f41444d41505c75303032656d64",
+      "occurrences": 1
+    },
+    {
+      "beforeUtf8Hex": "50524f4a4543545f4241434b4c4f472e6a736f6e",
+      "afterUtf8Hex": "50524f4a4543545f4241434b4c4f475c75303032656a736f6e",
+      "occurrences": 1
+    }
+  ],
+  "decodedEntireJsonObjectIdentical": true,
+  "decodedMasterBeforeSha256": "8a43a136085a87b9e26953772786d317e0e8e4baf1ad6755aca0a6c40bae580b",
+  "decodedSourceReversalsExpectedHashesAndPredicatesUnchanged": true,
+  "originalNativeUntouched": true,
+  "productTestSqlSdkBytesUnchanged": true,
+  "previousQualification": "V127: all runtime/source/types/lint/CLI/license/notes PASS1695actual/269selected/548explicitDBskips; only plan gate flags historical quoted names. Original V127 failure remains retained.",
+  "currentChecksRequired": "Exact parsed-object equality/reconstruct whole original raw JSON; source-preservation targeted controls plus license/notes/plan. No code/runtime/test semantic change justifies repeating the full prior source suite."
+}

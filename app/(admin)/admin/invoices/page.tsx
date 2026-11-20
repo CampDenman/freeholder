@@ -51,6 +51,7 @@ export default async function InvoicesPage({
           <p className="mt-1 max-w-prose text-sm text-ink-muted">{t("invoices.intro")}</p>
         </div>
         <div className="ms-auto flex flex-wrap gap-2">
+          <a href="/admin/invoices/cash-recovery" className="inline-flex items-center gap-2 rounded-md border border-rule px-4 py-2 text-sm font-semibold">{t("cashRecovery.title")}</a>
           <a
             href="/admin/invoices/tax"
             className="inline-flex items-center gap-2 rounded-md border border-rule px-4 py-2 text-sm font-semibold"

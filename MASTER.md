@@ -1127,6 +1127,22 @@ up gated by a boolean somebody forgot to check.
   that invoice is paid in full (a `provider` schedule prorates at the provider).
   A change deferred to period end bills the new plan's own variant from the
   first renewal after it.
+- **Controlled seller-merchant provider collection preserves the canonical
+  invoice and dated merchant-tax arithmetic.** Its explicit consent distinguishes
+  the actual native provider proration preview from collection: under a proven
+  `keep_as_draft` pause, the price/calendar update suppresses autonomous
+  proration, one exact canonical gross target receives only its locked original
+  credit, and residual credit stays in the canonical ledger. Existing provider
+  customer balances or unrelated credit notes cannot silently fund that target.
+  The recurring provider item represents NET only; every transition/renewal draft
+  needs its exact fixed per-invoice canonical merchant-declared tax component,
+  credit disposition and fee before any finalize/pay admission. This is not
+  Stripe Tax evidence or a new rounding-adjustment policy. Birth-safe zero-only
+  preparation uses `default_incomplete`, no application access and no rewrite of
+  an accepted trial/paid calendar, followed by actual pause and independent
+  readback before positive work. Draft pause remains an ACTIVE calendar, never
+  cancellation or complete financial-stop proof. Source implementation and
+  enabled-provider acceptance remain governed by C12.38/C11.05 below.
 - **Dunning is a policy with a schedule**, not a single failed charge: retries
   at stated offsets, a grace period during which access continues, notices on
   the channels the contact consented to (§4.14), and a final action the owner
@@ -1451,8 +1467,44 @@ The money path (steps 2–3) follows immediately after, ahead of booking, quotes
 | ORM | **Drizzle** | SQL-transparent, light, migrations as code, no codegen daemon |
 | DB | **PostgreSQL 15+** | Replit-provisioned or any managed PG |
 | Queue | **pg-boss** (Postgres-backed) | No Redis dependency; one datastore for v1 |
-| Storage | **S3-compatible adapter** | Replit Object Storage / DO Spaces / R2 / MinIO |
+| Storage | **S3-compatible adapter** | Replit Object Storage / DO Spaces / R2 / any S3-compatible endpoint that passes `scripts/s3-provider-probe.mjs` |
 | Styling | **Tailwind + CSS logical properties** | RTL-ready from day one |
+**Storage providers are qualified by behaviour, not by name.** The recorded-write
+path (`putWithReceipt`, used by galleries, social ingest, sealed member blobs,
+crawl imports and Doctor's `storage.roundTrip`) writes with `if-none-match: *`
+and deletes with `if-match`, and refuses an endpoint that accepts either and
+ignores it. Measured 2026-11-18 and 2026-11-19 across ten S3-compatible stores
+run locally: FOUR of them -- SeaweedFS, Zenko CloudServer, Garage and Ceph RADOS
+Gateway, which runs real production clusters -- answered `204` to a stale
+`if-match` DELETE and destroyed the object. A conditional DELETE is the scarce
+guarantee, not version enumeration: `if-match` on DeleteObject is a recent S3
+addition, so "S3-compatible" cannot be taken on trust and a trust list keyed on
+reputation would have admitted all four. AWS is trusted by name; every other
+endpoint is probed once at setup.
+Versioning is recorded as evidence, not required for that probe. MinIO is
+untested here, not rejected -- its image is no longer anonymously pullable from
+Docker Hub, quay.io or Chainguard, so we could not measure it; run the probe
+against your own instance. Measured conformant: AWS S3 and rustfs. Measured
+non-conformant, with the question each one failed, in the table in
+`scripts/media-transfer-protocol.mjs`.
+
+Separately, and this is a harder requirement than the probe: proving an erasure
+needs the provider to ENUMERATE versions, because that listing is how Freeholder
+shows no old bytes remain. A provider's own claim that it keeps no versions is
+not evidence -- `tests/core/media-original-retirement-lifecycle.test.ts` holds a
+provider that reports versioning disabled and retains the bytes anyway -- so a
+store which cannot answer a versions listing cannot be used for erasure-proof
+media, and is refused. Garage and s3proxy answer `501 NotImplemented` and are
+refused on those grounds. adobe/s3mock is a narrower case that was mis-stated
+once: it does retain and enumerate versions, with real version ids and delete
+markers, but wraps them in a `ListBucketResult` root instead of
+`ListVersionsResult`, which is indistinguishable from "no versions exist" --
+measured identically on 3.12.0, 4.12.4 and 5.2.3, so a long-standing upstream
+defect rather than a regression. That defect is why the recipe gate's S3 target
+failed, and the fix was a conformant fixture rather than a looser product: the
+gate now runs rustfs, asserts all four answers with
+`scripts/s3-provider-probe.mjs` before depending on them, and passes.
+
 | i18n | **ICU MessageFormat catalogs** (`/locales/*.json`) + `EntityTranslation` table | Per §4.9 |
 | Auth | **Lucia-style session auth, hand-rolled thin** | Email+password+OTP (admin), magic link (customers). No auth SaaS |
 | Validation | **Zod** everywhere; schemas shared between API, forms, and MCP tool definitions | One schema, three surfaces |
@@ -1787,7 +1839,7 @@ normal tested extension rather than bespoke UI work.
 ## 14. Replit-First Deploy Story
 
 - `.replit` + `replit.nix` committed; **Run** installs frozen dependencies, checks prepared Replit configuration and starts the dev server; runtime instrumentation migrates before initializing services/jobs. Deploy = Replit Deployments with PostgreSQL + Object Storage provisioned by the owner or their agent. `pnpm launch:prepare` generates private, stable credentials and a private owner claim link, reports missing infrastructure, and does not claim to provision provider accounts.
-- `npx create-freeholder` (Apache-2.0) scaffolds/forks for Railway, Render, DO App Platform, and bare Docker (`Dockerfile` + `compose.yml` with PG + MinIO for full self-host).
+- `npx create-freeholder` (Apache-2.0) scaffolds/forks for Railway, Render, DO App Platform, and bare Docker (`Dockerfile` + `compose.yml` with PG + an S3-compatible store for full self-host).
 - All config via env with a single `env.ts` Zod schema — `doctor` prints exactly what's missing in plain English.
 - **Export is a feature:** one admin button produces a full archive (SQL dump + media + a human-readable JSON of every entity). Ownership isn't a slogan; leaving must be easy — that's what makes staying a choice.
 
@@ -1988,7 +2040,7 @@ tested_on: "2026-07-01"
 - **Migration mandate (Tier 1–2):** a recipe is not approved without a specced migration path. Every Tier 1–2 recipe ships `migrate.md` covering, at minimum, migration **to and from each Tier-1 target** (export archive → provision → import → storage sync → DNS repoint), with expected downtime and a verification checklist. Tier-1 pairs are round-trip tested in CI (see §23); Tier-2 paths are verified by the recipe maintainer per release. No approved platform is ever a dead end — that's the ownership promise expressed as a requirement.
 - **Update mandate (Tier 1–2):** a recipe declares an `update` strategy and a rollback for its target, and CI exercises it in the upgrade gate (§39.9). A platform an instance cannot be kept patched on is not an approved platform — the same argument as the migration mandate, applied to time rather than to place.
 - Every recipe must run the same app code. No target-specific forks of application logic — if a target needs a code change, that change goes behind a capability flag in core (e.g., `jobs: in-process | worker`), available to all targets.
-- CI runs a **recipe validation matrix**: for each Tier 1–2 recipe, boot the app with that recipe's config against ephemeral PG + MinIO, run doctor, run the smoke suite. Recipes that rot get flagged automatically, not discovered by frustrated users.
+- CI runs a **recipe validation matrix**: for each Tier 1–2 recipe, boot the app with that recipe's config against ephemeral PG + S3-compatible storage, run doctor, run the smoke suite. Recipes that rot get flagged automatically, not discovered by frustrated users.
 
 ---
 
@@ -2094,7 +2146,7 @@ the recipe index and `deploy/migration-runbook.md` publish the same matrix.
   every-table fingerprint comparison, ownership export and media-inventory
   generation under all 30 pair labels on every release. The runtime recipe
   matrix separately boots the published image once per target against
-  PostgreSQL and MinIO, claims the seeded instance and runs canonical Doctor.
+  PostgreSQL and S3-compatible storage, claims the seeded instance and runs canonical Doctor.
   `scripts/media-transfer.mjs` copies each manifest object across S3/Replit
   boundaries and reads it back to compare size and SHA-256. For DO↔DO moves
   using the same Spaces bucket, media may be repointed instead of copied.
@@ -3548,6 +3600,2253 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Atomic credit confirmation continuation2026-11-15 (C12.38/C9.33/C11.05/C1.08):
+migration91 admits only the genuine same-transaction proration credit confirmation
+bound to its actual application, reservation, funding, acceptance, target and
+evidence digest. Both deferred guards and current readiness retain exact function
+hashes, and exact trusted-system acceptance attribution remains valid. A fresh
+PostgreSQL parent certificate replaces the duplicate full disposition evaluation.
+The complete unchanged three-case payment file PASSes on fresh migration91:
+positive171.042s, caught-fault rollback120.523s and deferred birth120.258s. The
+nonfinancial preview/source optimization reduced that fixture from about116s to
+71s. Missing controlled roots retain their certified empty-journal behavior; the
+focused native empty/mutation/savepoint/fault controls PASS. No row closes.
+See `deploy/controlled-preview-basis91.source.json`.
+
+Controlled journal-head continuation2026-11-15 (C12.38/C11.05/C1.08): migration90
+maintains a guarded per-resource certificate from the actual immutable row ledger.
+Deterministic deeply frozen safe views reuse only the same fresh certificate; raw
+retainers contain no views or authority verdicts. The complete six-case native
+journal file PASSes on fresh migration91, including empty/missing roots, mutation,
+savepoint ABA and fresh-certificate fault refusal. Earlier payment timeouts were
+resolved by the successor recorded above. No row closes. See
+`deploy/controlled-journal-heads90.source.json` and
+`deploy/controlled-view-cache90.source.json`.
+
+Row-hash ledger and payment-profile continuation2026-11-15
+(C12.38/C11.05/C1.08/C11.10): fresh ordinary migrations88/89 and their real
+insert/update/rollback/direct-write controls PASS; all42 parent source tables and
+nine controlled families have exact stored fingerprints. Focused source reversals,
+TypeScript and affected lint PASS. Earlier CPU-profiled payment timeouts and the
+later complete native result are both preserved in this checkpoint history. No
+checklist row closes.
+See `deploy/controlled-row-hash-ledger88.source.json`,
+`deploy/financial-row-hash-ledger89.source.json`,
+`deploy/merchant-tax-key-index89.source.json` and
+`deploy/controlled-safe-view-digest89.source.json`.
+
+Safe-response public-boundary and payment-performance continuation2026-11-15
+(C11.10/C1.08/C12.38/C11.05): new controlled adapter fixtures now enter the real
+safe-response session, while the reserved projection marker stays on the
+authenticated retained snapshot instead of changing public SDK result equality.
+Current and cached executions compare the same semantic result; pure inventory
+fixtures explicitly use recorded ancestry. Fifty focused adapter/HTTP/source
+cases and the forward reversal controls PASS after those repairs. Payment source
+also shares exact-scope initial principal history, combines principal/debt reads,
+reuses the fresh final witness, batches canonical target rows, and composes one
+journal scope with fresh final certificates. These are NOT accepted performance
+closures: repeated genuine positive attempts on separate fresh databases still
+TIMEOUT at the unchanged180s; the original native SHA remains
+71dd0c0efccab135da068a09cc833939c629f14e15d49a350685b20857dce25c. Full current
+source qualification, provider acceptance, independent review and stable release
+remain open. See `deploy/controlled-safe-public-boundary88.source.json`,
+`deploy/controlled-principal-history-share88.source.json`,
+`deploy/controlled-principal-debt-read88.source.json` and
+`deploy/merchant-tax-key-order88.source.json`.
+
+Controlled cash old-protocol admitted-harness continuation2026-11-15
+(C12.38/C9.33/C1.08/C11.10): the integrated five-case cash-origin file keeps its
+four current safe-protocol positives and runs the unchanged malformed late-callback
+oracle from actual pinned pre-upgrade commit426009a198 through its real old adapter,
+holder and database transactions on a fresh0..85 database. The focused malformed
+case and full five-case file PASS on separate fresh current databases, with the
+old malformed fact retained under a NULL new-protocol admission and raw review.
+No classifier, current ticket check, production predicate, assertion, retention
+mock or180-second timeout changes; no product behavior or schema change. Exact
+forward test reversal and focused source controls PASS. The initial old-child
+setup-timeout failure and every success/failure database are preserved. Provider,
+external drain, S1, security and stable acceptance remain open. See
+`deploy/controlled-cash-origin-old-protocol88.source.json`.
+
+Bounded safe-response migration composition2026-11-15 (C11.10/C1.08/C12.38/C9.33):
+real86 is byte-identical to frozen32ab S0 and its complete predecessor/whole/prefix
+identity is assembled. Real87 corrects both merchant-fee birth comparisons with
+numeric modulo epochs and composes merchant, auxiliary and final credit pins. A
+fifth exact safe-readiness successor changes only the auxiliary pin; without it,
+actual fresh S0 readiness and both native journeys fail closed. Source reversals,
+full types, focused adapter/source tests, real fresh/upgrade88, all five readiness
+checks and both genuine safe-response retention journeys PASS. Seven real boundary
+cases PASS; prepared-transaction proof remains OPEN on max_prepared_transactions=0
+and the real packaged-artifact probe remains UNRUN. The integrated-newer cash-origin
+suite retains its assertions but its five old adapter positives still require the
+safe-protocol admitted-harness continuation; they are not acceptance passes. No
+provider, external closed-set drain, S1, security or stable closure is claimed. See
+`deploy/controlled-safe-response85-composition87.manifest.json` and
+`deploy/merchant-fee-xid-epoch87.manifest.json`.
+
+Controlled journal validation SOURCE checkpoint2026-11-14 (C12.38/C1.08):
+within one synchronous post-fetch pass, the same actual admission/finish/stop
+rows are validated once and reused only for their exact operation/call/finish
+object identities. Exported proof readers still recompute independently; all
+original signatures, binding/outcome/result hashes, unfinished debt and complete
+row/revision projections remain. Six independent inventories use one Promise.all
+on the same real transaction, preserving every query/order/bound and empty-ID
+skip. No global, transaction or cross-call verdict
+cache, schema change or financial waiver. Warm-mutation/foreign-call/stop
+controls and genuine held-GET/FIN/current-revalidation/empty-resource natives are PREPARED,
+UNRUN. No compiler, test, database, provider or performance acceptance is claimed.
+Later S0/S1 composition must finish synchronous validation BEFORE the separate
+existing asynchronous verification-view loop, with exact source reversals;
+independent historical/current proof checks remain. See
+`deploy/controlled-journal-validation84-source-20261114.md`.
+
+
+B original-fee identity continuation2026-11-14 (C12.38/C9.33/C11.10): sourceV121
+PASSES1688actual/268completefiles/546explicitDBskips, fulltypes/lint/CLI; fresh
+normal80/strict163/369guards/424wholefunctions/actualSDK8/readiness PASS. Original
+B nativeV2 FAIL142.22s before quote: exact unreturned4199 principal and current
+400-minus1 fee are valid, but the earliest immutable cash receipt has NULL fee
+identity. The genuine signed original application bank independently records
+that fee. Readonly actual shared-context traces identify this precise bank-policy
+refusal; all598 whole tables/j86/sequence remain unchanged and failed80 is kept.
+The canonical reader now reuses ONLY the existing authenticated atomic owner,
+matching original receipt/batch/proof/collection/invoice/subscription/namespace/
+charge before comparing that original bank fee. No latest-fee adoption, receipt
+filling, ordinary fallback or financial/caller/fee-policy waiver. Two additional
+counter controls preserve NULL/foreign/current-only fee refusal, zero-fee and
+transfer conservation. Full source/fresh schema/SDK/original B qualification
+REQUIRED; no stable or B acceptance closure. See
+`deploy/atomic-credit-original-fee-root-continuation-20261114.json`.
+
+
+B first actual funding native2026-11-14 (C12.38/C9.33): qualified95c9 sourceV119
+PASSES1679actual/267files/546explicitDBskips, types/lint/CLI and fresh normal79/
+strict163/369guards/424wholefunctions/4215queries/SDK8; installed B/A/invocation
+readiness TRUE. Original B positive FAIL125.28s BEFORE quote/credit birth because
+controlled cash retention correctly marks the legacy schedule unknown/recovery,
+while the quote still requires pre-cash uncreated flags. Failed79/all598/j86/
+sequence/clients retained; no reset/migration/second native there. New DISTINCT
+existing-controlled product-ancestry predicate preserves the complete real
+nonbilling product journal and original scope, leaving generic initial bootstrap
+rules and every current financial/privacy/caller/consent/native/tax gate strict.
+No raw flag or row is cleared. Four role/refusal controls are prepared; fresh
+source/schema/SDK/original B native qualification REQUIRED. No B/stable closure.
+See `deploy/controlled-product-ancestry-root-continuation-20261114.json`.
+
+
+B readiness source continuation2026-11-14 (C12.38/C9.33): sourceV118 at83349d19
+PASSES types/lint/CLI/1679actual/267files/546explicitDBskips; fresh normal78,
+strict163/369guards/424wholefunctions/4215queries/actualSDK8 PASS. An ACTUAL
+readonly readiness call then fails42601: a procedure identity incorrectly
+includes DEFAULT. Two exact CHECK metadata strings also differ from the frozen
+source/model constraints already independently proved by full PG EXPLAIN plans.
+New full ready successor corrects ONLY procedure identity, explicitly pins its
+original arguments/default, and uses those two exact source-proven grouped
+BETWEEN/bigint representations. No constraint or business predicate changes.
+Readonly candidate TRUE/all598whole rows/j86/sequence unchanged; frozen complete
+1302078-byte prefix remains exact. Source/fresh-schema/SDK/B native qualification
+of this successor is REQUIRED; no B capability or stable closure claimed. See
+`deploy/atomic-credit-fee-ready-identity85.manifest.json`.
+
+
+B isolated ROOT source composition2026-11-14 (C12.38/C9.33/C1.08): frozen
+a39244d7 is combined with qualified root5f647179 in a separate review checkout.
+The WHOLE1063073-byte85 prefix is preserved before its exact238979-byte owned
+tail. Two purpose models/seven new functions/four complete old successors/four
+trigger declarations remain UNAPPLIED and UNQUALIFIED. Root5f qualification and
+native work are untouched. No B availability, checklist closure or stable claim.
+See `deploy/atomic-credit-fee-root-assembly-20261114.json`.
+
+
+Current stable-v1 status2026-11-14 (owner requires FULL specification): the
+canonical plan still has373 unique IDs/323checked/50open. No new deferral,
+stable release, main merge, production deployment or announcement is complete.
+Stable is achievable but remains implementation/integration work, with no
+supported release date. Progress is measured by completed integrated acceptance
+requirements; isolated source-test totals do not close specification items.
+
+Latest verified financial submilestone (C12.38/C1.08/C11.10): ALL SIX original-
+oracle auxiliary cases PASS for payment AND original-charge-receipt owners:
+payment173.87/148.57/135.24s at859e4211; receipt159.74/
+162.80/151.90s at7db593f4. All original180s/money/canonical/origin/FIN/no-duplicate-
+POST assertions retained. Each case has its own fresh ordinary86/strict161/
+365guards/417wholefunctions/4144queries/actualSDK8 and independent all596/j86/
+sequence/capabilities/drain PASS. SourceV111 fulltypes/lint/1588actual/254whole
+selected files/543explicitDBskips PASS. No provider-account acceptance inferred.
+See `deploy/atomic-auxiliary-six-native-checkpoint-20261114.json`.
+
+CORRECTION 2026-11-19, so the retained-180s statement above is not read as
+standing. The per-case 180s limit still holds for every money suite EXCEPT
+`tests/modules/atomic-credit-fee-persistence84.test.ts`, whose deadline Tony
+raised to 300s on that date. Nothing regressed: the six cases above ran at
+135.24-173.87s, and after a measured optimisation this suite's worst case is
+116.9s on a developer box. It fails only on a GitHub-hosted runner, which is
+1.8x slower, putting that case at ~210s against the old ceiling. The cost of
+the change is detection -- at 300s the suite catches roughly a 2x regression
+where 180s caught 4% -- so the per-service cost is instead reported on every
+run by `atomic-credit-stage-profile89`, whose header carries the attribution.
+Raising it required re-anchoring twelve live pins across ten records, two of
+them freezes (`atomic-credit-fee-partition84.freeze.json` and the
+`frozen.sha256` in `atomic-credit-fee-root-assembly-20261114.json`), which was
+authorised rather than incidental. The narrative digest inside
+`controlled-safe-public-boundary88.source.json`'s replay chain is deliberately
+untouched, because it records what was true then. If the payment path is ever
+brought under ~100s on a developer box, restore 180s and re-freeze.
+
+Verified ROOT5f647179 composes image admission acb15932 and fixed error-log
+precursor5d147d11. Combined SOURCE V113 PASSES fulltypes/lint,1629actual in258
+complete selected files,543explicit DB skips, actualCLI emit/copy/all6 packaged
+bytes and license/notes/plan checks. Entire82/85 and generatedSDK stayed exact.
+All SEVEN original refund-bank controls PASS779.00s and all FIVE original causal
+controls PASS542.25s, original whole files/dd3/513 and180s per-case limits intact.
+Each suite has its own fresh ordinary86/strict161/365guards/417wholefunctions/
+4144queries/actualSDK8 and independent all596/j86/sequence/capabilities/drain.
+See `deploy/original-refund-bank-seven-checkpoint-20261114.json` and
+`deploy/original-causal-five-checkpoint-20261114.json`. These are original-suite
+acceptance only; current B source composition remains UNQUALIFIED. Full safe-
+response S0 source32ab is frozen and independently reversed, but its13 original
+adapter positives, actual rollout/upgrade, separate migration86 transaction,
+S1 and all qualification remain required. No new stable checklist closure.
+
+Required delivery groups remain the existing open §43 items (no scope change):
+- Payment/subscription/marketplace completion: B fee/credit partitions, C full
+  lifecycle, remaining original bank/causal controls and enabled-provider flows.
+- Privacy/security: full S0/S1 safe producer/consumers, complete privacy/undo,
+  encrypted member/abuse-provider acceptance, then Tony's independent review.
+- Storage/recovery: complete quota/init/issued-authority/capture/cutover and
+  genuinely grounded original-host/restore acceptance; held media source is unqualified.
+- Site/provider/WordPress/preview/install/blog/link-in-bio requirements: finish
+  and qualify the current open items rather than removing them from stable scope.
+- Final clean-room build/browser/CI/full-spec and actual owner/provider acceptance,
+  followed by the signed stable gate and only then version/publication changes.
+
+
+Namespace-image isolated SOURCE qualification2026-11-14 (C1.12/C3.28/C11.08):
+frozen418 plus official791-note generation atd1a89172 passes fulltypes64.97s,
+actualCLI copy+emit build with all6 companion/declaration/recipe bytes exact,
+affected lint and93actual/10selected files/17explicit prerequisite skips.
+Existing real legacy gateway controls remain; genuine new-origin TCP requires
+an actual compatible signed image and is not supplied by a fictional label or
+verifier. No provider account, purchase, SSH, claim, owner initialization or
+recovery acceptance occurred. No runtime profile/capability published. Primary
+financial candidate stays unchanged; root composition/full-spec/real-image/
+provider/recovery/security/signature remain open. See
+`deploy/media-image-admission-root-source-checkpoint-20261114.json`.
+
+
+
+
+Key-move preservation-control continuation2026-11-14 (C12.38/C11.10): V110
+focused checks/fulltypes67.82s/lint PASS, then broad contracts stop at the old
+causal manifest's whole-store SHA because identical key functions moved to the
+approved shared leaf. Keep the SAME old full-store hash after exactly reversing
+the two declared import/function-block edits; actual new leaf block must remain
+byte-identical. No key/rotation/money/history/native predicate changes. V110
+failure preserved; full current source and receipt-owner natives still pending.
+
+
+
+Receipt companion preservation-control continuation2026-11-14 (C12.38): V109
+focused source guard correctly refuses the new companion's changed whole-file
+SHA after its explicit real receipt witness scope extension. The historical
+GET-fixture guard now first reverses ONLY that recorded scope delta, then
+requires the SAME exact original whole file/hash/180s. No production or monetary
+assertion changes; V109 failure retained. Full current qualification pending.
+
+
+
+Three original auxiliary natives checkpoint2026-11-14 (C12.38/C1.08/C11.10):
+exact859e4211 sourceV107 fulltypes/lint/1588actual/254files/543explicitDBskips
+PASS. FreshV70/V71/V72 each ordinary86/strict161models/365guards/417wholefunctions/
+4144queries/SDK48/49/50 actual8 PASS. ALL THREE whole original auxiliary cases
+PASS within original180s: successful1-cent own return+repeatGET173.87s; genuine
+thrown observer/unchanged firstFIN/new returnedGET/no secondPOST148.57s; actual
+externalcounter/no POST/no equal-amount adoption135.24s. Independent full596/
+j86/sequence/capability/drain and exact per-case bank/ledger/FIN checks PASS.
+V7 wrapper stopped BEFORE any native/config only on the newly extended fixture
+hash; V8 reverts the reviewed GET-only delta before unchanged old wire proof,
+using the same untouched qualified V70 (no reset/migration rerun).
+NEW exact key extraction77a77cba moves/reexports only identical original
+functions for one rotation/throw policy; source/activation not inferred. NEW
+receipt-owner companion adds its ACTUAL original receipt ID to unchanged witness
+selection (that reader deliberately does not guess aliases from payment IDs);
+ALL original assertions retained. Companion cases/source qualification pending.
+No C/stable or provider/security sign-off. See
+`deploy/atomic-auxiliary-three-original-native-checkpoint-20261114.json` and
+`deploy/original-cash-key-extraction-root-source-20261114.json`.
+
+
+
+Specific original auxiliary GET fixture continuation2026-11-14 (C12.38/C1.08):
+exact0486b428 sourceV106 fulltypes/lint/1587actual/253files/543explicitDBskips
+PASS; freshV69 ordinary86/strict161/365guards/417fullfunctions/4144queries and
+SDK47 actual8 PASS. Original positiveV6 reaches final repeat reconciliation,
+then FAIL160.83s: real adapter requests documented exact fee/refund resource GET,
+but fictional bank only implements list/POST and rejects that URL as unexpected.
+Production SQL/TS and whole original180s assertions stay unchanged. New fixture
+handlers return ONLY its actually-created matching parent/resource map row,
+without a new POST, fabricated resource, equal-amount adoption or counter change.
+Every old branch reverses byte-exact; failedV69 retained. Both documented fee
+refund and transfer reversal specific GETs supported. Fresh native/fullspec/
+provider/security/stable acceptance remains required. See
+`deploy/atomic-auxiliary-specific-get-fixture-root-continuation.manifest.json`.
+
+
+
+Auxiliary closure/owner continuation2026-11-14 (C12.38/C1.08/C11.10): exact
+343851b1 sourceV105 fulltypes/lint/1581actual/251files/540explicitDBskips PASS;
+freshV68 ordinary86/strict161models/365guards/417fullfunctions/4144queries
+and SDK46 actual8 PASS. ORIGINAL auxiliary positiveV5 passes own pre-POST,
+then FAIL143.06s in closure INSERT: actual42702 local evidence variable collides
+with the table evidence column. FailedV68/all596/j86/sequence retained. NEW
+full closure successor renames ONLY its18 local-variable references; JSON keys,
+column fields and every predicate stay exact. New pre-POST successor retains
+both already-supported genuine payment OR original charge-receipt owners using
+actual target payment/route/invoice FKs. All nonce/parent/terminal/caller/full-PG
+checks remain. Complete1,020,501-byte predecessor SQL preserved; three whole
+successors,0newfunctions/models/columns/triggers/services. New receipt-owner
+companion preserves ALL original three180s oracles with genuine receipt/proof/
+original-observation ancestry; all three PREPARED/UNRUN. Fresh qualification and
+all original money/provider/security/full-spec/stable gates remain required.
+See `deploy/atomic-auxiliary-fee-closure-owner85.manifest.json`.
+
+
+
+Original fee-native checkpoint and own pre-POST repair2026-11-14
+(C12.38/C1.08/C11.10): exact53cfd sourceV103 fulltypes/lint and1575actual/
+250wholefiles/540explicit DB skips PASS. FreshV62/V63 ordinary86/strict161/
+365guards/416fullfunctions andSDK40/41 actual8 PASS. Original whole positive
+feeV12 PASS136.00s; original whole counterV5 PASS126.20s. CounterV5 aggregate
+postcheck fails ONLY its copied one-preflight expectation; preserved first
+report plus corrected READONLY V6 proves actual two preflights/one refused POST/
+one real recoveryGET and full596/j86/sequence invariance. All six actual caller
+HMACs independently authenticated; no original oracle or180s changed.
+Auxiliary positiveV1/V2/V3 still FAIL132.47/147.36/140.41s before POST; all three
+failed DBs preserved. V2 real raw classification61calls has no unresolved facts.
+V3 same REAL before-POST TX proves actual nonce/one parent/current target/latest
+bank state match, one own unfinished caller, but generic bank reader returns0
+because its own active caller must remain debt. NEW dedicated pre-POST reader
+inherits/reverses the ENTIRE generic bank body; only its authenticated exact
+live fee caller can continue. All other callers and every whole PG row remain;
+generic reader/ordinary TS/whole original native unchanged. One new function,
+two full successors/readiness pin; whole973557 SQL prefix retained. Fresh full
+source/schema/SDK/original auxiliary acceptance is REQUIRED/UNRUN. No C/stable
+closure. See `deploy/atomic-fee-original-native-checkpoint-20261114.json` and
+`deploy/atomic-auxiliary-fee-prepost-bank85.manifest.json`.
+
+Strict test typing continuation2026-11-14 (C12.38): sourceV104 focused contracts
+PASS, then tsc refuses unchecked manifest array indexing in the NEW preservation
+test. Add an explicit missing-entry failure before reading it; no SQL, original
+native, production predicate or assertion changes. V104 failure retained; full
+fresh qualification remains required.
+
+
+Signature-work ROOT performance repair2026-11-14 (C12.38/C1.08/C11.10):
+exact1f89 sourceV102 fulltypes/lint/1554actual/249files/540explicit skips PASS;
+freshV60/V61 ordinary86/strict161models/365guards/416fullfunctions/4143queries
+andSDKV38/V39 actual8 PASS. V60 nine actual SQL correlation controls PASS;
+all596 rows/j86/seq unchanged. Original whole feeV10 reaches actual accepted
+1-cent return but TIMEOUT180s; observational freshV11 also times out, after
+realapply53.92s/originalreturn54.45s/fee22.69s. FailedV60/V61 preserved.
+CPUprofile measures54.60s Ed25519verify,43.88s canonicalization,5.32s public-key
+creation; PGmetadata shows no blocking. NEW finite primitive-only512-entry
+memo stores hashes of exact publickey/signature/FRESH canonical message tuple.
+Schema/domain/size/currentpayloaddigest and every original caller/source/owner/
+nonce/liveness/PG/bank/raw/current-money check remain unconditional. No money
+or current-state authority cached; no input payload/key/signature retained.
+Five warmed-mutation/key/domain/size/source/eviction controls added; all old
+signer/reader/stop/default/native19097bytes/180s bodies preserved. Full current
+source/schema/SDK/original native/performance acceptance remains UNRUN. See
+`deploy/provider-read-signature-work-root-continuation.manifest.json`.
+
+Required generic provider-retention audit2026-11-14 (C11.10/C1.08): source
+invoice/intent/expandedcharge and customer/credit-note callbacks/results retain
+whole provider JSON. A new safe-producer projection/version/consumer inventory
+is assigned; malformed financial maps must become authenticated unknown debt,
+never filtered knownzero or retained secretbytes. Held terminal-only aef source
+does not close this generic registered-path finding. No source repair/security
+signature/provider acceptance inferred. See
+`deploy/provider-response-retention-audit-20261114.json`.
+
+Bounded safe-log SOURCE continuation2026-11-14 (C11.10/C1.08): HTTP and MCP
+unknown failures use one fixed-event logger with a newly generated server UUID;
+it never receives the failure, request headers, tool name, query or parameters.
+The existing controlled-provider Server Action preserves known ServiceError
+redirects; every other thrown value becomes a new fixed native Error, retaining
+its generic failure behavior without copying cause/message/code/stack. Seven
+HTTP/MCP/installed-Next canary controls are PREPARED/UNRUN. This is a finite S0
+precursor, not closure of unsafe provider-response retention, safe ingress,
+legacy-FIN recovery, rollout, security review or provider acceptance.
+
+
+Exact approved BACKUP completed2026-11-14: owner explicitly approvedb5c0f3a9
+to existing integrate/current-full82-signed-history-20261113. Verified remote
+fastforward7322c43f→b5c0f3a9842ab37246c781c7f38af23d2e91f85a after push.
+Previous automatic-review trust rejection resolved by actualownerapproval;
+newer local repairs were not included in that exact authorized checkpoint.
+No release/deployment/LinkedIn action. See
+`deploy/approved-checkpoint-backup-20261114.json`.
+
+Launch-image isolated source qualification2026-11-14 (C1.12/C3.28/C11.08):
+frozen418/d1a89172 passes fulltypes64.97s, actualCLI packaging build/all6 copied
+recipe/companion/declaration bytes exact, lint/93actual/10files/17explicit
+prerequisite skips. Isolated evidence commitacb15932 remains uncomposed here;
+actual compatible signed image/new-originTCP/owner/provider/recovery acceptance
+remain required. Media initializer64a9e7cb and terminal/C0aef are SOURCEONLY
+held/unqualified, not activated. Full B/C/media/spec gates remain open.
+
+
+Fee acknowledgement correlation ROOT repair2026-11-14 (C12.38/C1.08):
+exacte56 sourceV100 fulltypes/lint/1553actual/248files/532explicit skips,
+ordinaryV58/strict161models/365guards/416fullfunctions andSDKV36 actual8 PASS.
+ORIGINAL feeV8 reaches genuine accepted1-cent POST and current bank target399/
+pendingfalse but FAILS at unchanged final commission-debt assertion186.89s.
+Actual readonly QUERY/observational SQL proves its ACK is bound and all bank/
+target/caller/agreement checks pass: Drizzle strips outer Column qualification
+inside selected correlated EXISTS, making operation_id compare to inner ACKid.
+Fully qualified original predicate matches; actual emitted predicate does not.
+All596 whole rows/j86/seq invariant across probes. V58 failure is preserved.
+New shared SQL expression retains all SIX ACK conditions through real Table+
+identifier chunks; ONLY its import/expression replace old debt body. No debt
+reason removal, generic receipt rewrite, bank waiver, schema or permission
+change. New SQL compiler/real read-only CTE countercontrols are PREPARED/UNRUN.
+Original whole native19097bytes/180s unchanged. Fresh qualification/fullspec/
+provider/recovery/security/signature remain open; no C/stable closure. See
+`deploy/merchant-fee-ack-correlation-root-continuation.manifest.json`.
+
+
+Atomic bank alias ROOT assembly2026-11-14 (C12.38/C9.33/C1.08):
+exact24aa sourceV99 fulltypes/lint and1550actual/247files/532explicit skips
+PASS. FreshnormalV57 ordinary86, strict161models/365guards/416fullfunctions/
+4143queries/2495expressions andSDKV35 actual8 PASS; generatedSDK unchanged,
+all11private phases hidden. ORIGINAL whole feeV7 FAIL155.44s before feePOST:
+actual42702 actual_refund record/table alias collision in bankhelperline173.
+ALL596tables/j86/sequence retained, clients drained, V57 preserved without
+reset/migration/new native. Frozen77f full helper/Aready successors append AFTER
+WHOLE93557185 prefix; ONLY nested alias/reference and helper body pin change.
+No model/column/signature/guard/index/service/economic/test-oracle change.
+Full fresh source/schema/SDK/original180s native remain required. No C/stable
+closure; B/C/media/provider/recovery/security/signature gates stay open. See
+`deploy/atomic-refund-bank-alias161-root-assembly.manifest.json`.
+
+B bounded source checkpoint2026-11-14 (C12.38/C9.33/C1.08): approved two
+immutable purpose children now have actual parent-first retention, seven full
+new SQL bodies, four complete old-body-preserving successors, exact readiness
+and four actual trigger declarations. Shared full-PG parent/undo/archive
+consumers and per-subscription safe privacy exports now consume exact B2 FKs;
+profile is restriction only, one5000/old-empty shapes retained. Exact key leaf77a
+preserves signing/rotation/missing-key semantics. New real-service/HTTP B birth,
+caught-fault rollback and genuine queued deferred-event controls are PREPARED
+UNRUN, alongside exact reversals/private canaries/epoch/5000 refusals. Original
+whole fee native and180s remain byte-exact. No compiler/lint/parser/model/tests/
+PG/provider execution, root edits, assembly, B availability or stable claim.
+Independent applied-credit compensation/unwind, own-refunded residual capacity
+and noncash/unknown-stop/out-of-band/late-consent work remain REQUIRED; no old
+application/history reversal or debt forgiveness is introduced.
+
+B private final-delta/consumer SOURCE WIP2026-11-14 (C12.38/C9.33/C1.08):
+both deferred final-conservation bodies and six new function bodies now exist
+as isolated UNRUN source; no readiness/trigger enabled. Actual shared central
+financial witness and invoice/merchant/subscription safe archives now consume
+exact B child/source ancestors conditionally, preserving old parent counts and
+empty shapes. Two original full successors have exact old literal reversals;
+two remaining successors, readiness/enabled pins and actual native controls
+remain unfinished. Root approved only the additional narrow original invoice
+refund birth gate for authentic NEW B/current whole sibling proof. No root
+edits, execution, qualification, B acceptance or stable claim here.
+
+B private owner-delta SOURCE WIP2026-11-14 (C12.38/C9.33/C1.08): reservation
+purpose BEFORE source now independently checks actual newborn parent/root,
+held complete callback/canonical prefix/current source and only-own-parent PG
+reconstruction. New private exact full-PG-verified subscription/proration
+preimages preserve original pending-plan/job/task/state plus PostgreSQL exact
+timestamp precision; four prepared controls remain UNRUN. Both mandatory
+deferred whole-final-delta functions, readiness and old successors remain
+unfinished; no trigger enabled, no root assembly/execution/qualification.
+
+B private SQL/footprint SOURCE WIP2026-11-14 (C12.38/C9.33/C1.08): actual
+legacy-application positive ancestry and original absolute-root candidates now
+exist in the isolated tail, plus genuine funding-purpose BEFORE preimage/birth/
+held-prefix/current-bank checks. Four remaining new function bodies, complete
+deferred final conservation, old successors and readiness/trigger pins are NOT
+complete or enabled. Collector-free exact-parent fullPG/MAC witnesses and safe
+buyer/owned-profile merchant archive helpers now exist; four private-canary
+controls PREPARED/UNRUN. No root collector/SQL assembly or execution changed.
+Private WIP remains unsuitable for integration or any qualification/stable
+claim; required full current physical/caller/loan conservation is not waived.
+
+B private persistence SOURCE WIP2026-11-14 (C12.38/C9.33/C1.08): signed private
+stored-review declaration now binds server-planned funding/proration and exact
+actual accepted source ancestry without changing public DTOs or asserting an
+old quote HMAC. Positively proved old applications use their own immutable
+original epoch, never an invented payment offset. Actual funding/reservation
+writers retain their real parent then same-TX purpose child; exact B intervals
+replace proportional repricing only for authenticated B funding. Seven new
+declaration controls plus prior fifteen math/MAC controls are PREPARED/UNRUN.
+SQL birth/final conservation guards, old complete successors and central safe
+witness integration remain unfinished; private checkpoint is NOT an
+integration/qualification/readiness/stable claim. No execution occurred here.
+
+B reservation segment private SOURCE WIP2026-11-14 (C12.38/C9.33/C1.08):
+root approved the additional purpose-child inventory. Child schema/strict
+contract/MAC and pure interval arithmetic now preserve separate ORIGINAL epoch
+start/end/caps and ABSOLUTE selected endpoints. Nonzero100/[104,105), nested
+slices/holes/retired/proven/owed and tampering have fifteen prepared controls,
+ALL UNRUN. Explicit table/private/noTTL source metadata added in isolation;
+actual FK/current-bank/persistence/SQL candidate/BEFORE+deferred mandatory-birth
+guards/old-consumer continuations and all qualification remain unfinished.
+No current authority, release, B completion or stable claim; original funding/
+reservation/application rows and their old hash domains remain unchanged.
+
+B reservation economic-segment INVENTORY2026-11-14 (C12.38/C9.33/C1.08):
+source audit proves existing reservation fee scalars/opaque digest do not retain
+the original root interval; repricing a4199/F400 retired1/current399 source at
+399/4199 changes first21 fee2 to1. ONE additional immutable reservation-purpose
+child is PROPOSED before schema/guard implementation: actual parent PK/fullPG,
+five named RESTRICT FKs, original interval/nominal/retired/assigned/proven/owed
+conservation, actual sameTX child birth with mandatory deferred check. Existing
+application reservation PK+FK proves one-to-one derivation without another
+application model. No parent columns/backfill/idempotency-key authority, old
+non-B floor/hash changes, provider chronology guesses or generic applied-credit
+release. Exact source/privacy/central witness and function/trigger inventory is
+`deploy/atomic-credit-reservation-segments84.inventory.json`; root review,
+implementation and all execution remain pending. This inventory establishes no
+readiness, credit-return completion, stable or release claim.
+
+Atomic bank record-alias SOURCE successor2026-11-14 (C12.38/C9.33/C1.08):
+independent source audit finds one nested JSON alias actual_refund colliding
+with the function's refunds%ROWTYPE local. NEW owned UNAPPLIED complete helper
+successor renames ONLY nested alias/reference to current_refund_atom; complete
+Aready changes ONLY corresponding bodySHA literal. Frozen dd3/all predicates,
+types/physical rows/callers/5000 and original whole fee native180s remain exact.
+Three full-source/native-preservation controls PREPARED, ALL UNRUN. No actual
+SQL failure, compile/PG/native/readiness/closure/stable acceptance is claimed;
+root owns assembly/qualification. See
+`deploy/controlled-atomic-refund-bank-record-alias84-source-20261114.md`.
+
+
+Atomic bank causal-fence ROOT assembly2026-11-14 (C12.38/C9.33/C1.08):
+frozendd3 follows wholecurrent45/83; entire MASTER+only22newleaflines retained.
+Whole89757985 prefix followed by TWO exact full helper/Aready successors;
+0new signatures/models/columns/kinds/services/guards/indexes. Old default
+resolver/target/160ready/native180s preserved. New ordinary proof keeps actual
+namespace SHA separate from literal account key, validates every returned-own
+packet/FIN and older covered identities, and refuses later selected-lineage
+preimages or maximal changed/missing bank state and unresolved raw feedback.
+V98 fulltypes/lint passed but contracts stopped on ONE metadata newline;
+corrected descriptor reverses to the exact same original whole target SHA.
+Actual exact8df readonly QUERY probes accept the real V55 last-own FIN/packets
+and maximal final bank state with all596 rows/j86/seq unchanged; these probes
+supply no new money authority. Full current source/schema/SDK/original native
+qualification remains required; no C/stable closure. See
+`deploy/atomic-refund-bank-fence161-root-assembly.manifest.json`.
+
+
+Atomic bank late-evidence SOURCE continuation2026-11-14 (C12.38/C9.33/C1.08):
+frozenfd preserved. New bank owner check uses original cashNamespaceKey SHA,
+never controlled literal namespace bytes. Signed original-v2 admission preimage
+membership of selected lineage UUID establishes causal AFTER edge, invalidating
+older bank proof without time/row subtraction. Each prior GET's OWN actual
+packets/unique last FIN are independently covered; older rows require exact
+prior-preimage coverage. Causally maximal complete original GET states/packets
+must agree with current bank; unknown/concurrent changed state stays review,
+older genuinely covered transfer0→1 history retained. Raw signed feedback must
+match exact current original resource/status; detached late pending stays debt.
+Full current PG/caller/budget/hash domains preserved, no generic resolver or
+old MAC rewrite. Root genuine V55 readonly QUERY proves old positive own8/FIN
+ordering/maximal policy reachable/all596rows+j86+seq unchanged, NOT successor
+qualification. Metadata-only fd descriptor consumes one final newline after
+V98 preserved source failure; old beforeSHA/product source unchanged. NEW
+UNAPPLIED suffix only existing helper+one Aready body-pin successor; no new
+signatures/models/columns/kinds/services. Ten pure/six source/three additional
+actual desired natives PREPARED, ALL UNRUN; original whole fee180s exact.
+Full root source/schema/native/SDK and B/C/full-spec remain open; no C/stable
+acceptance. See `deploy/controlled-atomic-refund-bank-fence84-source-20261114.md`.
+
+
+
+Public availability check2026-11-14 (C3.28/C11.17): unauthenticated GETs with
+redirects disabled return200 for freeholder.ai home and both public /api/health
+endpoints. Website health reports ok:true/0.2.0-beta.3; demo reports ok:true/
+0.2.0-beta.6. This supplies only availability at the recorded instant, no owner
+login/key/publishing/forbidden-operation/provider/recovery/stable acceptance.
+No deployment or LinkedIn post performed. Source current bank83 fulltypes/lint
+pass but V98 contracts stop on a one-newline preservation descriptor; domain/
+late-evidence follow-on remains required. No C closure. See
+`deploy/public-health-readonly-checkpoint-20261114.json`.
+
+
+Atomic current-refund bank ROOT assembly2026-11-14 (C12.38/C9.33/C1.08):
+frozenfd123 source follows qualified origin6b and exact financial8df. Entire
+current MASTER+only21newleaflines retained. ONE new SQL bank reader and THREE
+full target/160ready/Aready successors append AFTER WHOLE85073685 prefix;
+all old generic resolver/receipts/captures/MAC/dispatch guards/native180s exact.
+Explicit current bank alternative has real HMAC lineage/source/PG/returned FIN/
+all capture transition checks; full current witness and aggregate5000 retained.
+No new model/column/kind/service/index/guard or post authority. Current source/
+normal/schema/SDK/unchanged native qualification UNRUN. V55 stale-currentness
+failure and readonly full596/HMAC diagnostics preserved. No C/stable closure.
+See `deploy/atomic-refund-bank161-root-assembly.manifest.json`.
+
+
+Atomic current refund bank SOURCE continuation2026-11-14 (C12.38/C9.33/C1.08):
+actual preserved V55 proves newer genuine refund captures stale the old generic
+current receipt while independently authenticated current controlled bank rows
+remain available. ONE new ordinary/SQL per-namespace proof binds exact original
+request/resource/PI/charge/amount/currency, latest actual returned HMAC lineage,
+ALL captures/current callers/fullPG rows under ONE5000; no capture projection,
+old signature rewrite, opaque parent-digest reuse or generic resolver change.
+Historical contradictory status requires EVERY capture authenticate to an
+actually earlier closed returned inspection; detached repeats remain debt.
+Complete target successor adds ONLY exact old resolver OR genuine controlled
+bank proof; old default revision stays exact when unused. Complete160/A readiness
+successors use finite body-pin substitutions/new helper pin, retaining all
+older guards/route/privacy/index/CHECK pins. 0models/columns/kinds/services.
+Twelve pure/thirteen source/four actual desired native controls PREPARED, ALL
+UNRUN; original whole fee native180s/all assertions and generic sources exact.
+Root normal assembly/full source/schema/SDK/native qualification required; no
+C/stable acceptance. B/C/credit-unwind/full-spec requirements remain open. See
+`deploy/controlled-atomic-refund-current-bank84-source-20261114.md` and its
+finite manifest.
+
+
+
+Origin precursor SOURCE qualification2026-11-14 (C1.12/C10.32/C11.08):
+isolated root9d+frozen8dc14979838 fulltypes PASS62.07s; exact same production
+code at173f6400 with only typed TCP-error getter correction/notes. Actual CLI
+own tsc lint and root3file ESLint0warnings pass; focused9files77actual/16explicit
+noDBskips pass, including ALL12origin controls+1real fictional TCP producer/
+private-delivery control. No actual provider/SSH/purchase/claim/account used.
+All12dependency descriptors exact; root financial/media/type/SQL alias fixes
+and exact current82/85/model/registry/capability state preserved. Source merge
+is allowed only on integration branch; no main/publication. Real usable
+initializer/first-write fence/durable replay/backup-and-restore acceptance
+remain incomplete and REQUIRED. No cap/C/stable closure. See
+`deploy/media-origin-root-source-checkpoint-20261114.json`.
+
+
+Isolated origin source qualification2026-11-14 (C1.12/C10.32/C11.08):
+root+8dc14979838 fulltypes PASS62.07s, then root lint stops on asynchronously
+assigned Error inferred never in the new fictional TCP control. Typed getter
+retains exact recorded error/object/throw and every original wire oracle; full
+reversal recorded. CLI has its own standalone tsc lint; root ESLint intentionally
+ignores packages. All focused/runtime tests still UNRUN; primary integration
+WT unchanged. No initializer/write fence/capability/provider/stable acceptance.
+See `deploy/media-origin-tcp-typing-root-continuation.manifest.json`.
+
+
+  New-launch origin precursor 2026-11-14 is SOURCE ONLY: the real DigitalOcean
+  CLI path prepares a durable128-bit random admission, one actual media create,
+  independent response/return/metadata receipts and private read-only delivery
+  to the UID1001 application. Old/existing/ambiguous origins cannot be adopted
+  or replayed. Twelve source controls and one fictional TCP producer/delivery
+  control remain entirely UNRUN. Quota initialization, its real installed
+  first-writer fence and durable replay consumer remain unimplemented; no
+  capability, usable initializer or provider/stable acceptance is claimed.
+  See `deploy/media-namespace-origin-source-2026-11-14.md`. All rows stay open.
+
+
+  New-origin image containment 2026-11-14 is SOURCE ONLY: NEW DigitalOcean
+  storage refuses unknown account or unsupported pinned app/source before
+  resource purchase. The reader reuses exact existing signed main-CI image
+  policy and requires actual manifest/config/source-profile bytes. No complete
+  runtime profile or Docker/CI label is published while initializer/fence/
+  journal/recovery consumers remain unfinished.17 prepared controls are UNRUN;
+  inherited generic orchestration explicitly uses retained fictional legacy
+  buckets, preserving its assertions/counters. True-new TCP acceptance now
+  additionally requires a real published compatible immutable image, with
+  genuine public provenance checks; no fixture verifier/ABI supplies authority.
+  See `deploy/media-origin-image-admission-source-2026-11-14.md`. No row closes.
+
+
+Current causal/media161 ROOT checkpoint2026-11-14 (C12.38/C1.12/C11.08/C1.08/
+C9.33): exact8df9e847 current SQL sourceV97 passes1497/240 complete selected
+files/524 explicit DB skips; unchanged TS/lint fullV95 reused through finite
+SQL-only changes. FreshV55 ordinary86/strictV67 actual161models/365guards/
+415fullfunctions/4142queries/2495expressions and SDKV34 actual8 pass. Existing
+media_uploads is target161; physical public tables stay596. Three actual ready
+predicates plus missing-payment unknown/pending negative pass with ALL596 full
+rows/journal/sequence unchanged; both media capabilities absent.
+Original WHOLE6e positiveV6 still FAILS157.59s: genuine tiny return completes
+(1owner/4ops/28facts/1wholeclosure), then bigfee target refuses BEFORE any fee
+return operation. All596 before/after proof retained, failedV55 drained. Actual
+read-only V1–V3 diagnosis proves BOTH original resources known/notpending but
+atomic SQL target empty: generic refund-current receipt correctly stales after
+later genuine captures, while latest authentic controlled bank independently
+retains the exact1CAD succeeded refund, full current witness422tiny/384big.
+No generic resolver/capture/receipt waiver or blind refresh cycle is applied.
+Commerce prepares a finite atomic-boundary current-bank proof continuation;
+B credit work remains incomplete, as do held proration/media/full-spec gates.
+Negative/A/causal natives UNRUN. Earlier normalV52 compile and nativeV5 errors
+retained; SQL alias corrections separately reversible. No C/stable/signature/
+main/deploy/post acceptance. LinkedIn draft confirmed LOCAL ONLY. Remote backup
+still awaits explicit approval after auto-review rejection. See
+`deploy/current-causal-media161-root-checkpoint-20261114.json`.
+
+
+Actual original fee nativeV5 first failure2026-11-14 (C12.38/C9.33/C1.08):
+current3ba9 source1497/240/524, freshnormalV53 ordinary86/strict161models/
+365guards/415completefunctions/4142queries/2495expressions and actualSDK8 pass.
+Original WHOLE6e positive runs96.10s, real tiny refund succeeds, then first fee
+review stops SQL42702 BEFORE original causal recovery: A resource TABLE output
+payment_id shadows its bare route column. V53 retained/drained, all596 before/
+after snapshots retained; counter negative/A/causal natives remain UNRUN.
+Two full SQL85 successors qualify ONLY route selection and corresponding one
+ready body-hash literal; all fee/evidence/debt predicates otherwise byteexact.
+WHOLE832734 prefix and exact full-body reversals retained. No fixture/global
+variable-conflict setting/amount waiver. Fresh source/schema/SDK and unchanged
+original native must pass before acceptance; no C/stable closure. See
+`deploy/atomic-auxiliary-fee-route-alias85.manifest.json`.
+
+
+Current SQL compilation correction2026-11-14 (C1.12/C11.08): sourceV95 passes
+1497 tests/240 complete files/524 explicit DB skips, fulltypes/lint/metadata.
+Fresh normalV52 then stops SQL42883 in multipart idle minimization: bare outcome
+SRF alias resolves outer certificate.outcome TEXT. Explicit outcome(value) and
+qualified value references retain the exact original artifact/job/scope predicates.
+Owned/normal82 receive identical finite unpublished-source correction; complete
+rewind proves all earlier whole prefix identities. Failed V52 DB retained/drained;
+no SDK/business/native ran on it. No cast/guard waiver/capability or C closure.
+Fresh full qualification and original business tests remain required. See
+`deploy/media-multipart-artifact-alias-root-continuation.manifest.json`.
+
+
+Current source lint correction2026-11-14 (C12.38/C1.12/C11.08): V94 fulltypes
+passes, then affected lint stops on four forbidden inline type imports and two
+unsafe Vitest matcher assignments. Explicit type-only imports follow the exact
+preserved whole reader prefixes; unknown-typed matcher locals retain identical
+asymmetric predicates and native assertions. No cast, SQL/model/capability or
+production runtime change. Full-file finite reversals recorded and V94 failure
+preserved. Complete current source/schema/SDK/original business qualification
+remains required; no C/stable closure. See
+`deploy/current-media-causal-lint-root-continuation.manifest.json`.
+
+
+Causal source typing correction2026-11-14 (C12.38/C9.33/C1.08): V93 fulltypes
+stops before lint/DB on optional true refresh property across inferred existing/
+new target union and optional registry output metadata. Production now checks
+actual property membership before the SAME genuine fresh-GET condition; no
+caller flag/default or old sequence change. Registry control requires the real
+explicit output schema before unchanged legacy/true/false refusal assertions.
+All original whole native/source economics/MAC/SQL/model bodies stay; exact
+reversals and V93 failure retained. Complete fresh current qualification and
+business natives still required; no C/stable closure. See
+`deploy/original-inventory-causal84-type-continuation.manifest.json`.
+
+
+Original inventory causal ROOT composition2026-11-14 (C12.38/C9.33/C1.08/
+C11.08): frozen6522685b merged atop exact media200/327 and qualified auxiliaryb40;
+entire current MASTER plus only34newleaflines preserved. Actual A holder/oneway
+release/request fields retained. THREE A handler entries acquire genuine v2
+connected identity/resource/parent/canonical/cash/callback prefix before ready/
+basis/phase; old predicates/nonce checks unchanged. Source pin reconstructs ONLY
+2Akind literals+2indexes before requiring entire old schema SHA, preserving old
+MAC/column/default/native oracles; all other oldsource pins checked. Original
+whole6e fee,269privacy and652causal native files exact. No model/SQL/registry
+addition. Complete current source/schema/SDK and all original positive/negative/
+auxiliary/causal business natives UNRUN. Full private current rows/5000/FIN and
+actual bank/credit/fee/source proofs remain independent of historical comparison.
+No broad kind omission, old row re-sign, fake context or C/stable acceptance.
+See `deploy/original-inventory-causal84-root-composition.manifest.json`.
+
+
+Original controlled inventory causal-v2 SOURCE checkpoint2026-11-14
+(C12.38/C9.33/C1.08): actual preserved V48 diagnosis proves its authentic
+inspection+8facts are excluded directly but reintroduced through controlled
+RF/raw-parent history. A new signed controlled-inspection request preimage
+binds actual owner/namespace/op/caller/nonce and per-domain physical identities;
+explicit comparison companions reconstruct ONLY authentic own read rows and
+feedback namespaces, keeping FULL current rows/callers/5000 before/after.
+Separate closure context projects ONLY its exact authenticated own closure
+against signed FULL pre-insert revision, retaining GET/allfacts/feedback/other
+closures. Old v1/HMAC/SQL/default digest expressions and original whole native
+files preserved; no old row upgrade or cached money authority. 0models/SQL/new
+services. Twelve pure/nine source/three registry/five actual desired native controls
+PREPARED, ALL UNRUN; types/lint/PG/SDK/provider UNRUN. GET-only admission is
+explicitly optimistic with full rechecks. V2 mutable
+entries acquire shared identity/complete connected resource/parent/canonical/
+cash prefix before bound, nonblocking actual callback keys and rediscovery;
+no late locks or public marker. Real two-connection race prepared/unrun. Frozen
+A's three future handler entries need the explicit same-prefix composition.
+Exact current WHOLE v2 closure may supply fully refunded canonical principal
+through unchanged independent debt/bank checks; no review flag clearing or
+partial/fee closure upgrade. Newly born v2 partial target requests one genuine
+fresh GET before claims; v1 sequence unchanged. Exact controlled partial
+closure projects only its own authenticated fact,
+retaining the real target/GET/other facts/current resource and source proofs;
+no whole/principal grant. Separately tagged v2 partial economic source retains
+all original Fi/refund/credit ancestry and explicit unassigned duty, with full
+physical currentSourceRevision independently fresh; old v1 source pinned.
+Genuine equal-receipt partial/repeat/foreign-invalidation native prepared/unrun.
+Root qualification,
+B credit partition, actual credit return/unwind and every full-spec gate remain
+open. See `deploy/original-cash-inventory-causal84-source-20261114.md` and
+source preservation manifest. No C closure/stable/post.
+
+
+
+Media source type correction2026-11-14 (C1.12/C11.08): V92 fulltypes stops
+before lint/DB on unknown JSON metadata passed to Object.keys and one duplicate
+retained-identity import. A shared pure empty-record predicate now requires a
+real nonNULL nonarray object, agreeing with independent SQL{} checks; valid{}
+behavior stays, malformed metadata retains debt. No cast, HMAC/first-scope
+change, ownership/physical waiver or capability. Duplicate import removed only,
+combined required reader/candidate import retained. Exact complete source
+reversals recorded; V92 preserved. Full fresh source/schema/SDK/native/provider
+qualification remains required; no C closure/stable. See
+`deploy/media-unknown-metadata-root-continuation.manifest.json`.
+
+
+Media identity/quota ROOT assembly2026-11-14 (C1.12/C11.08/C10.32/C1.08):
+frozen compact+72bb genuine fixture, ordinary361, legacy1b8 and quotae3f source
+now follow qualified auxiliaryb40. Full current MASTER plus only32+41newleaflines
+retained. New compact/session fields compose with qualified namespace narrowing;
+all baseline/binding/part authority/type fixes and financial noTTL reasons stay.
+Owned/normal82 exact1017370/7a592c66 preserves WHOLE749050,897790,942079,997946
+prefixes; normal85 remains832734/86e09cd1. ONE existing upload model adds nullable
+no-default/no-backfill/noFK UUID+partialunique+2guards; no new table/service/job/
+capability. Exact first membership/legacy anchors and physical-role quota proof
+remain independent of empty listing or equal key. Full current source/schema/
+SDK/business qualification UNRUN. Finite source parser adds ONLY scalar calls/
+requests args;8controls preserve all443current functions and strict negatives.
+Both request/part capabilities stay unpublished. Genuine initialization/original
+ABI/issued terminal/capture/custody/quota/cutover/upgrade/provider/fullspec and
+financial causal/proration/credit/security acceptance remain required. No C
+closure/stable/post. See `deploy/media-identity-quota-root-assembly.manifest.json`.
+
+
+Source-only continuation, 2026-11-14 (C1.12/C11.08): new ordinary upload births
+now explicitly bind one immutable upload/reservation UUID in the genuine shared
+same-TX producer, with deferred cross-row validation and no historical NULL
+fill/default/FK to a temporary pointer. Future first captures retain the exact
+original key digest; repeated requests require agreeing intact captures and
+precise historical subject ownership. Exact ordinary erasure and thirty-day
+redundant metadata custody consumers preserve the UUID and separate derivative
+proofs; unknown/held/legacy evidence remains pending. Four functions/two triggers/
+one index/one nullable column append after the intact owned82 prefix. Eight pure
+and five genuine service/TCP controls are PREPARED, all UNRUN; two require the
+real complete request ABI. No capability, C closure or provider/security/stable
+acceptance. Legacy/issued-authority/quota/capture/cutover and real qualification
+remain required. See `deploy/media-upload-original-reservation-source-2026-11-14.md`.
+
+Source-only continuation, 2026-11-14 (C1.12/C11.08): optional future legacy
+upload anchors retain safe literal original capture/pointer/upload witnesses
+without filling historical NULL births. Two scalar SQL functions and six full
+continuations require an intact earlier same-subject capture/receipt, exact
+surviving whole original pointer witness, authentic ordinary PUT/caller and
+full physical retirement. Unknown/unwritten legacy remains pending. No new
+model/column/index/trigger/service/job/capability; whole prior owned82 prefix
+and prior oracles stay exact. Eight pure/seven genuine old-producer upgrade
+controls are PREPARED/UNRUN; SQL/Drizzle full-pointer equality and actual public
+hold/terminal-old-receipt reachability must pass first. No provider/security/
+stable/C closure. Issued-authority, capture/quota/cutover and full real acceptance
+remain required. See `deploy/media-legacy-upload-anchor-source-2026-11-14.md`.
+
+Legacy unknown-upload qualification2026-11-16 (C1.12/C11.08): an unmodified
+pre82 runtime at `bab980ad` creates the genuine unwritten reservation against the
+exact current0..81 prefix. The ordinary upgrade through108 then produces a complete
+current retained capture, uses real public hold removal, and creates an independent
+verified request. The unknown native control passes1/1 and the pure anchor controls
+pass8/8; TypeScript and focused lint pass. No bytes, positive caller or provider proof
+are invented. The six retired-written native controls and their independent cohorts
+remain open; their first reachability result follows. See `deploy/media-legacy-upload-unknown-producer.source.json`.
+No provider/security/checklist closure follows.
+
+Retired-upload reachability control2026-11-16 (C1.12/C11.08): a genuine old
+accepted PUT, ordinary upgrade, retained capture, hold removal and second verified
+erasure reach the actual current multipart worker. Its immutable legacy receipt keeps
+`birthDebt`, so the worker refuses before a DELETE or anchor can be created. The failed
+cohort is preserved; no retirement/native assertion is claimed. The shared producer's
+unknown old→upgrade→native regression passes again. TypeScript and focused lint pass.
+See `deploy/media-legacy-upload-retired-reachability.source.json`. All six retired
+controls remain open; no product guard or checklist row changes.
+
+Full-NULL legacy safe-pending classification2026-11-16 (C1.12/C11.08): the genuine
+pre82 written producer has no original caller/runtime and retains NULL receipt/pointer
+birth. The documented anchor contract therefore cannot positively retire or reduce it;
+a new UUID or synthetic caller would be false evidence. A new named old→normal108→
+current-capture→native control passes1/1: both actual workers refuse, no DELETE/anchor
+appears, physical/request/capture evidence remains intact, and only the ordinary asset
+links detach. The unknown/unwritten full regression and19 pure proof cases pass;
+TypeScript/lint pass. See `deploy/media-legacy-upload-unrecoverable-pending.source.json`.
+The six positive anchor controls still require a genuinely eligible historical cohort;
+no product code, provider result or checklist row changes.
+
+Source-only continuation, 2026-11-14 (C1.12/C10.32/C11.08): transfer quota
+settlement/release now follows actual original caller tokens and separate
+source/target physical roles. Real accepted request accounting may precede
+outer FIN; no FIN is invented. Full source retirement releases its capacity
+while target charge and original copied privacy lineage remain live; current
+holds/late caller facts invalidate proof before dedup. Actually unattempted
+same-original retry requires all real FIN/frame evidence; unknown/unbound
+charges remain debt. Two scalar SQL functions/one full existing guard and five
+TS files, zero new model/field/trigger/service/job/capability. Nine pure/nine
+native controls PREPARED/UNRUN; all qualification remains UNRUN in this child.
+Actual namespace initialization, issued-authority closure, capture/cutover,
+external provider/operator/security and final stable gates remain required.
+See `deploy/media-transfer-quota-role-source-2026-11-14.md`.
+
+Quota ACK-before-FIN qualification2026-11-16 (C1.12/C10.32/C11.08): the
+independent current producer performs real source/target TCP inventory and quota
+initialization, admits the actual target caller, writes exact bytes, retains accepted
+provider facts, and settles the original token before deliberately omitting outer FIN.
+Its native control passes1/1; all9 pure accounting proofs and static checks pass.
+See `deploy/media-transfer-quota-ack-producer.source.json`. Eight other native cohorts,
+live-provider operation and checklist acceptance remain open; no C-item closes.
+
+Verified-copy quota qualification2026-11-16 (C1.12/C10.32/C11.08): two fresh
+service/TCP cohorts complete the ordinary copy flow. Concurrent settlement reuses the
+exact original token without rewriting physical requests, and SQL refuses early-zero
+and foreign settled-token transitions while preserving the live charge. Both native
+controls pass; TypeScript and focused lint pass. See
+`deploy/media-transfer-quota-verified-copy.source.json`. Six other native cohorts and
+provider/operator/checklist acceptance remain open.
+
+Source-retirement quota qualification2026-11-16 (C1.12/C10.32/C11.08): two
+fresh adopted cohorts preserve synthetic object bytes/revisions across genuine TCP
+producer/native handoff. Conditional source cleanup releases only source capacity while
+target charge and original privacy lineage remain live; a newly named hold refuses
+duplicate old-source release before dedup. Both native controls pass. TypeScript and
+focused lint pass. See `deploy/media-transfer-quota-source-retirement.source.json`.
+Four other native cohorts and actual provider/checklist acceptance remain open.
+
+Privacy quota reachability2026-11-16 (C1.12/C10.32/C11.08): a genuine copied
+cohort produces a verified erasure and real pending transfer/storage/multipart jobs.
+Actual retries then reject one another's later physical receipts as outside immutable
+first captures; the transfer remains unredacted after150s. This is a cross-scope
+coordination defect, not a provider or timeout pass. The failed cohort is preserved and
+the short test deadline restored. TypeScript/lint pass; no product guard changes. See
+`deploy/media-transfer-privacy-scope-reachability.source.json`. Repair and native
+acceptance remain open; no C-item closes.
+
+Privacy descendant-recovery qualification2026-11-16 (C1.12/C10.32/C11.08):
+the preceding failure is repaired without changing first capture bodies. Exact-reservation
+DELETE descendants now join every existing original cohort under genuine transfer
+authority, and an already fully retired transfer returns without more physical/quota
+work. A fresh genuine pg-boss cohort converges and its native control passes after
+108.782s of actual retries. Late-erasure4/4, quota pure9/9 and transfer lifecycle9/9
+regressions pass; TypeScript/lint pass. See
+`deploy/media-transfer-privacy-descendant-recovery.source.json` and changeset
+`media-privacy-descendant-recovery.md`. Hosted/provider and checklist acceptance remain open.
+
+Unknown-target quota qualification2026-11-16 (C1.12/C10.32/C11.08): a genuine
+TCP reply loss after physical dispatch retains an unknown request/caller, pending token
+and charge. The evidence assertion now recognizes a valid failed call with no response
+observation while requiring its unknown frame/finish and rejecting any not-attempted
+fact; release refusal and unchanged-state checks are intact. Producer and native control
+pass1/1 each; TypeScript/lint pass. See
+`deploy/media-transfer-quota-unknown-target.source.json`. The unattempted-retry and
+late-original cohorts remain open; no C-item closes.
+
+Unattempted-target quota qualification2026-11-16 (C1.12/C10.32/C11.08): a
+genuine admitted caller records its actual notAttempted finish without provider I/O.
+The native control releases only that original token, then performs a real same-object
+copy whose new caller has a distinct token and exact settled bytes. Producer/native
+controls pass1/1 each; TypeScript/lint pass. See
+`deploy/media-transfer-quota-unattempted-target.source.json`. Only the late-original
+cohort remains open in this group; no provider or checklist acceptance follows.
+
+Late-original quota recovery2026-11-16 (C1.12/C10.32/C11.08): a fresh genuine
+copy/adopt/retire cohort physically reapplies the exact source bytes over TCP, reads
+them back, and submits the retained original provider revision. The unchanged native
+control first proves the old path wrongly leaves its original caller returned. The
+shared observation path now reopens only callers bound to that exact receipt and
+reconciles the same original quota token. Producer/native controls pass1/1 each;
+release is refused without changing observations. All nine native role cases pass
+on fresh independent post-repair cohorts, including the genuine82.774s privacy worker.
+Fifteen pure quota proofs, nine ordinary recovery cases, TypeScript and focused lint
+pass. See
+`deploy/media-transfer-quota-late-original.source.json` and changeset
+`media-late-original-quota-recovery.md`. No provider or checklist acceptance follows.
+
+
+Source-only continuation, 2026-11-14 (C1.12/C11.08): the idle multipart
+consumer leaf separates immutable historical first identity, exact current
+whole-frontier coverage and actual original erasure-job entitlement. The genuine
+worker can reduce that verified no-object cohort atomically without another
+DELETE; raw/session locators stay NULL through fresh READ-only same-original
+late-evidence re-review. Existing listing exposes only the exact eligible old
+ABORT while preserving CREATE debt; current classification restores only after
+actual new reads, two full inventories and guarded review. All first ACK/FIN/
+stop/results, safe declarations, certificate/capture bodies and previous native
+oracles stay intact. Seven functions/sixteen full continuations append after the
+whole749050 owned82 prefix, no schema/model/trigger/service/job/flag/capability
+change. Eight genuine service/TCP/actual-worker controls are PREPARED/UNRUN;
+all qualification is UNRUN in this child. Ordinary physical minimizer/write
+proof stays byte-identical; unverified retained upload binding remains pending.
+No C closure, remote terminal, provider/host/security/stable acceptance. Full
+ordinary/legacy/issued-authority/quota/capture/cutover consumers and all real
+acceptance remain required. See
+`deploy/media-multipart-idle-compact-source-2026-11-14.md`.
+
+Source-only fixture continuation, 2026-11-14 (C1.12/C11.08): the eight idle
+compact lifecycle controls now seed a genuine separate CUSTOMER subject for
+actual owned begin/abort, retaining OWNER for verified privacy and fresh human
+recovery. The real privacy call supplies confirmation ERASE. Its hold control
+uses a separate genuinely verified request for that same subject, because the
+existing public guard correctly freezes changes to an applied pending request.
+Source inspection confirms that guard is request-scoped; creating the second
+request is allowed by the existing service. All expected assertions, case names,
+product/SQL/capability source and frozen0ca BEFORE remain unchanged. Whole-file
+fixture reversal is recorded. All execution/qualification remains UNRUN; this
+supplies no native acceptance or C closure. See
+`deploy/media-idle-compact-fixture-source-2026-11-14.md`.
+
+
+Same-owner auxiliary checkpoint2026-11-14 (C12.38/C9.33/C1.08/C11.08):
+exactb40c8658 sourceV91 PASSES1448 assertions/228 complete selected files/490
+explicit DB skips, fulltypes/lint/metadata. FreshV51 ordinary86 +strictV62
+PASSES160models/362guards/399fullownedfunctions/4091queries/2468expressions;
+actualSDKverify8 PASS, generated public contract unchanged/all11private phases
+hidden,160whole rows/journal/sequence/drain0 invariant. Readonly actual new
+auxiliary/fee/paid installation predicates alltrue with596whole row hashes/
+journal/sequence unchanged, BOTH media capabilities absent. This proves installed
+machinery only. Fullcore service emittedJS before/after audit typing correction
+is byte-identical; actual op identity audited, nonce excluded. V90types and
+both assembly-only preflights retained. A3 desired business natives and original
+fee positive/negative UNRUN/unclosed on this source: known V48 generic controlled
+GET/closure causal defects are being repaired in isolated source, not bypassed.
+All5privacy natives remain explicit predecessor ee7b evidence. Credit/proration/
+unknown/media/fullspec and provider/platform/build/browser/CI/recovery/security/
+signature gates remain required. Remote backup push was automatically rejected
+for unapproved source/audit destination and awaits explicit owner answer; all
+new work stays local. No C closure/stable/post. See
+`deploy/atomic-auxiliary-fee84-root-checkpoint-20261114.json`.
+
+
+Auxiliary source typing repair2026-11-14 (C12.38/C1.08/C11.10): V90 fulltypes
+stops before lint/PG. Generic keyof on a discriminated input union omitted the
+actualOperationId audit key and collapsed private claim inference; framework
+key typing now distributes over validated variants. Runtime parsed-input
+Object.hasOwn selection/redaction/permissions/transactions stay byte-identical;
+actual operation remains audited, nonce excluded. Two generic native spy inputs
+now pass through the actual strict service input parser before identical calls/
+fault timing; every original business oracle unchanged. Exact source reversals
+recorded. V90/assembly preflights retained. Complete fresh source/schema/SDK/
+native/provider acceptance required; no C/stable closure. See
+`deploy/atomic-auxiliary-fee84-type-continuation.manifest.json`.
+
+
+Same-owner auxiliary ROOT assembly2026-11-14 (C12.38/C9.33/C1.08/C11.08):
+frozenaf221 source now follows qualified paid-privacy ee7b/fedc, preserving full
+current MASTER plus only12newleaflines and the actual root namespace/type fixes.
+Owned/normal85 append exact74684/ee68ae91 tail AFTER whole758024/9425c8e2 prefix.
+Five new functions/four full reversible successors retain old fee dispatch and
+all old original journal/default history branches; exactly2kind literals append
+after13old kinds and2lifecycle indexes, zero models/columns/triggers. Three new
+system/external:false names appear in BOTH private literal inventories. Same
+existing original owner/op/fact/closure families govern all four root current
+financial/privacy readers; no hash-domain substitution or shared-profile scope.
+All composed source/schema/SDK and desired native qualification UNRUN; actual
+GET/closure causal repair and full credit/proration/unknown/media/provider/spec
+acceptance remain required. No C closure/stable/post. See
+`deploy/atomic-auxiliary-fee84-root-assembly.manifest.json`.
+
+
+Same-owner atomic fee source 2026-11-14 (C12.38/C9.33/C1.08/C11.08): zero
+new models; two explicitly versioned original-journal fee-only fact kinds and
+exact lifecycle indexes preserve original full/partial return semantics and the
+old fee-dispatch blocker. Actual physical resource/ACK/returned-caller union,
+fresh GET after own target birth, full current pre-POST nonce/holder checks and
+separate current-bank closure are prepared. Generic original historical digests
+and original FIN bodies stay unchanged. All controls and actual desired natives
+are PREPARED/UNRUN; source/schema/provider/security acceptance, credit economic
+partition/reversal and unknown/out-of-band recovery remain required. No C-item,
+stable or launch closure. See deploy/atomic-auxiliary-fee84-source-20261114.md.
+
+
+
+Original-owner paid-privacy checkpoint2026-11-14 (C1.08/C9.33/C12.38/C11.08):
+exactee7b4a39 sourceV89 PASSES1416 assertions/225 complete files/487 explicit
+DB skips, fulltypes/lint/metadata. FreshV50 ordinary86 +strictV61 PASSES160models/
+362guards/394fullownedfunctions/4074queries/2456expressions; actual liveSDKverify8
+passes with unchanged SDK and all160 rows/journal/sequence. ALL FIVE original
+269 privacy natives PASS237.293s: actual verified buyer+frozen seller erasure
+blocks new access after retained paid money, both actual shared/exclusive
+concurrency directions behave correctly, and direct onset/shared/wrong/foreign
+lock plus request/hold ownership rebindings refuse. Original native whole file
+unchanged; independent596-table/86journal/sequence/caps/drain0 snapshots pass.
+Both prior source-pin failures preserved; exact2+2literal source reversals keep
+entire old undo/cartless code and all native/original manifest oracles unchanged;
+focused15 contracts pass. No fee-positive/media/provider/stable acceptance is
+transferred. Separate actual original-cash GET/closure causal repair, auxiliary/
+credit/proration/media/fullspec and all provider/platform/build/browser/CI/
+recovery/security/signature gates stay required. No C closure. See
+`deploy/controlled-paid-privacy85-root-checkpoint-20261114.json`.
+
+
+Paid-privacy handler-pin composition2026-11-14 (C1.08/C9.33/C12.38): V88
+fulltypes/lint PASS; contracts proceed past exact contacts-file composition then
+stop on old cartless whole paid-handler SHA. The source-pin harness reverses
+ONLY the exact unique privacy import+target gate before the entire original SHA;
+original cart/constructors/native/access/undo comparisons and old manifest stay
+unchanged. All changed privacy predecessor SHAs were searched for other pins.
+V87/V88 preserved; focused compositions and complete fresh source/schema/native
+qualification required, no C closure/stable. See
+`deploy/controlled-paid-privacy85-cartless-contract.manifest.json`.
+
+
+Paid-privacy source-pin composition2026-11-14 (C1.08/C9.33/C12.38): V87
+fulltypes/lint PASS; contracts stop on old financial-undo whole contacts-service
+SHA after exactly2new reserved-source fences outside undo. Original source patch,
+whole inverse/order comparisons and every native remain unchanged. The pin
+harness now reverses ONLY those2literal unique lines before requiring the entire
+original file SHA; no general exclusion/hash update. New privacy source contracts
+independently pin full current files and exact additions. V87 preserved; complete
+fresh source/schema/native qualification required; no financial/stable closure.
+See `deploy/controlled-paid-privacy85-undo-contract.manifest.json`.
+
+
+Paid-owner privacy ROOT assembly2026-11-14 (C1.08/C9.33/C12.38): frozen
+269f1e9f source merged, preserving entire current MASTER plus only17newleaflines.
+Owned/normal85 append exact28854/ec0a463b tail AFTER entire729144/842f6d55
+qualified refund-guard prefix; old624213 historical prefix still byteexact.
+Five new full functions/three exact BEFORE guards and two full paid-source/ready
+successors retain old pins and source reversals. Zero models/columns/services/
+flags; original whole paid and fee native cases unchanged. Current composed
+source/schema/SDK/native qualification UNRUN. Separate actual original-cash GET
+causal-v2 repair remains required; no money/provider/stable or C closure. See
+`deploy/controlled-paid-privacy85-root-assembly.manifest.json`.
+
+
+Paid-access privacy SOURCE repair 2026-11-14 (C1.08/C9.33/C12.38): a verified
+erasure request does not yet set the contact erasure marker. New controlled
+period access now requires the same exact frozen-buyer/quote.profileId merchant
+write privacy policy as collection, under the existing shared identity prefix.
+Five bounded shared writers acquire exclusive identity before relevant locks;
+three additive SQL BEFORE guards independently fence new restrictions and
+actual request/hold ownership rebinding. Original money, bank, calendar,
+permissions, retention, observational recovery and historical no-op paths remain.
+The full existing SQL85 prefix and ordinary source bodies are preserved through
+explicit reversals; the owned successor pins every new body/trigger. Zero new
+models, columns, services or flags. Four source contracts and genuine paid-event,
+verification-concurrency and alternate-writer native controls are PREPARED/UNRUN.
+No CPU/PG/provider/SDK qualification ran in this isolated leaf. See
+`deploy/controlled-paid-privacy85.{md,manifest.json,fragment.sql}`. Required actual
+qualification, full proration/specification, provider, security and stable gates
+remain open.
+
+
+Fee160 actual refund checkpoint2026-11-14 (C12.38/C9.33/C1.08/C11.08):
+exactc12dff93 sourceV86 PASSES1412 assertions/223 complete selected files/482
+explicit DB skips, fulltypes/lint/metadata; freshV48 ordinary86 and strictV59
+160models/359guards/389fullownedfunctions/4066queries/2456expressions PASS.
+Current liveSDKverify8 PASS, generated SDK unchanged, all160 whole rows/journals/
+sequence unchanged and drain0. Original full fee nativeV4 FAILS106.292s AFTER
+real refund settles: paid4200/refunded1/payment2, feeops0. Actual original-cash
+GET+8facts+returnedFIN persist, then current inventory refuses. Same-source real
+systemQUERY with SQLreadonly from startup proves own op+all8facts correctly
+excluded by direct recovery reader but reintroduced by nested controlled parent.
+All596 whole rows/86journals/sequence unchanged across diagnosis. Original whole
+native/money/fee/access assertions untouched. V45/V46/V48 datasets retained;
+V3wrapper rejected intendedSQLdelta beforeDB, V1diagnostic importfailed beforeDB,
+both preserved. V49counter negative prepared/nevercreated/unrun. Fix actual
+identity-bound causal composition before new original-positive/negative natives;
+no broad history exclusions, old HMAC rewrite, cached bank or retry waiver.
+Held privacy/credit/proration/media and every full-spec/provider/platform/build/
+browser/CI/recovery/security/signature gate remain open. No C closure/stable/post.
+See `deploy/fee-refund160-root-checkpoint-20261114.json`.
+
+
+Controlled refund timestamp repair2026-11-14 (C12.38/C9.33/C1.08): original
+fee160 V46 native FAILS96.829s at deferred cash guard after genuine customer
+refund ACK+FIN committed. Readonly actual metadata proves retained processing
+refund1 with returned physical ACK/FIN; full596 rows/86journal/sequence unchanged.
+The old guard ignores refunded/failure fields but omits the ordinary canonical
+updated_at=now() delta, so it wrongly asks a committed old batch for new cash
+admission. One appended complete successor preserves entire old body and adds
+ONLY timestamp-qualified equality over the same old mutable fields+updated_at.
+Principal/status/provider/invoice/origin remain immutable; no old bank or batch
+is reused. Entire725367 priorSQLprefix/oldshape/stage/ready/refundguards and
+original complete fee natives unchanged. V45/V46 retained; prepared V47negative
+was never run. Source/schema/SDK and fresh original full natives remain required;
+no C closure, actual provider or stable acceptance. See
+`deploy/controlled-cash-refund-transition85.manifest.json`.
+
+
+Fee160 original native/fixture checkpoint2026-11-14 (C12.38/C9.33/C1.08):
+actualV45 positive fee journey FAILS97.070s on the customer refund transport.
+Two real payments/core3 retain4200 and one genuine initial source GET+result+
+FIN succeeds; no customer refund or fee operation commits. Same-source readonly
+wire metadata proves frozen logical flagsfalse, correct retained PI, but both
+optional wire toggles OMITTED. The new fictional bank wrongly required literal
+false strings, throwing before returning its refund. Official Stripe destination
+refund docs verify omission retains fee/transfer. Exactly TWO fixture assertions
+now apply that false default ONLY to omitted fields; explicittrue/malformed
+still fails. Production frozen serializer/body/SQL and original entire fee native
+case unchanged. All596 hashes/86journals/sequence unchanged across diagnosis,
+drain0; V45 and first failed diagnostic (wrong metadata-key check) preserved.
+Fresh ordinary/schema/current qualification and original full native rerun
+remain required; no native/provider/stable acceptance transferred.
+See `deploy/controlled-refund-wire-defaults160.manifest.json`.
+
+
+Fee160 schema/SDK checkpoint2026-11-14 (C12.38/C9.33/C1.08/C11.08): exact
+5e609ff2 sourceV85 PASSES1412 assertions/223 complete selected files/482 explicit
+DB skips, fulltypes/lint/metadata. FreshV45 ordinary86 and strictV56
+160models/359guards/389fullfunctionbodies/4066queries/2456expressions PASS.
+ActualSDK update+verify8each PASS with160whole-row/journal/sequence invariance
+and drain0; generated SDK adds exactly5scoped names and hides all8private names,
+with no public removals. V26 wrapper failed ONLY on parsing its TS trailing
+comma AFTER tests/snapshots; V27 completion exceeded git's1MiB read buffer BEFORE
+DB. Both preserved; V28 read-only completion validates exact original16results,
+corrects only parsing/buffer and rechecks160rows/journals/sequence unchanged.
+No generation rerun or generatedcode hand edit. GeneratedSDK fulltypes/lint/
+metadata and actual fee/paid business natives remain required. Held privacy,
+auxiliary owner/credit/unknown recovery and media/full-spec/provider/platform/
+build/browser/CI/recovery/security/signature gates remain open. No C closure.
+See `deploy/fee-invocation160-schema-sdk-checkpoint-20261114.json`.
+
+
+Fee160 verifier source correction2026-11-14 (C12.38/C1.08): V84 fulltypes
+PASS5.322s; lint stops on an inline type import and implicit string coercion of
+unknown JSON namespace fields. The function reference is now imported type-only;
+signed admission verification explicitly requires actual string platform/PI and
+string/null/absent account before forming the same namespace. No string coercion
+can give malformed object/array/numeric atoms a namespace. A genuine crypto
+negative re-signs those malformed inputs and requires refusal; all valid hash
+domains and original cases stay unchanged. Complete source/schema/SDK/native
+qualification remains required; no financial/provider/stable closure.
+
+
+Fee160 source type correction2026-11-14 (C12.38/C9.33/C1.08): V83 full
+TypeScript stops on the new fictional bank refund handler assigning actual
+POST metadata to a narrowly inferred response object. Its existing local
+variable now has the same provider-record type as the bank map; exactly one
+annotation, no runtime/oracle/provider-body change. No lint/contract/database/
+native started on that failed gate. Fresh complete source160 qualification
+remains required; no C closure/stable or actual provider acceptance.
+
+
+Fee invocation160 ROOT SOURCE assembly2026-11-14 (C12.38/C9.33/C1.08/C11.08):
+frozen6e87 source now composes with qualified media5df/7322, preserving entire
+current MASTER plus only17newagentlines and the qualified cartless-compatible
+postpay helper. The four central financial/privacy readers and safe archives now
+include actual payment/receipt-owned GETs even with NULL fee operation, complete
+PG row hashes, table+UUID identity and one5000 bound, avoiding double-count with
+externally selected controlled rows. Seller filtering requires accepted target
+quote profile AND exact collection. Eight private names are in BOTH literal
+inventories; actual pair undo callback fence is retained. Owned/normal85 append
+ONLY the two exact frozen tails after whole624213/9b6144 prior prefix; model
+count160, actual publictabletarget596, journal86. Every source/schema/SDK/native
+qualification is UNRUN on this composed source. Same-source auxiliary owner,
+credit/noncash and unknown/external-return work, paid-access privacy repair,
+media/full-spec/provider/platform/build/browser/CI/recovery/security/signature
+remain required. No C closure, actual provider or stable claim. See
+`deploy/fee-invocation160-root-assembly.manifest.json`.
+
+Original atomic-fee residual source checkpoint 2026-11-14 (C12.38/C9.33/
+C1.08/C11.08): real4199/F400+1/F0 captures and tiny principal return retain the
+immutable Fi and explicit whole399 debt until the exact original fee1 return,
+actual caller/result/FIN and fresh lineaged bank400/refunded1 agree. ONE new
+payment/receipt-owned invocation model records no-operation source GETs and an
+explicit actual adapter-preflight child under each real original POST/recovery
+holder. Counter mismatch retains its raw response before refusing; no zero fee
+operation, historical caller birth, amount owner or provider-atomicity claim.
+Same-transaction real claim/unique POST birth and independent SQL/SDK boundaries,
+shared owner recovery/debt views and four locales are prepared. Root central4,
+private inventories, SDK, source/schema/native/provider/security acceptance and
+same-source original auxiliary-owner/noncash/unknown disposition continuations
+remain REQUIRED. This child ran no execution or qualification; no normal/published
+SQL or root central consumer changed. No C-item/stable/announcement closure. See
+`deploy/controlled-atomic-refund160-source-20261114.md` and its source manifest.
+
+
+
+Media composed checkpoint2026-11-14 (C1.12/C11.08/C12.38/C9.33/C1.08): exact
+5df00274 sourceV82 passes1351 assertions/218 complete selected files/480 explicit
+DB skips and fulltypes/lint/metadata. FreshV44 ordinary86 and strictV55
+159models/357guards/377fullfunctionbodies/4009queries/2418expressions pass;
+actualSDK8+8 invariance/drain0 pass. Original unchanged fullpaid155 regression
+PASSES64.723s on this composed schema, with separateactualmoney/accessTX,
+alloriginalhistory/repeat/overlap/export/mergeundo oracles and independent595
+snapshots/159models/86journals/capsabsent/drain0. Genuine media retirement/worker/
+re-review natives remain UNRUN: they require the complete request AND part
+protocol; both actual capabilities remain absent, no temporary publisher or
+fabricated context. Remaining media source/minimization/remote authority/quota/
+capture/cutover and fee/proration/full-spec/provider/platform/build/browser/CI/
+recovery/security/signature gates stay open. No C closure or stable/post claim.
+See `deploy/media-retirement159-root-checkpoint-20261114.{md,json}`.
+
+
+Media boundary-inventory correction2026-11-14 (C1.12/C11.08): V81 fulltypes
+and affected lint pass, then the first contract failure identifies the private
+seal service missing from the SECOND explicit external:false inventory. Its
+system-only inventory entry already exists. The exact private name is now
+listed in both, preserving every permission/HTTP/MCP/SDK nonexposure assertion;
+no production permission or service behavior changes. V81 stopped at42 actual
+assertions and cannot count as a complete source pass. Full source and actual
+schema/worker/native/provider qualification remain required; no C closure.
+
+
+Media composed source correction2026-11-14 (C1.12/C11.08): V80 full types
+PASS70.080s; affected lint stops on one capture helper imported as runtime when
+used only by ReturnType. Exactly that import is now type-only, preserving all
+function bodies and SQL. No database/native started on V80; complete selected
+contracts/metadata remain UNRUN. The earlier suspected redaction-field issue
+was checked against the complete actual CTE: resource.redacted_at is explicitly
+projected and valid, so no SQL or predicate was changed. Fresh source/schema/
+SDK/media/native/worker and all acceptance remain required; no C closure.
+
+
+Media retirement SOURCE assembly2026-11-14 (C1.12/C11.08): frozen000d/7396/
+be87/b72b now compose with the qualified financial source, preserving entire
+current status text plus only53 new agent evidence lines and root type/lint
+corrections. Owned82 and ordinary82 now match749050/a52d8e61, with the complete
+649575/e704e568 prior prefix intact. Exactly one nullable/no-default/no-backfill
+review proof column/CHECK and one new guard; no model or capability publication.
+Finite strict-parser extension recognizes only the existing scalar reviews
+rowtype: eight controls pass, all411 prior parsed journal functions stay exact,
+all421 held functions/owned headers are covered. Fresh composed source, schema,
+SDK and actual media/worker/native acceptance remain UNRUN. Raw minimization,
+exposed/unknown/legacy/extra-session/capture/quota/cutover and all stable/provider/
+security/signature gates stay open. See
+`deploy/media-retirement159-root-assembly.manifest.json`.
+
+
+Actual financial rollback continuation2026-11-14 (C1.08/C12.38/C9.33):
+12b9600c changes only the finite genuine producer warmup and documentation;
+product/schema bytes remain exact c6. SourceV79 passes1321/210/458 explicit
+DB skips, full types/lint/metadata; freshV43 ordinary86/strictV54/SDK8+8 pass.
+Injected-after-actual-grant-inverse undo PASSES67.822s with entire595 equality.
+Original uneven/equal atomic rollback cases PASS63.525s/61.870s, proving exact
+SQL23514 injected failure AFTER a genuinely succeeded earlier payment, all
+original snapshot/provider-count oracles and temporary-trigger rollback.
+Independent595 snapshots/159models/86journals/capsabsent/drain0 pass for each.
+Raw4200 bank receipts remain, canonicalpaid0/payments0/core3zero. V42 and all
+older failures preserved. Combined with c6 originalfullpaid/mergeundo and
+clean/newread/refund controls, this supplies bounded local fictional-provider
+financial acceptance, no actual provider/account, C closure or stable sign-off.
+Held media source and remaining fee/proration/full-spec gates stay open.
+
+
+Actual full paid/undo checkpoint2026-11-14 (C12.38/C9.33/C1.08): exact c6c7d449
+source V78 passes1321 assertions/210 complete selected files/458 explicit DB
+skips and types/lint/metadata. Fresh V42 ordinary86 and strictV53
+159models/356guards/367completefunctions/3995queries pass; actual SDK8+8 and
+read-only real undo-lock SQL schema check pass. Original fullpaid155 PASSES
+68.831s with separate money/access transactions and original windows/usage,
+fresh IDs, overlap/repeat/export/merge/undo oracles. Dedicated clean undo
+PASSES69.183s; newer real financial read/refund refusal cases PASS75.350s and
+71.739s with full595 table equality. Independent snapshots/journal/caps/drain
+pass for each. Injected-after-actual-grant-inverse native FAILS62.813s only at
+final595 equality: normal pre-business-TX producer restart adds deployment and
+job-runtime rows after the fixture had stopped it. Exact injected failure and
+inverse call assertions were reached, but complete rollback acceptance remains
+OPEN. V42 is preserved; the finite fixture correction warms the genuine producer
+before the snapshot, preserving all original case bodies and full595 oracle,
+without exclusions/mocks/product changes. Fresh qualification required. No
+provider-account, independent security, full-spec or stable/signature closure.
+See `deploy/current-source159-payment-checkpoint-20261113.{md,json}` and
+`deploy/verified-financial-contact-undo-runtime84.manifest.json`.
+
+
+Undo lock-source follow-up 2026-11-14 (C1.08/C12.38): full source V77
+passes1321/210/458 explicit DB skips, but source review then finds one raw SQL
+ownership typo before native execution: credit_notes has invoice_id, no
+contact_id. The lock discovery now joins its real invoice FK before contact
+selection, preserving all recursive edges/bounds. An additional exact actual
+payment callback key uses NONBLOCKING try-lock/refusebusy only for tracked fee
+invocations; no fingerprint or canonical prefix is waived. The complete helper
+reverses byte-exact to the frozen agent source through two explicit deltas;
+new source/native checks remain required. Future fee producer/callback fencing
+is still an activation dependency, not qualified by this key alone. Licensing
+metadata added to the source manifest; original source patch and3original body
+hashes remain unchanged. All full-spec/stable gates stay open.
+Financial merge undo verification SOURCE repair2026-11-14 (C1.08/C12.38):
+actual cartless V39 failed after merge although a genuine read-only diagnostic
+proved all370 current subscription evidence entries exactly equal to its stored
+merged snapshot. Undo's own earlier inverse writes invalidated that snapshot.
+Optional same-TX reference preparers now verify complete existing invoice and
+subscription comparisons BEFORE any inverse write, under one complete pair-wide
+resource/parent/canonical/cash prefix and nonblocking actual inspection callback
+fences. Original inverse order, all financial fingerprints and foreign-change
+refusals remain; direct restore still verifies. No schema/SQL/permission or grant
+quota policy change. Original full paid native bytes unchanged; six source and
+four actual desired controls PREPARED/UNRUN. Root qualification remains required;
+no stable/C-item closure. See `deploy/verified-financial-contact-undo-source-20261114.md`.
+
+
+Actual partial/refund/atomic checkpoint 2026-11-14 (C12.38/C9.33/C1.08):
+original tiny-partial V37 PASSES48.995s (paid1/outstanding4199/no paid effect);
+original newest-refund V38 PASSES67.473s (canonicalpaid4200 but actual latest
+refund1 refuses access); original uneven two-receipt V40 PASSES96.932s with
+actual1/F0+4199/F400, distinct2payments/receipts/links and one complete batch.
+Each has independent595 snapshots, exact86 journal/caps and drain0. Original
+rollback V41 FAILS58.105s because its assertion looks for the injection text
+in Drizzle's outer query message. Afterstate is canonicalpaid0/payments0/core3
+zero with2raw receipts retaining4200, but exact cause and later internal snapshot
+assertions are not yet qualified. ONLY2 negative matcher expressions now require
+actual Error.cause SQL23514 AND exact original injection message; the real SQL
+trigger/first-succeeded predicate and every other native byte stay unchanged.
+Fresh complete rollback acceptance remains required. V39 full paid cart-free
+native also remains failed at inverse ordering; genuine same-source readonly
+framework diagnosis proves370/370 current entries EXACTLY match stored merged
+afterstate before inverse writes, all595 hashes/journal/sequence unchanged.
+No original financial evidence may be waived. All full-spec/provider/security/
+final stable gates stay open. See `deploy/controlled-atomic-rollback-cause84.manifest.json`.
+
+Paid-period merge fixture SOURCE correction2026-11-14 (C9.33/C12.38/C1.08):
+actual V36 reached genuine paid effect/history/export/merge, then undo correctly
+refused the unrelated original checkout setup cart. Cart undo captures every
+contact cart regardless of status; no guard or cart state is relaxed. A separate
+actual catalogue→agreement→controlled-period fixture now creates NO cart and is
+used ONLY by the full paid merge/undo scenario, which proves both real contacts
+cart-free before merge. Original checkout/provider/default period constructors
+remain byte-identical; full native reversal retains every business/timestamp/XID/
+undo/export oracle. Source controls PREPARED/UNRUN; root fresh qualification is
+required. No product/SQL/provider changes, C-item or stable closure. See
+`deploy/cartless-paid-merge155-source-20261114.md`.
+
+Paid native identity timestamp continuation 2026-11-14 (C12.38/C9.33/C1.08):
+complete source V74 passes1310/207/454 skips after the retirement timestamp
+oracle correction. Read-only source review identifies the same mandatory
+$onUpdate rule in registered grant contact merge and undo. Their two later
+assertions now retain every original field comparison except updatedAt, which
+must equal the actual unique PG operation timestamp, with grant row-XID equal
+the actual merge/undo operation row and exact full-time bounds. No product,
+permission, used/window/createdAt or money predicate changes. Those later
+contexts were NOT reached in V35; no execution acceptance is claimed. Combined
+two oracle manifests reverse to the entire original paid native byte-exact;
+renewed source and fresh full scenario remain required. See
+`deploy/controlled-paid-period-identity-timestamps155.manifest.json`.
+
+Actual paid-effect commit / timestamp oracle correction 2026-11-14
+(C12.38/C9.33/C1.08): b30 source1310/207/454 skips, fresh V35 normal86,
+strict159/356guards/367completefunctions and SDK16 pass. Original paid native
+V4 then commits money and one independent actual effect, but FAILS64.120s at
+its oldgrant equality expecting updatedAt unchanged. Mandatory shared $onUpdate
+SQLnow must record status retirement. Same-source READONLY diagnosis proves
+2expired+2fresh grants in the actual effect row transaction, old updated_at
+EXACTLY equals new SQL created_at, and effectTX differs moneyTX; all595 table
+hashes/all86 journals/sequence unchanged and drain0. V35 remains preserved.
+Only the test timestamp oracle changes: every old ID/contact/source/entitlement,
+startsAt/endsAt/used/createdAt equality stays, updatedAt must equal actual fresh
+birth PLUS full PostgreSQL timestamp and row-XID proof; no anyDate/date/usage
+waiver. Remaining original assertions need a fresh complete native pass; this
+correction is PREPARED/UNRUN. All stable/provider/full-spec gates stay open.
+See `deploy/controlled-paid-period-updated-at-oracle155.manifest.json`.
+
+Actual original money PASS / independent access failure 2026-11-14
+(C12.38/C9.33/C1.08): at6aaf, complete source1310/207/454 explicit DB skips,
+fresh V33 normal86 and strict159/356guards/367completefunctions, SDK16 all pass.
+The ORIGINAL full local application V9 PASSES1 actual/10filtered in61.866s:
+actual4200 CADminor invoice settlement, one real payment and core3each1, unchanged
+access inside the genuine money TX, independent all595 snapshots/journal/caps/
+drain0. No actual provider account acceptance transfers. Fresh V34 normal86 and
+strict159 also pass. The independent paid-period native then FAILS72.734s after
+money committed: raw grant-window SQL passes JavaScript Date objects to a driver
+expecting timestamp strings. Target remains paid4200/payment1/core3each1 but
+paid-effect receipt0; full595 afterstate/drain0 preserved. Three parameters now
+use validated Date.toISOString() with explicit timestamptz casts; every exact/
+overlap/null/usage/history predicate is otherwise byte-identical. This source
+repair is PREPARED/UNRUN; source plus a new fresh independent access native must
+qualify. V34 is never reset. All other full-spec/provider/recovery/security/final
+stable gates remain open. See
+`deploy/controlled-paid-period-timestamp155.manifest.json`.
+
+Period guard source-control correction 2026-11-14 (C12.38): first composed
+source V71 stops at one test helper selecting the trailing EXECUTE FUNCTION
+trigger reference instead of the actual CREATE FUNCTION declaration in the
+older legacy fragment. No SQL predicate or expected original-body hash changed.
+The test helper now selects only anchored CREATE/CREATE OR REPLACE declarations;
+its exact whole legacy-body, original ready-body and frozen-prefix assertions
+remain mandatory. V71 is a failed partial source run, not1310/207 acceptance;
+focused and full source checks must rerun before fresh database qualification.
+
+Controlled/legacy period integration checkpoint 2026-11-14 (C12.38/C9.33):
+original application V7 at766 clears full bank/admission/payment birth but the
+old period-route trigger demands an unrelated legacy schedule observation.
+Its transaction rolls back completely: paid0/payment0/core3zero, authentic4200
+CAD minor receipt retained, independent595 snapshots/drain0; V31 stays preserved.
+New source distinguishes an actual controlled origin/generated payment link,
+then requires the entire existing same-transaction original bank/parent route
+validator; missing origin or invalid stage refuses before any legacy fallback.
+Removing one literal branch restores every ordinary legacy byte. Current ready
+guard retains all prior bank/validator/route pins and adds the full period body
+and exact enabled BEFORE INSERT ROW trigger. Two replacements append after all
+614412 frozen SQL85 bytes; no new function/model/trigger/journal or permission.
+This composition is PREPARED/UNRUN. New amount regression controls preserve their
+entire exact614412-byte checkpoint while allowing separately checked later SQL
+suffixes; no prior predicate/body oracle changes. Renewed source/strict complete
+function-origin inventories and original money/access natives remain required;
+no C closure or stable/provider sign-off. See
+`deploy/sql/0085_controlled_period_route_successor_20261114.manifest.json`.
+
+Controlled original-period route SOURCE correction2026-11-14 (C9.33/C12.38/C1.08):
+actual V31 reached a genuine created payment/lifetime receipt link, then the
+legacy period trigger required unrelated old schedule invoice observations and
+rolled back all canonical money. A separate UNAPPLIED owned85 successor now
+admits only the exact controlled origin through the FULL existing signed
+same-transaction bank/parent route validator; recognized invalid controlled
+candidates refuse before fallback. Removing its one branch restores every byte
+of the old ordinary policy. Readiness additionally pins that complete function
+and the exact enabled original period trigger while preserving all existing
+bank/validator/route pins. Four source controls are PREPARED/UNRUN; no migration,
+CPU/native/provider execution or acceptance occurred in this lane. Root owns
+assembly after the full614412-byte prefix and fresh strict/actual qualification.
+C12.38, public composition/proration and stable remain open. See
+`deploy/controlled-period-route-lineage84-source-20261114.md`.
+
+Actual application retry 2026-11-14 (C12.38/C9.33/C1.08): cb2 source
+passes1302/205/454 explicit skips; fresh V30 normal86, strict159/356guards/
+367completefunctions, SDK16 and112 standalone amount expressions pass. Original
+native V6 then refuses batch INSERT with SQL42804: root patch generator reentered
+a newly inserted CASE at repeated payment amount sites, nesting one extraction
+while leaving a later boolean use. Earlier numerical checks qualified individual
+expressions, not their complete function composition. V30 is preserved with no
+admission/payment; independent595 snapshots/drain0 remain. A new single-pass
+seven-site whole-function replacement plus single-pass exact reversal preserves
+all original bank predicates and the entire592389-byte prior SQL85 prefix; its
+new complete body remains pinned alongside the original boolean validator.
+This correction is PREPARED/UNRUN and requires renewed genuine native acceptance;
+all payment/access/full-spec/provider/security/final stable gates stay open.
+See `deploy/controlled-cash-bank-minor-sites84.manifest.json`.
+
+Actual application checkpoint 2026-11-14 (C12.38/C9.33/C1.08/C11.08):
+f38 source passes1302 assertions/205 selected files with454 explicit DB skips;
+fresh V29 applies86 ordinary migrations, then strict159 passes356 guards/367
+complete SQL function bodies, including the independently inventoried numeric
+helper. Real SDK generation8 plus verification8 passes unchanged. The original
+full local application clears its prior page-cohort refusal but FAILS at batch
+INSERT: the exact bank reader assigns an existing boolean minor-value validator
+to bigint. No admission/payment is committed; original4200 CAD minor cash stays
+retained, core batch/receipt/link each0. Independent all595 snapshots and drain0
+are preserved. A finite seven-expression successor validates first, then reads
+the exact JSON integer (invalid input remains NULL/refusal), preserving every
+other ownership/identity/conservation predicate and the entire570287-byte SQL85
+prefix. Existing boolean validator stays unchanged; ready guard additionally
+pins the entire corrected bank body. This new SQL source is PREPARED/UNRUN;
+fresh migration/schema/numerical/native qualification is required. Payment/access,
+full specification, actual provider/platform/recovery, independent/final sign-off
+and stable remain open. See `deploy/controlled-cash-bank-minor-value84.manifest.json`.
+
+Original pay-caller inventory cohort source correction 2026-11-14
+(C12.38/C9.33/C1.08): actual V28 retained4200 safely, then prospective application
+refused only three line/payment page facts from pay39. Its genuine caller performs
+an open preflight inventory, the real pay POST/ACK and another inventory; global
+same-caller pagination incorrectly joined the two terminal page runs. A bounded
+consumer now derives each run from existing signed invoice_read anchors and the
+actual intervening controlled_invoice_paid fact. Complete original caller/request,
+exact target/component/price/PI/cash ownership and an independent full CURRENT
+manifest remain mandatory. Every original occurrence is retained; no invented
+pass ID, annotation, amount-based adoption, page value deduplication or blanket
+pay exemption. Default completePages/currentProof remain byte-unchanged. Sixteen
+new chronological signed-raw controls are PREPARED/UNRUN; the original real native
+oracle remains unchanged and must qualify. No SQL/model/permission/provider or
+stable claim. See `deploy/controlled-pay-inventory-cohorts84-source-20261114.md`.
+
+Composed source checkpoint 2026-11-14 (C1.12/C11.08/C12.38/C9.33):
+current-bank principal/ordinary legacy empty-read boundaries and tracked first-ACK
+CREATE/idle ABORT/verification-only ABORT source are integrated. New normal82
+preserves all488021 prior bytes and materializes the exact649575-byte owned
+successor. A genuine readonly framework diagnostic of failedV28 isolates only
+three page atoms from one original pay39's distinct pre/post invoice reads;
+53 other atoms resolve, all595 row hashes/all86 journals/sequence stay unchanged,
+no callers remain and no payment/admission exists. Exact signed-anchor cohort
+repair is in progress, without deduplication or ownership exemption. Current
+composed source/schema/native/SDK acceptance must rerun; new160 fee-call model
+is still isolated/incomplete, both media capabilities absent, all stable gates
+open. See `deploy/sql/0082_tracked_create_abort_successors_20261114.manifest.json`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): genuine human multipart
+recovery now has a retained-first-ACK CREATE path. Exact original baseline,
+physical nonce/runtime/full ACK/UploadId and actual FINs or independent stop
+precede a fresh empty original-session inspection and two complete immutable
+provider inventories. Immutable applied review permits genuine future parts/
+completion without changing the original failed/NULL return, ACK or FIN.
+Unknown-no-ACK singleton sessions remain pending; session retirement, issued
+URL consumption, erasure and quota release are not inferred. Exact reviewed
+local CREATE closure can permit ordinary stopped-executor drain release while
+all other namespace/cohort checks remain. The earlier ordinary review trigger's
+unconditional multipart refusal is replaced by the same full mandatory typed
+proof predicates, preserving old ordinary/transfer branches and c792 oracles.
+Six functions/eight continuations append after the intact c792 owned82 prefix;
+no model/column/trigger/capability/journal is added. Eight proof/five genuine
+service/SDK/browser PUT/fictional TCP controls are PREPARED/UNRUN; 1633836e
+original-fixture type-only alignment is explicit. No child execution/provider/
+host action or C closure. Unknown/legacy/terminal/session/capture/quota/cutover,
+full qualification, actual provider/operator/platform acceptance, independent
+review and stable sign-offs remain open. See
+`deploy/media-multipart-known-create-recovery-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): the existing authorized
+owner/expiry/verified-first-scope cleanup has a genuine idle original multipart
+ABORT path. Exact known CREATE and every unused/withheld issuer must close;
+exposed/unknown URLs, holds, foreign generations and unbound charges refuse.
+A permanent original namespace/key admission fence precedes one real ABORT.
+Actual ACK/FIN, fresh accounted exact-session/object absence and two complete
+immutable physical inventories precede retirement of only that original pending
+pointer. No TTL/logical404/browser callback, quota release, global legacy gate
+or remote issued-link closure is inferred. Never-dispatched CREATE has its own
+strict real original proof; lost/failed ABORT stays pending without replay.
+Seven proof/seven genuine service/SDK/fictional TCP controls are PREPARED/UNRUN;
+all prior oracle bodies remain intact. Six functions/three continuations/three
+mandatory guards append after the intact known-CREATE owned82 prefix, with no
+model/column/journal/capability change. No child execution/provider/host action
+or C closure. Unknown/terminal/legacy/session/capture/quota/cutover work, all
+qualification/external/platform/independent review and stable gates remain
+open. See `deploy/media-multipart-idle-retirement-source-2026-11-13.md`.
+
+Source continuation 2026-11-14 (C1.12/C11.08/C3.22): explicit fresh-human
+multipart cleanup can verify a failed/unknown original idle ABORT without a
+new DELETE. Exact original caller/nonce/session, every creator independently
+closed, permanent namespace/key fencing, actual local FIN or independent stop,
+fresh two-request absence and two full immutable provider passes precede a
+typed retired review. Original missing ACK/FIN/first result stay unchanged;
+held/retained/foreign/charged/exposed cohorts refuse. Earlier failed inventory
+is not refilled. Exact actual-FIN reviewed CREATE/ABORT can close its own
+pre-drain cohort without inventing a Linux stop FK; all other drain/plan
+requirements remain. Three functions/nine continuations append after the
+intact idle owned82 prefix, with no trigger/model/column/journal/API/capability
+change. Eight proof/six genuine service/SDK/fictional TCP controls are PREPARED/
+UNRUN, all prior oracle bodies intact. No child execution/provider/host action
+or C closure. Remote authority/unknown/legacy/certificate/quota/capture/cutover,
+full qualification and external/platform/independent security/stable gates
+remain open. See `deploy/media-multipart-abort-recovery-source-2026-11-14.md`.
+
+Controlled principal old-empty successor source checkpoint 2026-11-13
+(C12.38/C1.08): the existing receipt/namespace and immutable agreement route are
+read before future application links. Only an ordinary key, zero actual receipts,
+no controlled namespace/alias and a valid ordinary method/attempt shape can take
+the early legacy empty return. Reserved controlled-receipt keys and every known
+controlled source still require full membership/HMAC/current-bank proof; missing
+or foreign schedule aliases refuse. This relies on the actual existing signed
+receipt/trigger-only immutable birth key invariant, not on detecting arbitrary
+corruption after guards are bypassed. The independent same-transaction principal
+refusal remains unchanged; the traced shared writer has no such call before
+commit. Two principal natives now carry the exact frozen genuine post-write
+manifest GET/retention helper before inspection/application. Nine selector and
+two source controls are PREPARED/UNRUN. No guard/SQL/permission or acceptance
+waiver. See `deploy/controlled-principal-oldempty84-source-20261113.md`.
+
+Controlled canonical current-bank principal source checkpoint 2026-11-13
+(C12.38/C9.33/C1.08): applied controlled receipts now require their actual
+committed signed batch/receipt and generated-payment lifetime link, immutable
+per-receipt route/fee epoch, latest HMAC admission-lineage RETURNED bank facts,
+and separately rechecked complete current namespace/parent PG graph. A bare
+later refund/dispute inspection is effective even without a recovery owner;
+no fully-paid-invoice, prospective application proof or old cash transaction
+is substituted for current principal. Known wrong recipients refuse; ancillary
+unknown/owed commission remains separate review. Actual controlled counting
+uses one table/identity union and refuses conflicting full PG SHAs/overflow;
+ordinary default history/digest shapes and existing recovery/caller requirements
+remain. Nine pure and two genuine partial-principal/later-refund native controls
+are PREPARED/UNRUN, with no source/native/SQL/provider acceptance claimed.
+Remaining actual recovery, proration/credit/terminal and launch work stays
+REQUIRED. See `deploy/controlled-canonical-bank-principal84-source-20261113.md`.
+
+Actual application witness correction 2026-11-13 (C12.38/C9.33/C1.08):
+V27 with the genuine fresh paid manifest passes the earlier freshness boundary,
+then refuses before admission with BigInt JSON serialization in the derived
+fee witness. Actual source history deliberately returns three BigInt totals;
+only that local derived witness now uses the existing checked safe-integer
+conversions, retaining pending and every original money/raw/namespace predicate.
+The shared canonicalizer/signature format and all SQL stay byte-identical.
+Failed V27 retains paid0/payment0/receipt14200, three actual manifest proofs,
+one genuine inspection and all595 table snapshots with zero clients. Exact
+finite source/reversal identities are recorded in
+`deploy/controlled-cash-prior-witness84.manifest.json`. Source and fresh native
+renewal remain required; no application/access/C-item/stable acceptance.
+
+Current159 payment checkpoint 2026-11-13 (C12.38/C9.33/C1.08/C1.12/C11.08):
+source6791 passes1243 actual/196 selected files,433 explicit DB skips and full
+types/lint/metadata. FreshV25/V26 all86 migrations pass; strict159/353 guards/
+351 full bodies/3976 readonly queries pass, with both media capabilities absent.
+Actual SDK generation8+verification8/full types pass. Original provider collection
+now PASSES32.419s at02b44a5c, retaining real4200 CAD minor units with local
+paid0/payment0 and original access. The next full-application native FAILS before
+admission: retained manifest38 precedes actual pay39. All595 whole-row hashes/
+86 journals/sequence remain unchanged across readonly diagnosis; V26 is preserved.
+A genuine post-pay fixture GET/retain is pending, with no freshness guard waiver.
+No application/access/provider/full-spec/stable closure. See
+`deploy/current-source159-payment-checkpoint-20261113.md` and its hash manifest.
+
+Source fixture correction 2026-11-13 (C12.38/C9.33/C1.08): preserved actual V26
+full application correctly refuses its retained pre-pay manifests33/38 after
+the real admitted pay39. Root read-only evidence confirms exact proof/result/
+canonical identity and the sole later bank mutation; original guard remains
+unchanged. Prepared staged/paid application fixtures now admit, execute and
+retain a genuine post-pay manifest GET before cash inspection/application,
+preserving all prior money/access/rollback oracles. An additional desired native
+retains the stale-proof refusal then proves genuine refresh without a second
+pay POST. Child source-only, all controls UNRUN; root source/fresh native renewal
+required, failed V26 preserved. No C-item/stable/provider/launch acceptance.
+See `deploy/controlled-postpay-manifest84-source-20261113.md`.
+
+Paid-period forward assembly 2026-11-13 (C9.33/C12.38/C1.08): the real
+paid-effect model and existing subscription/event/grant/catalogue mutations now
+compose with actual target-derived invoice/profile history and the ordinary
+paid-invoice event. New85 appends the exact41809-byte paid suffix after the
+entire528451-byte atomic prefix; published0–79 and frozen80/81/83/84 stay intact.
+The affected strict inventory must expand154→159, including the four existing
+parent/access tables. Source, fresh ordinary schema, SDK and actual money/access/
+recovery/provider/security acceptance remain PENDING. Prior3b4f488d source-only
+qualification passes1221 actual/191 whole selected files,422 DB skips and full
+types/lint/metadata, but predates this paid integration. No C-item/stable closure.
+
+Source correction 2026-11-13 (C1.12/C11.08/C3.22): root v58 compiler stopped
+before business/native execution on multipart cursor/page inference, a widened
+negative fixture kind and two shadowed fetch type references. An isolated c792
+descendant supplies explicit actual types/literals/global fetch references and
+lists the eight exact existing scoped private recovery phases in the reviewed
+service inventory. All assertions, runtime/SQL/permission/timeout/capability
+semantics remain unchanged. This child ran no qualification/execution/provider/
+host action; root renewal is pending and all readiness gates remain open. See
+`deploy/media-multipart-recovery-types-source-2026-11-13.md`.
+
+Integrated successor checkpoint 2026-11-13 (C1.12/C11.08/C12.38/C9.33):
+latest actual V24 native advances through NET4000 and TAX200 then refuses an
+older mixed-list snapshot before set-fee. Failed database and all raw evidence
+remain preserved; no payment or receipt is created. The exact historical
+LIST/read/mutation proof repair and paid-family composition are in progress.
+Atomic actual-fee and tracked multipart withheld/readback/unknown-COMPLETE
+branches are integrated in the isolated checkout; new normal82 preserves its
+entire383272-byte prefix and normal85 its entire453680-byte prefix. These
+integrated source/normal-schema/native/SDK gates are PREPARED/UNRUN. No storage
+capability, C-item closure, stable release or announcement is authorized by
+this checkpoint. See `deploy/sql/0082_0085_integrated_successors_20261113.manifest.json`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): the actual current local
+issuer may retain a distinct first WITHHELD disposition only in its owning
+failure continuation, before returning any URL, with its exact original mint,
+nonce and real request/caller FINs. Earlier successful/FAILED results, missing
+FINs and restored-snapshot absence cannot become withheld proof. New attempts
+have new identities; accepted/unknown remote authority still blocks cutover.
+Interrupted projection uses only complete retained first proof. Later genuine
+positive facts are retained before reopening original debt. Existing model state
+and SQL checks distinguish this from unattempted minting/provider revocation;
+no new model/column/capability is added. Four locales give bounded owner recovery
+guidance through the real shared query. Six ownership and five actual-service/
+SDK/TCP controls plus one SQL evidence-guard control are PREPARED/UNRUN; all old
+oracles and preceding owned SQL remain intact. No child execution/provider/host
+actions or C-item closure. Genuine remote terminal consumption, unknown/legacy
+recovery, authority-certificate minimization, session/capture/quota/cutover and
+all qualification/external/independent/stable gates remain open. See
+`deploy/media-multipart-withheld-issuer-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): real normal multipart
+completion now streams every original fixed part boundary/checksum as well as
+whole-file SHA before object adoption, binding its actual body fact to the
+immutable original manifest, pinned revision and CREATE nonce. Reported ETag,
+part listing, size or Content-Length cannot substitute. Same-size changed
+stored bytes retain actual earlier ACK/backend bytes as recovery debt; no
+second POST is authorized. Older/partial positive facts stay retained without
+receiving a fabricated new certificate. One appended function/two guards and
+an existing adoption predicate continuation add no model/column/check or
+capability. Seven verifier, six wire and two real-service/TCP controls are
+PREPARED/UNRUN; all old oracles and preceding owned SQL remain intact. This is
+an actual readback dependency, not unknown-COMPLETE review or remote authority
+consumption. Unknown/legacy recovery, certificate minimization, session/
+capture/quota/cutover and all qualification/external/independent/stable gates
+remain open. No child execution/provider/host actions or C-item closure. See
+`deploy/media-multipart-stored-part-readback-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): the genuine human shared
+multipart recovery service now handles a tracked unknown COMPLETE through its
+immutable first CREATE/body declaration/preflight and original local finishes
+or exact independently verified stop. Fresh actual metadata and bounded full
+part readback pin any retained first revision; two complete original provider
+inventories precede immutable applied review/private descendant receipt. Normal
+completion can consume only that guarded proof without another POST. Original
+first results, ACKs and actual/NULL FINs remain unchanged; ownership/erasure,
+nonce, namespace and first-capture lineage stay authoritative. A real multipart
+inventory guard owns this producer; no metadata exemption/model/column or
+capability is added. Existing four-locale stop guidance and UI use the same
+shared audit/step-up/key refusal; root final SDK qualification is required.
+Thirteen proof, six wire and five genuine-service/SDK/TCP controls are PREPARED/
+UNRUN, with a concrete separately unrun actual Linux acceptance plan. All old
+oracles and predecessor owned SQL remain intact. No child execution/provider/
+host actions or C-item closure. Remote terminal consumption, unknown CREATE/
+legacy issuer recovery, certificate minimization, full session/capture/quota/
+cutover and every qualification/external/independent/stable gate remain open.
+See `deploy/media-multipart-applied-complete-recovery-source-2026-11-13.md`.
+
+Controlled historical nonpayable draft source correction 2026-11-13
+(C12.38/C9.33/C1.08): root actual V24 built both NET4000 and tax200, then the
+read-only ordinary classifier isolated an older partial4000 LIST atom; its
+genuine independent complete GET preceded the next tax writer, while a separate
+current full GET proved4200. A narrow typed historical cohort now binds that
+actual LIST→GET→next-writer sequence and exact then-owned component/line/price
+IDs, zero payment/PI/cash/fee and full bounds. Current proof, every raw atom,
+original caller, mixed owner, paid-cohort and default same-call predicates stay
+required; no amount comparison can adopt an owner or discharge debt. Ten signed
+pure controls are PREPARED/UNRUN and original complete native assertions remain
+unchanged. No execution, SQL/model/fixture/root edits or readiness/stable claim;
+failed V24 and all acceptance remain open. See
+`deploy/controlled-historical-draft84-source-20261113.md`.
+
+Paid-period financial/privacy composition source checkpoint 2026-11-13
+(C9.33/C12.38/C1.08): immutable paid-effect history now follows ONLY the actual
+invoice IDs of validated controlled targets, partitioned for merchants by the
+accepted quote profile AND exact collection/invoice ownership. Original cashless
+and no-route histories remain complete. Shared physical table/UUID identities
+are deduplicated, conflicting SHA/ancestry or one combined5000 overflow refuses;
+empty legacy witness/export shapes remain unchanged. Buyer exports omit merchant
+review and all private proof/bank/process bodies. The subscription subject source
+has the literal table inventory and actual-subscription safe projection. The real
+paid-invoice event calls the independently guarded period effect before legacy
+handlers and returns only when handled; old handler bodies remain unchanged.
+Ten new pure controls and extended actual-service native footprint/export/merge
+contexts are PREPARED/UNRUN. No SQL/model addition in this composition slice;
+parent source, full existing/new schema, native/provider/security acceptance
+remain REQUIRED. See `deploy/controlled-paid-financial155-source-20261113.md`.
+
+Controlled external anomaly controls prepared 2026-11-13 (C12.38/C9.33/C1.08):
+two TEST-ONLY desired natives observe declared wrong-currency USD and whole
+overage4201/4200 through real owned OPEN targets, actual HTTP adapter/raw commit/
+finish services and real refusal boundaries. Exact positive raw money must stay
+retained while canonical/payment/core3/access remain unchanged, no receipt is
+clipped/adopted, and no original caller/physical pay is replayed. Complete
+original-zero fixture provenance and Carrier's disjoint refund helper remain
+required. All controls are UNRUN; no product/SQL/schema/root/failure change or
+readiness/stable claim. Actual anomaly/disposition/provider/security/full-scope
+acceptance remains required. See
+`deploy/controlled-external-anomalies84-prepared-20261113.md`.
+
+Controlled original-zero fixture source correction 2026-11-13
+(C12.38/C9.33/C1.08): root's actual V23 first-target journey created/bound the
+NET4000 component, then the read-only ordinary classifier isolated exactly one
+mixed-list refusal. Its original zero-only fictional invoice omitted explicit
+tax/route/default fields required by the positive mixed-list ownership contract.
+Only the positive fixture now freezes a complete original document from the
+actual original bootstrap response; generic80 and every product/raw/caller
+predicate remain unchanged. Three real-adapter controls and stronger retained
+fact assertions on the original unchanged full native are PREPARED/UNRUN.
+Failed V23 evidence remains preserved and fresh-database/native/source acceptance
+is required. No readiness, C-item closure or stable claim. See
+`deploy/controlled-original-zero-fixture84-source-20261113.md`.
+
+Actual controlled inventory failure 2026-11-13 (C12.38/C9.33/C1.08): V22
+passes real catalogue setup and creates its canonical4200 target, then SQL42702
+refuses BEFORE a bank charge because local actual collides with facts.actual.
+A NEW full-function successor renames only that local variable; both qualified
+fact.actual column references and every predicate remain byte-equivalent after
+reversal. Frozen orchestration84 source and the entire443235-byte normal85 prefix
+remain unchanged. All594 public-table hashes/all86 journals/drain are captured;
+actual target paid0, payment0, receipt0 and unconsumed sequence remain. Failed V22
+is preserved with no next reset. Fresh normal/schema/original native and all
+provider/paid/recovery/stable acceptance remain pending. See
+`deploy/controlled-collection-inventory-local84.manifest.json`.
+
+Controlled activated-amendment date source checkpoint 2026-11-13
+(C12.38/C9.38/C9.33/C1.08): a genuine original-period factory can select a
+later explicitly accepted start through existing activated amendment terms,
+while the parent previously admitted only unchanged parentStart/End. A new
+ordinary actual calendar/terms/FK reader now supplies that exact narrow later
+start at both parent date boundaries and rechecks its full actual row revision.
+Original parent windows, trial, zero-credit, source, money/privacy/fee/caller and
+whole raw/PG checks remain; ordinary empty histories and observational GET
+behavior are unchanged. Pure/source controls are PREPARED/UNRUN; no execution,
+schema/SQL/root reader change or acceptance claim occurred. The real complete
+late-amendment native/provider/effect journey and all full-scope acceptance
+remain required. See `deploy/controlled-late-period-authority84-source-20261113.md`.
+
+Controlled atomic actual-fee source checkpoint 2026-11-13
+(C12.38/C9.33/C1.08/C9.38): target/bank protocol stays v1, while a distinct
+signed application batch version binds each actual original bank charge's fee
+and the complete original cumulative endpoint. Real earlier canonical prefixes
+must exist before later receipts; every receipt settles in one TX or all
+canonical/core3 writes roll back. Existing default prefix floors and original
+per-payment refund/credit epochs remain unchanged. The new owned UNAPPLIED
+suffix preserves full old route/fee guards and all current raw/parent/bank
+evidence; no model is added and root's18-family footprint remains required.
+Strict amount/signature/source controls and four additional genuine desired
+natives are PREPARED/UNRUN, with no SQL/parser/compiler/test execution or root
+migration edit. Actual integration, currency/overage, refund/fee/paid effects,
+provider/security and all remaining full-scope acceptance remain required; no
+activation, C-item closure or stable claim. See
+`deploy/controlled-cash-atomic-fee84-source-20261113.md`.
+
+Controlled genuine staged writer source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): genuine repeated initial parent/bank evidence now
+produces actual immutable HMAC admissions immediately before canonical writes.
+The real shared payment INSERT generates its UUID; every subsequent route,
+observation, settlement and complete-batch boundary rechecks783 current physical
+normalization and immutable bank facts. A genuine successor replaces old424's
+deliberate false shape while retaining all other structural predicates and
+exact original-period consent; thirteen actual enabled guards plus body pins
+are required before the first admission. The new private shared money command
+is system/external:false, with no bank POST or access mutation. Older partial
+invoice facts require exact signed complete historical receipt cohorts while a
+separate current proof remains mandatory. Six native application cases, six
+signed historical-cohort pures and five source controls are PREPARED/UNRUN;
+no execution or current migration edit occurred. Exact root4a/221 repairs are
+preserved. Atomic whole-batch cent allocation, real currency/overage anomalies,
+separate paid effects and full native/provider/security acceptance remain
+required, not deferred. See
+`deploy/controlled-cash-staged-writer84-source-20261113.md`.
+Independent controlled paid-period effect source checkpoint 2026-11-13
+(C9.33/C12.38/C1.08): one new immutable exact-FK effect receipt and NEW UNAPPLIED
+SQL authenticate a genuinely separate transaction after real canonical money
+commits. Current original principal, latest HMAC inspection/finished bank facts,
+complete observed namespace/parent PG preimage and actual accepted terms/calendar
+remain required; the old same-TX cash batch is never reused as an effect grant.
+Immediate and deferred guards bind exact actual source/events and normalize only
+twelve managed parent columns. A shared private period-grant operation preserves
+old dates/usage, refuses overlap/grace and creates fresh actual grant identities;
+exact-window retries and contact merge retain that history. Ancillary owed/review
+is separate from principal and never labelled collected. Twelve pure, six SQL
+boundary and three actual-service native controls are PREPARED/UNRUN. No compiler,
+lint, build, test, database, provider or hosting execution occurred in this lane.
+Root still owns central financial/privacy/export/event composition and fresh
+model/SQL/native qualification. Proration current-bank composition, genuine
+positive terminal/alternative disposition and automatic renewal/recovery/UI
+orchestration remain required implementation, alongside all provider/platform/
+security acceptance. No C-item, feature, stable or release sign-off is closed.
+See `deploy/controlled-paid-period155-source-20261113.md`.
+
+Controlled original-receipt routing source checkpoint 2026-11-13
+(C12.38/C9.33/C1.08): the actual shared payment resolver recognizes only the
+canonical receipt's real controlled-origin child, authenticates its genuine
+same-transaction HMAC batch/current bank/parent stage BEFORE payment UUID birth,
+and compares the unchanged shared cash/fee computation to that exact receipt
+plan. Legacy period/generation routes and all previous cash/return/history guards
+remain intact. A NEW UNAPPLIED suffix preserves the full old route guard with
+only an exact verified controlled-origin alternative to its gross-proration
+attempt condition; independent BEFORE and deferred stage guards remain required.
+The route capability checks actual function-body hashes and enabled trigger
+identities, never a boolean marker. Three controls are PREPARED/UNRUN; no CPU,
+database, provider or current-root execution occurred. Genuine initial batch
+admission/writer integration, separate paid effects, partial/batch/native and
+provider/security acceptance remain required; no C-item or stable closure.
+See `deploy/controlled-original-receipt-route84-source-20261113.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): new managed multipart
+CREATE records explicit SHA256/COMPOSITE provenance. New COMPLETE keeps the
+original browser receipts and derives fixed byte/checksum limits from the
+immutable file declaration; all local issuer returns must be genuine. Its
+actual original caller verifies every provider ListParts page before one
+conditional COMPLETE, retaining complete XML/page identities and an independent
+verified-parts fact. Shared services and SQL enforce matching original birth,
+manifest, namespace/drain/tombstone/privacy/hold authority. Existing full pinned
+object readback remains required. Successful verification/completion does not
+retire issued links or sessions, invent remote ACK/FIN, or permit cutover.
+Eight manifest, twelve wire and five real-service/TCP controls are PREPARED/
+UNRUN; all earlier oracles remain unchanged. Six functions/three guards add no
+models/columns or capability definition. Source also carries root's exact
+655 SQL parenthesis correction and the source-inspected missing sign-role
+whitelist entry; no production incident is claimed. Consumption, unknown and
+legacy recovery, capture/quota/cutover, qualification/provider/platform and
+independent review/stable gates remain open. No child execution/provider/host
+actions or C-item closure. See
+`deploy/media-multipart-part-verification-source-2026-11-13.md`.
+
+Actual proper-target native checkpoint 2026-11-13 (C9.33/C9.38/C12.38/C1.08):
+the first real service journey stops BEFORE controlled target birth because its
+fixture assumed one grant. Actual paid subscription already owns its genuine site
+grant; adding the explicit page entitlement correctly produces a second old-period
+grant. Read-only postmortem proves both original dates/used0, no target, all594
+public-table fingerprints unchanged across diagnostics and zero clients. The
+fixture now preserves the complete original catalogue and verifies exactly the
+new page grant, every old date/used/status/identity and the exact added row count.
+No grant row is fabricated or original native oracle removed. V21 failed fixture
+and all logs/snapshots remain preserved; no next test resets it. The verification
+wrapper separately corrects Result-array prototype normalization and a diagnostic
+column name, retaining all86 exact journal values and original failures. Current
+native/application/access/provider/stable acceptance remains open.
+
+Strict154 qualification checkpoint 2026-11-13 (C12.38/C1.08): fresh ordinary
+V20 passes all86 migrations/hashes/profile/drain in6.921s. The first strict source
+preflight correctly identifies five genuine modeled factory phases absent from
+its older independent kind inventory; those exact phases are recorded without
+dropping old kinds or predicates. The renewed read-only check passes the first146
+models, then finds two otherwise identical conjunction terms in the new collection
+model ordered differently from the frozen SQL. Only those terms are reordered
+in the model; the strict parser/expression oracle and every SQL byte stay unchanged.
+Both failures/results/drains and V19/V20 databases are preserved. Renewed source,
+fresh154 catalog/SDK/native and all stable acceptance remain pending.
+
+Fresh migration failure 2026-11-13 (C1.12/C11.08): ordinaryV19 stops in new
+media82 at one unmatched closing parenthesis in the issued-authority closure SQL
+function. The failed database/result are preserved and drained; no schema or
+native pass is claimed. Exactly that syntax character is removed, preserving
+every predicate and the full277201-byte ad46 prefix; source/whole-file before/after
+identities are recorded in `deploy/sql/0082_multipart_issuer_parenthesis-correction.manifest.json`.
+Fresh migration/schema/native/SDK and all application/recovery/provider/security
+acceptance remain pending. Both storage capabilities remain absent.
+
+Forward migration materialization 2026-11-13 (C12.38/C1.08/C9.33/C9.38):
+source221a883a passes1,103 actual assertions/173 complete selected files,394
+explicit DB skips, exact full types/lint and license/notes/plan checks. The genuine
+protocol initialization failure is corrected with unchanged constants in a
+dependency-free leaf; original ancestry7 and CASE9 controls pass. New normal0085
+now materializes the nine new target/application model families AFTER lineage84,
+with seven complete scalar CASE corrections at original creation positions and
+all other frozen source/guards retained. All86 journal entries, fresh154 strict
+schema/native/SDK and genuine writer/paid/recovery/provider/security acceptance
+remain UNRUN/PENDING. Both storage capabilities stay absent; stable/signature/post
+remain pending. See `deploy/controlled-forward85-materialization-20261113.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): genuine local multipart
+issuance now uses per-attempt original operation/caller/request nonce and actual
+local FIN, exact immutable file-part body/session/deadline, managed facade and
+independent SQL namespace/hold/privacy/controller constraints. The real SDK
+signature binds body checksum/SHA/size/public nonce; only URL/header digests are
+retained, with no provider ACK, received bytes or terminal outcome invented.
+All sibling attempts drain before return. Issued authority stays pending after
+local FIN/expiry and blocks capture/cutover until genuine consumption proof.
+A TX-local current issuer ABI and mandatory future capability runtime predicate
+close the historical tagged-function gate path; actual old/untracked executor
+closure remains separate. No full request or part capability is published.
+English/French/Spanish/Arabic owner guidance preserves issued-link review debt.
+Ten crypto/wire and six real-service/TCP controls are PREPARED/UNRUN, all old
+oracles preserved. No execution/provider/host actions or C-item closure. Actual
+part/consumption, stopped/legacy recovery, capture/quota/cutover and every
+qualification/acceptance remain open. See
+`deploy/media-multipart-local-issuance-source-2026-11-13.md`.
+
+
+Controlled protocol initialization correction 2026-11-13 (C12.38/C1.08):
+source v49 passes full types and affected lint, then the unchanged positive
+inspection ancestry control exposes an initialization cycle: the protocol literal
+was captured as undefined before its importing contract finished loading. An
+independent diagnostic reproduces that exact invalid-value issue. Both unchanged
+protocol/policy constants now live in a dependency-free leaf; all runtime users
+import it directly and the existing contract reexports preserve its public ABI.
+The original positive and negative assertions remain unchanged. Renewed source,
+schema/native/provider qualification and stable sign-off remain pending.
+
+Controlled original-receipt routing source checkpoint 2026-11-13
+(C12.38/C9.33/C1.08): the actual shared payment resolver recognizes only the
+canonical receipt's real controlled-origin child, authenticates its genuine
+same-transaction HMAC batch/current bank/parent stage BEFORE payment UUID birth,
+and compares the unchanged shared cash/fee computation to that exact receipt
+plan. Legacy period/generation routes and all previous cash/return/history guards
+remain intact. A NEW UNAPPLIED suffix preserves the full old route guard with
+only an exact verified controlled-origin alternative to its gross-proration
+attempt condition; independent BEFORE and deferred stage guards remain required.
+The route capability checks actual function-body hashes and enabled trigger
+identities, never a boolean marker. Three controls are PREPARED/UNRUN; no CPU,
+database, provider or current-root execution occurred. Genuine initial batch
+admission/writer integration, separate paid effects, partial/batch/native and
+provider/security acceptance remain required; no C-item or stable closure.
+See `deploy/controlled-original-receipt-route84-source-20261113.md`.
+
+Controlled scalar CASE source correction 2026-11-13 (C12.38/C1.08): the frozen
+unapplied core/783 source is retained unchanged. Seven complete function-body
+replacements add only parentheses around scalar CASE operands in IF expressions;
+an exact source/hash/signature manifest records every change. Root must place
+these corrected statements at their original creation positions in a NEW forward
+migration; appending replacements after an invalid CREATE cannot repair an
+already failed normal migration. Nine preservation controls are PREPARED/UNRUN.
+No SQL/parser/test execution, published migration change or activation occurred.
+See `deploy/controlled-cash-application-case84-source-20261113.md`.
+
+Controlled initial batch evaluation source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): a NEW ordinary unregistered evaluator discovers the
+actual complete SQL financial FK scope before canonical locks, obtains the
+genuine retained bank batch itself through the private prospective initializer,
+and checks original current principal/debt, credit/fee, ownership/privacy and all
+actual source callers/raw occurrences. The unchanged caller inventory is reused
+on the full source scope without reverse foreign-resource locking; partial
+capacity and full PG before/after invariance remain explicit. Three genuine
+factory/bank/inspection service-native controls are PREPARED/UNRUN, not passes.
+No SQL/model/registration/activation or execution occurred. Signing/persisting
+actual prewrite admissions, staged writer and original route/settlement boundary
+integration, partial/tiny batch natives and final acceptance remain required.
+See `deploy/controlled-cash-initial-evaluation84-source-20261113.md`.
+
+Controlled original preparation source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): the isolated future consumer now distinguishes
+actual original zero bootstrap invoice evidence from canonical target owners in
+mixed raw lists. It requires authenticated pre-update bootstrap ancestry plus a
+complete later list/independent invoice inventory after actual writes, original
+customer/platform/account and zero historical atom checks; unknown, ambiguous,
+contradictory and unfinished evidence stays debt. Normal-period bank rollover
+is limited to exact accepted full-NET, nonproration forecast windows while price,
+interval, anchor and trial checks remain. Eight signed raw cases and nine window
+cases are PREPARED/UNRUN, with source-only type-narrowing corrections preserved.
+No execution, SQL/model/registration or activation occurred. Initial application
+parent evaluation, staged writer/routing, exact activated-amendment late-period
+admission and actual native/provider/security acceptance remain required. See
+`deploy/controlled-bootstrap-zero-context84-source-20261113.md`.
+
+Controlled prospective context source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): a private real-Tx read-only initializer obtains the
+genuine batch bank proof itself, freezes a receipt-only retained-unapplied model
+without paymentId, verifies full PG before/after evidence and always removes its
+context. Actual raw/principal/debt reader plumbing retains actual canonical paid,
+every raw/caller row and strict receiptOnly/default guards. Complete known mixed
+invoice facts now preserve exact multiple owners/proofs; unknown/duplicate/
+ambiguous atoms stay debt without amount/current-account adoption. Twenty new
+signed-raw pure and four source controls are PREPARED/UNRUN; no execution, SQL,
+model/current-root or service-registration change occurred. Genuine full parent
+evaluation, mutation-stage context/writer/routing, original bootstrap nonpayable
+proof and native/provider/security acceptance remain required. Application and
+stable remain unactivated/open. See
+`deploy/controlled-cash-prospective-context84-source-20261113.md`.
+
+Controlled canonical stages source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): a NEW UNAPPLIED continuation independently proves
+exact real payment/invoice/route/bank-observation/fee/FIFO-plan/state-event deltas
+against the complete immutable PG parent preimage, retaining every other current
+raw/caller/privacy/source row. Actual prior receipt allocations are required
+before later fee use; strict settlement and deferred whole-batch conservation
+preserve partial remainders without paid/access claims. The ordinary real-context
+reader authenticates actual HMAC/lineage and current hashes, acquiring no lock in
+reverse and granting no permission. Nine pure/four source/nine read-only SQL
+primitive controls are PREPARED/UNRUN; no parser/runtime/database execution or
+current root/journal/old guard mutation occurred. Genuine initial parent
+prospective context, raw-atom/debt authority, batch writer/routing integration,
+native/provider/security acceptance and the full current specification remain
+required. Application stays unregistered/unactivated; all C-items and stable
+stay open. See `deploy/controlled-cash-application-stages84-source-20261113.md`.
+
+Controlled application admission source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): the isolated future branch normally carries the real
+bank batch reader and adds three immutable exact-FK original batch/receipt/
+actual-payment-link models. NEW UNAPPLIED SQL checks complete PG parent preimages,
+real bank inventory/partial consideration, original credit and cumulative fee
+ownership, actual held prefix and real first payment UUID birth. Full internal
+PG row SHA, exact-owner safe exports and explicit private/noTTL metadata remain
+separate. Sixteen pure and five source controls are PREPARED/UNRUN; no execution
+or current-root/journal mutation occurred. Subsequent receipt births still
+mechanically refuse until full actual own-canonical staged normalization,
+deferred conservation, prospective parent context and genuine alternate writer
+integration are complete. Application remains unregistered/unactivated; all
+native/security/provider acceptance, full specification, C-items and stable
+remain open. See `deploy/controlled-cash-application-protocol84-source-20261113.md`.
+
+Source-only review follow-up 2026-11-13: the new cumulative receipt loop's PLpgSQL
+record is named distinctly from its actual SQL table aliases. This narrow local
+rename preserves every predicate; the regression remains prepared/UNRUN and no
+database/source qualification is implied.
+
+Controlled bank-order source correction 2026-11-13 (C12.38/C1.08/C9.33):
+isolated source carries the ONE signed actual admission-lineage child and its
+real producer/own-ancestry hook. A NEW UNAPPLIED bank suffix replaces only the
+unsafe transaction-start timestamp selection with actual namespace-locked
+sequence/predecessor/closed-history selection. Full old source predicates remain;
+lineage enters immutable bank and complete-current PG fingerprints. Unknown or
+later unsequenced reads refuse stale bank data. The parent current graph keeps
+all lineage and permits only exact authenticated own birth in historical causal
+comparison. Four source and two pure controls are PREPARED/UNRUN; no parser,
+compiler/database/provider/native ran. Real transaction-order/negative-bank and
+all protocol/batch/native/security/provider acceptance remain required. Current
+root143 qualification, all C-items and stable stay unchanged. See
+`deploy/controlled-bank-read-order84-source-20261113.md`.
+
+Controlled bank consumer source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): isolated source normally carries the actuale3
+observational producer and consumes its distinct genuine returned bank context,
+retaining original capture/route and actual current fee/recipient proof. A missing
+old raw charge remains unknown while every known original/current charge must
+match the actual receipt; bodies are not rewritten. Four pure and four source
+controls are PREPARED/UNRUN; no compiler/database/provider operation ran. Current
+legacy defaults stay strict. The prospective application query stays
+unregistered and424 final guard refuses. Sequential receipt GETs and own
+canonical writes require genuine immutable per-namespace bank plus complete
+current parent/batch transition proof; scalar historical digests cannot be
+silently rebased. This actual dependency and full partial/batch/overage/native,
+SQL/effects/security/acceptance work remain required, with no new deferral or
+C/stable claim. See
+`deploy/controlled-bank-observation-consumer82-source-20261113.md`.
+
+Controlled observation parent source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): isolated source registers the distinct private
+observational GET query and ordinary complete coverage reader. Actual source,
+all raw/private financial rows and every caller remain represented; only a new
+GET requires closure. Independent fresh-human stops must preserve other caller
+debt. Finished historical comparison removes only the exact authenticated six
+returned-own families, matching separate PG/canonical hash domains while full
+current coverage retains all. No post-application classifier/state, amount owner,
+public override or application authority is used. Thirteen pure and six strict
+contract controls are PREPARED/UNRUN; no CPU/database/provider/build ran. Genuine
+producer/current bank context, prospective batch application and old guard
+composition, effects, security and full acceptance remain required. No C/stable
+closure or new deferral. See
+`deploy/controlled-cash-observation-authority82-source-20261113.md`.
+
+Genuine current-bank SQL source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): four NEW UNAPPLIED functions independently resolve
+actual controlled receipt/origin/accepted-target lineage and latest receipt-owned
+RETURNED inspection with contiguous complete state and actual fee/recipient
+facts. The bank policy has genuine positive paths; it is separate from parent
+application authority. Every selected raw row remains in current PG-SHA
+witnesses; immutable bank facts are distinguished from complete-current namespace
+and opaque admitted JS source digest. Signed143stop source is carried; no
+qualification is inferred. All38 prepared SQL controls are UNRUN, and full
+native authentication, actual observation/context, parent/batch proof and old
+route/period composition remain required. Existing424 refusal guards are
+unchanged; no root assembly/model/journal/activation or stable state moves. See
+`deploy/controlled-current-bank-predicate82-source-20261113.md`.
+
+Controlled cash alternate-writer source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): a NEW UNAPPLIED additive fragment checks actual
+receipt/origin/accepted-target and conserved cash/credit identities at three
+deferred canonical boundaries, without replacing existing guards. Its final
+money verifier deliberately refuses until a genuine finished original bank and
+complete parent/batch SQL proof exists; a marker/manifest is insufficient.
+Four source security controls are prepared and UNRUN. Actual proof, exact old
+gross-route composition, lock/revision/callback fence and genuine positive/
+partial/rollback/negative/default native controls remain required. No current142
+or published SQL identity, model/journal, readiness, activation or stable state
+changed. See `deploy/controlled-cash-application-guards82-source-20261113.md`.
+
+Controlled current-bank consumer source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): the isolated future writer now consumes genuine
+ec57 latest receipt-owned finished inspection plus authenticated original
+controlled capture and actual canonical fee allocation. Unknown/returned/
+disputed/foreign/FX fee or recipient facts refuse; neutral primary flags alone
+never become settlement proof. All28 new pure cases are prepared and UNRUN.
+Root0e9d/af8 and the3f raw-resolution digest are preserved. No authority or
+writer is registered: genuine full15 observational admission/context, batch
+proof, same-transaction delta, callback guards and actual native controls are
+still required. The six future models stay excluded from current142; no new
+SQL assembly/model/journal, deployment or stable state changed. See
+`deploy/controlled-cash-inspection-consumer82-source-20261113.md`.
+
+Canonical controlled receipt-batch writer source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): an isolated UNREGISTERED ordinary writer preserves
+exact actual receipt/origin/FK identities, full-batch no-write authority checks,
+resource→parent→canonical lock order and the same shared create/observation/
+settle transaction. Partial/tiny amounts preserve unpaid remainder; duplicates,
+foreign/reserved ownership and overage refuse without clipping. Seventeen
+prepared pure plan controls are UNRUN. Genuine producer/inspection/context,
+authority registration, alternate-writer guards and actual native rollback,
+partial/no-effect/refusal/default-path controls remain required before this
+path can work or qualify. The future six models remain excluded from current142;
+no SQL/model/journal, existing default, deployment or stable state changed. See
+`deploy/controlled-receipt-batch-writer82-source-20261113.md`.
+
+Prospective controlled cash parent checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): an isolated ordinary evidence reader now checks
+actual retained receipt/origin, resource→parent→canonical locks, exact cash
+remainder after issued credit, original caller/payment/credit/fee debt and
+privacy/table-bound current parent revisions. It supplies no allowed result
+and registers no authority. Fifteen arithmetic controls are prepared and
+UNRUN. Genuine current charge/refund/dispute inspection, Carrier's finite
+prospective proof and same-transaction application evaluator/caller remain
+required, including exact handling of the one unapplied receipt without
+weakening existing principal defaults. The future six models remain outside
+current142 qualification; no SQL/model/journal or stable state changed. See
+`deploy/controlled-cash-application-parent82-source-20261113.md`.
+
+Prospective exact-receipt batch arithmetic continuation (same date and items):
+seven further prepared controls preserve a one-cent partial capture and unpaid
+remainder, distinct equal-valued receipt UUIDs, duplicate refusal, exact
+cash/credit capacity, whole overage/currency refusal and the complete5000 bound.
+This is arithmetic only; all22 parent controls remain UNRUN. Actual authenticated
+partial/batch proof and same-transaction application remain required. The
+parent reader now imports the producer's existing protocol constant directly;
+no authority is registered or paid effect granted.
+
+Source-only controlled raw target checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): the isolated future fifteen-family consumer now
+keeps authenticated coverage unchanged while deriving exact original bank
+obligation/canonical-cash ownership from authentic creator/observer, current
+complete inventory and same-receipt original lineage. Customer-wallet and
+issued-note contradictions, incomplete inventories and every unfinished caller
+remain review; later zero is not disposition. Known gross cash identity after a
+real refund does not waive refund, principal, credit or commission debt. All22
+new prepared controls are UNRUN. The six target models remain excluded from
+current142 qualification; public/cashless acceptance, application-only money
+authority, terminal/alternative receipts, native/provider acceptance and full
+qualification remain required. No SQL/model/journal, deployment or stable
+state changed. See
+`deploy/controlled-target-raw-classification82-source-20261113.md`.
+
 This section replaces the former `ROADMAP.md` and `PROJECT_BACKLOG.json`. It is
 the execution view over §§1–42 and is the only list from which product work is
 selected. Git history and changesets explain what happened; this section says
@@ -3558,7 +5857,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-10-14 |
-| Latest launch audit | 2026-11-11 source checkpoint at main `2a4af1e1e502a150cf6295db1f5fbb99c6ea4b60`. Protected merges supply exact-verb orchestration authority; provider-backed return/refund and original trial-setup dispatch repairs; contact/import/provider erasure repairs; shared photograph-cart stock; the OpenMLS migration and cached-SFU-credential isolation; and public-source crawling, nested menus, private ZIP archives, typed generic content and explicitly approved hosted media. Evidence and limits remain beside their C-items and in the linked deployment/review documents. This checkpoint excludes unmerged mail-retention/invoice work and the unfinished durable large-import, mail-dispatch recovery and seller-commercial-identity work. It supplies no actual provider/platform acceptance, cross-target final-candidate object-byte recovery, independent C11.10 review or C11.17 signature. The last deployed-site evidence remains the 2026-11-10 snapshot: disposable demo `e6577345`, production `c3215f63`; neither deployment was reverified or advanced by this checkpoint. |
+| Latest launch audit | 2026-11-14. Protected main last verified fdba2817(PR702); PR701 older/unqualified. Exact1f89 sourceV102 fulltypes/lint/1554actual/249files/540explicit DB skips, freshV60/V61 ordinary86/strict161models/365guards/416fullfunctions/4143queries andSDKV38/V39 actual8 PASS; V60 nine real correlation controls PASS/all596+j86+seq invariant. Original whole feeV10 and observational V11 TIMEOUT unchanged180s after actual accepted1-cent return. CPU measured54.60s signature verification; finite primitive-only performance repair remains source-only pending fresh qualification. Failed databases preserved. Exact owner-approved b5c0f3a9 backup pushed/remote SHA verified; newer work local. Isolated image93 source/CLI checks pass; initializer64a/terminalaef unqualified. B/C/media/full-spec/provider/platform/build/browser/CI/recovery, generic provider-response retention repair, independent security and final signature remain open. Version0.2.0-beta.6; no stable/deployment/LinkedIn closure. |
 | Evidence snapshot | Owner/agent launch acceptance, 2026-10-06: actual Chromium WebAuthn, recovery download, passwordless login, scoped MCP publishing/refusal and named-agent audit in `tests/browser/agent-launch.spec.ts`; isolated-database auth/key checks, live SDK verification and seven packed-package consumer checks passed. Actual Replit/Lovable account launches remain C3.28. Historical snapshot: on `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
@@ -3568,7 +5867,7 @@ what is true now and what remains.
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | _not selected — record the final candidate merge SHA when signing_ |
-| Remaining open | Every unchecked live row below still governs completion; the only exclusions are the existing explicit §43.18 deferrals. Source completion remains for original media operations, multipart/capture ownership and byte recovery (C1.12/C11.08), durable large-import resumption and historical reader identity provenance (C3.22/C3.46/C2.29), original mail dispatch and unknown-outcome recovery (C3.31), and complete seller-as-merchant commercial identity, mixed-cart, tax/fee and provider-feedback integration (C12.38). Merged source repairs do not close returned-item acceptance (C5.19), independent OpenMLS acceptance (C12.39), or abuse-provider/reporting acceptance (C12.30). Qualification remains for blog metadata/comments and source-specific cutover (C2.27–C2.29/C3.46), actual Replit/Lovable launches (C3.28), scoped gallery publication (C3.29), actual provider/preview/intake/file journeys (C3.31–C3.39), fresh native installation (C3.44), managed-assistant deployed text and approved-call acceptance (C3.45), phone link-in-bio acceptance (C9.39), hosted quota/cutover operation (C10.32/C10.33), enabled-provider settlement and cross-target recovery (C11.05/C11.08), record lifecycle re-audit (C11.14), marketplace payout acceptance (C12.26/C12.27), independent review and final reconciliation/clean-room suite/signature (C11.10/C11.16/C11.17). Historical evidence is preserved; no row is closed by this status refresh. |
+| Remaining open | Every unchecked live row below still governs completion; the only exclusions are the existing explicit §43.18 deferrals. Source completion remains for original media operations, multipart/capture ownership and byte recovery (C1.12/C11.08), durable large-import resumption and historical reader identity provenance (C3.22/C3.46/C2.29), and complete seller-as-merchant commercial identity, mixed-cart, tax/fee and provider-feedback integration (C12.38). Merged source repairs do not close returned-item acceptance (C5.19), independent OpenMLS acceptance (C12.39), or abuse-provider/reporting acceptance (C12.30). Qualification remains for blog metadata/comments and source-specific cutover (C2.27–C2.29/C3.46), actual Replit/Lovable launches (C3.28), scoped gallery publication (C3.29), actual mail dispatch/consent/minimization and selected-provider acceptance (C3.31), other provider/preview/intake/file journeys (C3.32–C3.39), fresh native installation (C3.44), managed-assistant deployed text and approved-call acceptance (C3.45), phone link-in-bio acceptance (C9.39), hosted quota/cutover operation (C10.32/C10.33), enabled-provider settlement and cross-target recovery (C11.05/C11.08), record lifecycle re-audit (C11.14), marketplace payout acceptance (C12.26/C12.27), independent review and final reconciliation/clean-room suite/signature (C11.10/C11.16/C11.17). Historical evidence is preserved; no row is closed by this status refresh. |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -3598,6 +5897,42 @@ is a product capability (§39), not because the project must be marketed.
 snapshot. `[ ]` means incomplete, including partially implemented work. An
 item may be checked only in the same change that supplies its evidence. Never
 use prose such as “mostly done” as a substitute for decomposing an item.
+
+Source-only continuation, 2026-11-14 (C1.12/C11.08): the finite immutable
+multipart retirement certificate-birth slice adds one nullable/no-default field
+on existing reviews and a system-only shared service, preserving historical
+NULL reviews and original caller ACK/FIN. Exact complete raw proof/frontier is
+independently checked before sealing/dedup; late evidence or holds keep current
+proof pending. Eight pure and six genuine service/TCP controls are prepared,
+all unrun. No raw/quota minimization, capability publication, new model or C
+closure. Root qualification and full late-evidence/minimization/catch-up,
+issued-authority terminal, quota/capture/cutover/provider acceptance remain open.
+See `deploy/media-multipart-retirement-certificate-source-2026-11-14.md`.
+
+Source-only continuation, 2026-11-14 (C1.12/C11.08): exact-admission certificate
+catch-up now queues the fixed safe proof through the original retirement TX's
+existing outbox primitive. Owner and actual worker use the same private system
+service; full proof/holds/frontier and original queue/claim/runtime identity
+precede dedup. Only resource retirement uses DB transaction time; actual original
+ACK/FIN remain unchanged. Five structural and six genuine service/TCP/worker
+controls are prepared, all UNRUN. No schema, flag, raw minimization, erasure
+acknowledgement or C closure. Consumers/late-identity/re-review, quota/capture/
+cutover and genuine provider acceptance remain required before publication.
+See `deploy/media-multipart-retirement-catchup-source-2026-11-14.md`.
+
+Source-only continuation, 2026-11-14 (C1.12/C11.08): authenticated first idle
+multipart identity now requires agreement of all intact original certificates;
+actual late session facts retain first key/session digests and reopen the same
+original debt without refilling ACK/FIN/canonical rows. Fresh authorized RAW
+same-ABORT READ/two-pass re-review appends a distinct review/seal/job while old
+stop receipts/results/proofs remain immutable. Historical identity is separate
+from current whole-frontier proof and grants no live mutation/remote terminal.
+Five new SQL functions and five full guard/current-review continuations are
+owned/unapplied;10pure+6genuine service/TCP controls are prepared, all UNRUN.
+No model/column/flag/global legacy gate/minimization/C closure. Compact consumers,
+other creator/conflicting-session recovery, quota/capture/cutover and actual
+provider/security acceptance remain required. See
+`deploy/media-multipart-retained-identity-source-2026-11-14.md`.
 
 ### 43.2 Definition of done for every feature
 
@@ -3902,9 +6237,57 @@ reading chat logs.
   database skips). The actual 501-entry pending containment passes (5.403s),
   unchanged outage/removal/replay positive passes (6.676s), and the other 14
   raw-source controls pass without retry; independent physical/receipt/journal
-  readback and closed database sessions are recorded. Evidence: `deploy/import-wxr-index-privacy-2026-11-13.md`. Full guarded index minimization and recovery of
-  historical completed receipts remain required; this does not close C1.08.
+  readback and closed database sessions are recorded. Evidence:
+  `deploy/import-wxr-index-privacy-2026-11-13.md`. Those ordinary79 results
+  establish containment; the newer81 proofs below do not close C1.08.
 
+  Full81 finite privacy proof2026-11-13 (80=3a686245/81=955a04d2): NEW ordinary
+  schema matches all82 identities/22 models and enabled guards. The unchanged
+  original501-WXR full-erasure and URL-only media-key AFTER controls pass;
+  exact original scope, accepted same-namespace physical receipts/raw absence
+  and private-projection minimization are independently read back. Actual held,
+  accepted500-CMS-child and later501-generation boundaries pass with exact
+  native before/after ownership, canonical membership or bytes preserved as
+  appropriate. Historical NEWv2 actual old79->ordinary81 proof reopens the
+  retained verified/intact false-completed task truthfully into pending recovery,
+  idempotently, with capture0/no backfill/no later-graph adoption/no extra DELETE.
+  Unknown historical private index remains for reviewed recovery. Source/SQL,
+  case timings and minimal independent proofs are in
+  `deploy/import-upload-index-erasure-source-2026-11-13.md` and
+  `deploy/import-uploaded-history-recovery-2026-11-13.md`. Four stronger WXR/ZIP
+  rollback cases now pass on ce/955: both late-reader controls complete and
+  minimize500 entries; both named-hold controls protect and then delete raw
+  originals. Held final receipts remain retained/partial with500 unminimized
+  entries/one marker and no task after release. Those old partial receipts
+  remain terminal; the actual new-request evidence below finishes cleanup
+  while preserving them. Remaining public authority/cancellation/recovery, live
+  API/MCP/SDK/browser/provider and wider privacy/restore acceptance remain open;
+  no account or stable sign-off follows.
+
+
+  Released-hold NEW-request repair source2026-11-13 (C1.08/C3.47/C11.14):
+  the documented new verified request failed before job assertions on actual
+  WXR3a35/955 because rollback removed the mutable upload descriptor. Its
+  failure database and unchanged positive oracle remain preserved. A narrow
+  source repair admits only a complete original capture with an intact retained
+  same-contact receipt, exact graph/generation/revision/chunk membership and
+  positive same-namespace physical retirement, with no live hold/writer/rebind
+  or accepted ownership. The new capture/tasks preserve the old receipt and
+  scope. Four prepared native other-subject/corrupted-receipt refusals accompany
+  the unchanged WXR/ZIP positive controls. Full Node22 types, corrected lint,
+  registry/composition/participation contracts and68 unique NoDB assertions
+  pass (138 explicit DB skips); note regeneration and metadata pass. Actual
+  NEW ordinary0–81/438 schema passes all82hashes/22models/28guards. Both
+  unchanged87 positives pass (WXR10.323s/ZIP8.655s), independently proving
+  original500minimized, oldpartial/intactretainedreceipt unchanged, new exact
+  capture/job/completedreceipt, later501+bytes unchanged and no second DELETE;
+  UTC/fsyncON/jitOFF/journal/PGclient drain pass after each. Four prepared
+  other-subject/corrupted-receipt negatives now also pass individually for
+  WXR/ZIP (7.383/7.505/7.326/7.083s), preserving exact oldartifact/capture,
+  private500 and newcapture/task/artifact0 with independent full82/profile/
+  drain after each. Final combined/API/MCP/SDK/browser/provider acceptance
+  remains UNRUN; no C-item/stable completion claim follows. See
+  `deploy/import-held-original-new-request-2026-11-13.md`.
 
   Reopened 2026-11-12 (C1.08/C3.47): an actual current270 control
   documented an empty original hold, uploaded a later unheld WXR generation,
@@ -3980,9 +6363,715 @@ reading chat logs.
   step-up, typed confirmation and audit evidence in `tests/core/outbox.test.ts`;
   webhook replay convergence in `tests/core/webhooks.test.ts`; changeset
   `outbox-dead-letters.md`; operator runbook `deploy/event-outbox.md` **F04** `/admin/jobs/outbox` redacted replay with step-up. **F05** `platform.listOutboxEvents`/`getOutboxEvent`/`replayOutboxEvent`/`outboxSummary` at `/api/v1/platform.*`, MCP `platform_*` (replay is step-up). **F07** `tests/core/outbox.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/event-outbox.md`. **F12** `tests/core/outbox.test.ts` is the composition proof.)
+  Media source lint repair 2026-11-13 (C1.12/C11.08/C10.32): the first
+  combined whole lint run stops at41 errors. Storage bindings now preserve
+  their adapter receiver; typed imports, original-tag validation and synthetic
+  TCP handler rejection handling are explicit. Existing original-body, version,
+  request/finish and lifecycle assertions remain. Renewed gates are pending.
+  Media integration type repair 2026-11-13 (C1.12/C11.08): transfer forms
+  now use the exact translated-label object type, and the legacy witness
+  fixture explicitly supplies NULL for newly nullable writer/revision fields.
+  This fixes the first combined type run's media errors without inventing
+  historical provenance. Renewed compilation and media acceptance remain open.
 - [ ] **C1.12** Complete media support for video, audio and documents,
   resumable/presigned direct uploads, validation, malware scanning seam,
   metadata/provenance, focal points, lifecycle and orphan cleanup.
+  Immutable first media scopes and original birth/locator retirement source are
+  prepared but unrun;16 models/owned UNAPPLIED82 stay inactive, and physical
+  retirement/multipart/crash/cutover implementation and actual acceptance remain
+  required. See `deploy/media-original-first-capture-source-2026-11-13.md`.
+  Scoped original PUT recovery qualification2026-11-15: the first fresh native
+  run failed all four cases because its loopback fixture lacked conditional-write
+  authority mapping. With genuine synthetic AWS-to-TCP transport, two controls
+  passed and two exposed genuine recovery defects. A lost PUT response can have
+  no retained revision, so applied recovery now admits a fresh unpinned read but
+  still requires the original request nonce, exact full bytes and two complete
+  inventories; absence recovery still requires its pinned revision. S3's
+  unversioned `VersionId: null` is normalized to the current object revision,
+  matching the existing TypeScript proof and allowing exact SQL quota settlement.
+  Final fresh migration93 execution passes4/4;27 transfer/wire controls, full
+  TypeScript and focused lint pass. See
+  `deploy/original-put-recovery-lifecycle.source.json`. No hosted/provider,
+  stopped-writer, physical-erasure or C-item acceptance follows.
+  Non-AWS conditional authority2026-11-18 (C1.12/C11.08): an observed physical
+  CREATE or current-key DELETE was trusted only on an `*.amazonaws.com`
+  endpoint, because `if-none-match: *` IS the create-only guarantee and
+  `if-match` the delete one, and a provider that accepts and ignores either
+  answers "created" for a write that landed on a live key. That fail-closed
+  rule left every other S3-compatible store unusable for observed writes --
+  including the recipe gate's own fixture, which is why the entries above
+  reached for "genuine synthetic AWS-to-TCP transport" rather than a real
+  endpoint, and why the demo seed refused with `conditional_authority` the
+  first time that gate ran on this branch. Such an endpoint is now trusted
+  once BOTH facts are established at setup and carried on the binding:
+  `proveS3ConditionalSemantics` watched this endpoint refuse a second create
+  and a stale `if-match`, and the bucket reports versioning Enabled so a later
+  provider regression writes a new version instead of destroying one. Neither
+  alone suffices; both absent, the endpoint stays fail-closed exactly as
+  before, and the refusal now names which fact is missing. AWS is unchanged and
+  is never probed. The recipe gate enables and reads back bucket versioning in
+  its own setup step, so a store that cannot retain versions fails there rather
+  than inside Freeholder. No provider-account, hosted or C-item acceptance
+  follows: this is the conditional-semantics half the earlier entries recorded
+  as pending, not storage acceptance.
+  Original provider privacy continuation2026-11-15: both prepared controls first
+  failed at the same loopback fixture authority boundary. With genuine synthetic
+  AWS-to-TCP transport and the repaired applied recovery, fresh migration93
+  execution passes2/2. Subject export excludes foreign physical resources and
+  original request tokens, new immutable provider facts change the evidence
+  version without replacing the first ACK, and unminimized evidence stays pending.
+  Focused lint passes. See `deploy/original-provider-privacy-lifecycle.source.json`.
+  No ingress, provider-account, worker or full-erasure acceptance follows.
+  Original conditional retirement continuation2026-11-15: with genuine synthetic
+  AWS-to-TCP transport, six prepared controls passed immediately. The paused-PUT
+  control expected an exception although the actual non-throwing cleanup contract
+  correctly returned false before DELETE or receipt mutation; only that fixture
+  assertion changed. Final fresh migration93 execution passes7/7 for exact
+  conditional retirement, retained version/session and active-writer refusal,
+  privacy holds, and interrupted/unattempted continuation with no DELETE replay.
+  Focused lint passes. See `deploy/original-retirement-lifecycle.source.json`.
+  No runtime defect or hosted/provider acceptance follows.
+  Applied-review retirement continuation2026-11-15: fresh migration93 execution
+  passes3/3 through genuine lost-reply review, one exact conditional DELETE and
+  guarded raw-evidence minimization. Original returns, request/review/inventory
+  evidence and digests remain intact; a later named hold admits no DELETE. Focused
+  lint passes. See `deploy/original-applied-retirement-lifecycle.source.json`.
+  Independent stopped-executor and hosted/provider acceptance remain open.
+  Monotonic DELETE continuation2026-11-15: the first qualified run passed5/6;
+  fresh-person recovery failed because migration93 admitted the human reviewer
+  but the monotonic SQL predicate still required the system reviewer. Migration94
+  aligns only that reviewer predicate, preserving actual attribution and every
+  physical/no-replay requirement. The first migration control refused an incorrect
+  successor hash; its literal recomputation and failed database are preserved.
+  Final fresh execution passes6/6, the real93→94 official-runner upgrade verifies
+  all95 journals and the exact function body, and full TypeScript/focused lint pass.
+  See `deploy/monotonic-delete-lifecycle.source.json`. No C row closes.
+  Finished DELETE recovery qualification2026-11-15: a genuine migration94 local
+  commit fault after actual provider ACK passes1/1 on fresh PostgreSQL. Recovery
+  retains the first failed return, ACK, request and facts, requires fresh complete
+  physical absence, and sends exactly one DELETE. Focused lint passes; see
+  `deploy/finished-delete-recovery-lifecycle.source.json`. No hosted acceptance.
+  First-capture lifecycle qualification2026-11-15: fresh migration94 execution
+  passes2/2. A first empty hold capture stays unchanged while a separately verified
+  request captures the later authentic writer birth; a mismatched actual queue
+  payload is refused before provider I/O with capture/erasure receipts unchanged.
+  Focused lint passes. See `deploy/original-first-capture-lifecycle.source.json`.
+  No account, ingress, whole-worker or C-item acceptance follows.
+  Multipart CREATE qualification2026-11-15: the first genuine current run failed
+  all5 controls on a resource trigger's operation-only fields. Migrations95–97
+  isolate that branch, parenthesize immutable JSON-page append, and distinguish
+  first session assignment from clearing an existing session. Intermediate runs
+  preserved4,3 and1 failures, the last being a fixture-reset statement timeout;
+  no guard was bypassed. Final fresh migration97 execution passes5/5 and the real
+  94→97 official-runner upgrade verifies all98 journals and all3 repaired bodies.
+  Full TypeScript/focused lint pass. See
+  `deploy/multipart-create-birth-lifecycle.source.json`. Hosted/provider and
+  stopped-executor acceptance remain open; no C row closes.
+  Multipart session-fact ledger qualification2026-11-15: fresh migration97
+  execution passes4/4. Scripted additional facts test only the real ledger after
+  genuine CREATE: conflicts are retained before projection, first ACK/FIN/session
+  identity and results remain immutable, pointer recovery fails closed, and an
+  unretained fact cannot project. Focused lint passes. See
+  `deploy/multipart-session-fact-ledger.source.json`. No additional provider ACK,
+  credential ingress, account or C-item acceptance is claimed.
+  Durable part capability qualification2026-11-15: migration98 publishes only a
+  runtime-predicated authority tag, returning unavailable to old presence-only
+  callers. Fresh execution passes6/6 for once-only body-bound local mint/FIN,
+  raw signer and unrelated-principal refusal, named holds, and delegated authority
+  remaining pending after return. The real97→98 upgrade verifies all99 journals
+  and unavailable untagged capability; full TypeScript/focused lint pass. See
+  `deploy/multipart-part-issuance-lifecycle.source.json`. Actual consumption,
+  stopped/legacy recovery and provider acceptance still govern other controls.
+  Known-CREATE recovery qualification2026-11-15: migration99 resolves a genuine
+  complete-parts variable/column ambiguity, and the owner review listing now keeps
+  accepted operations with unresolved physical callers available. The original
+  precondition run skipped5/5; subsequent controls preserved2 then1 failures.
+  Final fresh execution passes5/5, including review→declare→sign→browser PUT→
+  complete with no second CREATE and no rewritten first results. Real98→99 upgrade
+  verifies100 journals and the exact function body; full TypeScript/focused lint
+  pass. See `deploy/multipart-known-create-lifecycle.source.json`. No C row closes.
+  Provider-part verification qualification2026-11-15: the first current run passed
+  4/5; repeated recovery-only refusal changed the unknown operation timestamp.
+  That path now preserves the retained row instead of re-marking it. Final fresh
+  migration99 execution passes5/5 for checksum/full-nonce readback, wrong/unissued
+  part and named-hold refusal, lost ListParts debt and zero repeated COMPLETE POST.
+  Full TypeScript/focused lint pass. See
+  `deploy/multipart-part-verification-lifecycle.source.json`. No terminal session,
+  provider-account or C-item acceptance follows.
+  Multipart readback qualification2026-11-15: fresh migration99 execution passes
+  2/2. Full part-bound body facts precede object adoption without inventing link
+  consumption or session retirement; same-size byte contradiction preserves the
+  actual COMPLETE ACK/backend object as recovery debt, with no adoption, deletion
+  or fresh POST on repeat. Focused lint passes. See
+  `deploy/multipart-readback-lifecycle.source.json`. No terminal/provider claim.
+  Part-manifest lifecycle qualification2026-11-15: fresh migration99 execution
+  passes5/5. Complete declarations bind to the genuine CREATE caller and repeat
+  idempotently; changed same-size bytes, wrong sizes, other customers and named
+  holds are refused before new provider calls or signing authority. Focused lint
+  passes. See `deploy/multipart-part-manifest-lifecycle.source.json`. No provider
+  consumption, transport authentication or C-item acceptance follows.
+  Withheld-part lifecycle qualification2026-11-15: the first current run passed
+  5/6; its final direct observation insert lacked the shared request capability.
+  Using the genuine capability without weakening guards gives final6/6 on fresh
+  migration99. Private refusal, later genuine issuance, exposed/withheld immutable
+  dispositions, paused callers and additional positive-fact debt reopening retain
+  their original returns and evidence. Focused lint passes. See
+  `deploy/multipart-part-withheld-lifecycle.source.json`. No revocation/provider
+  account or C-item acceptance follows.
+  Unknown-COMPLETE recovery qualification2026-11-15: the first current run passed
+  4/5; JSONB key reordering made the retained part manifest fail its original
+  digest. Creation and recovery now share canonical field ordering, preserving
+  existing digest values. Final fresh migration99 execution passes5/5, including
+  canonical completion without another POST, nonce/session/debris refusals and
+  active/scoped-caller controls. Full TypeScript/focused lint pass. See
+  `deploy/multipart-applied-recovery-lifecycle.source.json`. No invented ACK/FIN,
+  provider account, host stop, erasure or C-item acceptance follows.
+  Original ABORT recovery qualification2026-11-15: migration100 resolves the
+  idle guard's operation-column ambiguity. Initial execution passed3/6, then5/6;
+  the retained-debris continuation exceeded60s, so only that genuine proof case
+  now allows120s and passes68s. Final fresh execution passes6/6 in167s, preserving
+  first failed inventories, admitting no second DELETE, and refusing active/scoped
+  or wrong-namespace callers. Real99→100 upgrade verifies101 journals and the exact
+  guard body; full TypeScript/focused lint pass. See
+  `deploy/multipart-abort-recovery-lifecycle.source.json`. No provider/host claim.
+  Repeat-ABORT qualification2026-11-15: the unchanged positive passed in281.6s;
+  phase profiling isolated195.5s to certificate insertion and found three triggers
+  repeating the identical seal predicate. A 3% async-local cache experiment was
+  rejected and reverted. Migration101 retains the dedicated mandatory certificate
+  guard while removing only its two duplicate evaluations. Positive124.1s, final
+  aggregate6/6 in282s, and real100→101 upgrade verifies102 journals/both bodies.
+  Full TypeScript/focused lint pass. See
+  `deploy/multipart-repeat-abort-lifecycle.source.json`. No provider/host closure.
+  Retirement-certificate lifecycle qualification2026-11-15: fresh migration101
+  execution passes6/6. Sealing is idempotent; human/system reviews remain separate;
+  forged/stale certificates and non-system callers are refused; named holds and
+  scripted late facts reopen current debt without rewriting first certificates,
+  ACK/FIN or provider history. Focused lint passes. See
+  `deploy/multipart-retirement-certificate-lifecycle.source.json`. No provider
+  account, independent executor or C-item acceptance follows.
+  Idle-compaction lifecycle qualification2026-11-16: the initial7/8 aggregate
+  isolated late same-first re-review. Recovery now coalesces identical queued
+  erasure work, recognizes an owning transaction's exclusive identity lock,
+  shares intact-certificate evaluation, and preserves exact human re-review
+  attribution. Migration105 computes the expected proof/identity once before
+  applying the unchanged certificate authority predicate. Fresh105 passes8/8
+  in224.32s; the late case passes70.422s and repeat-ABORT positive43.498s.
+  Privacy/certificate/repeat regressions pass20/20; the official102→105 upgrade
+  verifies106 journals and all three new function bodies. Full TypeScript,
+  focused lint, plan, license and changelog gates pass. See
+  `deploy/multipart-idle-compaction-lifecycle.source.json`. No provider account,
+  hosted executor, clean-room or C-item acceptance follows.
+  Retirement catch-up qualification2026-11-16: fresh migration105 passes6/6
+  through real pg-boss delivery. Interrupted-owner recovery uses the identical
+  queued safe proof without another DELETE; immediate sealing deduplicates;
+  holds, late facts and copied jobs refuse stale authority; post-enqueue failure
+  rolls back retirement, queue and claim together while retaining first ACK/FIN.
+  Focused lint passes. See `deploy/multipart-retirement-catchup-lifecycle.source.json`.
+  No provider account, OS-stop proof or C-item acceptance follows.
+  Idle-session retirement qualification2026-11-16: fresh migration105 passes7/7.
+  Genuine ACK/FIN, two-request absence and two complete inventories retire only
+  the never-exposed original; retained-first-ACK CREATE recovery composes without
+  replacing its failed first result. Exposed links, named holds, retained physical
+  debris, lost ABORT replies and paused writers preserve honest recovery debt.
+  Focused lint passes. See `deploy/multipart-idle-retirement-lifecycle.source.json`.
+  No provider account or C-item acceptance follows.
+  Transfer read-provenance qualification2026-11-16: the initial direct-loopback
+  fixture lacked conditional-write authority; synthetic AWS-to-TCP mapping keeps
+  every product assertion intact. Migration106 disambiguates the actual inventory
+  caller,107 reads plan-only adoption fields only for plans, and108 distinguishes
+  the target receipt alias. Fresh108 passes4/4 in39.01s; official105→108 verifies
+  109 journals and both guard bodies. Full TypeScript/focused lint pass. See
+  `deploy/media-transfer-read-provenance-lifecycle.source.json`. No provider
+  account, cross-module or C-item acceptance follows.
+  Chained-transfer qualification2026-11-16: fresh migration108 passes3/3. Two
+  actual physical generations preserve exact original receipt ancestry and the
+  logical alias; a real current-source session refuses another claim; SQL refuses
+  intermediate-edge rebinding without new provider I/O. Synthetic AWS-to-TCP
+  transport preserves all assertions. Focused lint passes. See
+  `deploy/media-chained-transfer-lifecycle.source.json`. No provider account or
+  C-item acceptance follows.
+  Target-PUT review qualification2026-11-16: fresh migration108 passes6/6. A
+  finished lost-response target is affirmed by its original nonce/full bytes and
+  complete inventory, then resumes without another PUT. Foreign nonces, retained
+  versions/sessions and named holds remain refused; the first NULL result digest
+  stays sealed. Synthetic AWS-to-TCP transport preserves every assertion. Focused
+  lint passes. See `deploy/media-target-put-review-lifecycle.source.json`. No
+  provider account, executor stop or C-item acceptance follows.
+  Drain-association qualification2026-11-16: fresh migration108 passes4/4.
+  Capture-only metadata grants no release; subset caller cohorts and fabricated
+  terminal births are refused; a genuinely pre-admitted target PUT stays fenced
+  even when the later capture names its exact current plan. Synthetic AWS-to-TCP
+  transport preserves every refusal. Focused lint passes. See
+  `deploy/media-transfer-drain-association-lifecycle.source.json`. No kernel stop,
+  provider account or C-item acceptance follows.
+  Original namespace-fence qualification2026-11-16: fresh migration108 passes6/6.
+  Cold/warm ordinary writers and raw children remain fenced without blocking exact
+  GET recovery; active claims reject same-key admission; matching transfer ancestry
+  conditionally retires its source; already-dispatched late bytes retain their
+  original facts. Initial failures were test wrapper assumptions, not bypasses;
+  exact SQLSTATE/message assertions now match the actual error boundary. Focused
+  lint passes. See `deploy/media-original-namespace-fence-lifecycle.source.json`.
+  No provider account, executor stop or C-item acceptance follows.
+  Controller-fence qualification2026-11-16: fresh migration108 passes2/2. A new
+  unrelated namespace drain refuses both SQL and actual-factory children of plan
+  A's authentic admitted target caller; plan B cannot capture while plan A owns
+  that caller. Synthetic AWS-to-TCP transport preserves every assertion. Focused
+  lint passes. See `deploy/media-transfer-controller-fence-lifecycle.source.json`.
+  No provider account, process stop or C-item acceptance follows.
+  Main storage-transfer qualification2026-11-16: the synthetic fixture now serves
+  bounded inventory XML and original request proof while preserving its target
+  pause/lost-reply behavior. Three transfer jobs declared after the old core list
+  were genuinely unregistered; normal boot now includes advance, erase and late-
+  fact reconciliation, with explicit registry assertions. Fresh108 passes9/9 in
+  63.65s, including conditional retirement, privacy holds and admitted-PUT debt.
+  Full TypeScript/focused lint pass. See
+  `deploy/media-storage-transfer-lifecycle.source.json`. No provider account,
+  ingress or C-item acceptance follows.
+  Unadmitted-target qualification2026-11-16: fresh migration108 passes its real
+  collision control. An identically hashed pre-existing target is neither read,
+  adopted nor deleted; only the actual original source retires, with no target
+  PUT/privacy-delete caller and no false whole-request completion. Synthetic
+  AWS-to-TCP transport preserves every assertion. Focused lint passes. See
+  `deploy/media-transfer-unadmitted-target.source.json`. No provider account or
+  C-item acceptance follows.
+  Multipart wire qualification2026-11-16: all13 protocol controls pass. Exact
+  full-response digests survive keep-alive framing; malformed/oversized XML,
+  entity expansion, duplicate fields, wrong buckets and HTTP200 errors never
+  become acceptance. NoSuchUpload remains absence, not ABORT proof. Focused lint
+  passes. See `deploy/media-multipart-complete-wire.source.json`. No real auth,
+  provider account or terminal caller-consumption acceptance follows.
+  Part-capability wire qualification2026-11-16: all10 actual SigV4 controls pass.
+  Signed URLs bind exact session/part/size/checksum/public nonce; raw server-held
+  tokens stay out of responses and durable facts; no network call or provider ACK
+  is invented. Missing identity, altered signer output, excessive deadlines and
+  retention failure preserve the original boundary. Focused lint passes. See
+  `deploy/media-multipart-part-capability-wire.source.json`. No app authorization
+  or provider acceptance follows.
+  Part-verification wire qualification2026-11-16: all12 checksum-bound controls
+  pass. Complete page identities require exact checksums, sizes, ETags and browser
+  receipts; later errors, missing/extra parts and NoSuchUpload never invent done
+  or authority consumption. CREATE/COMPLETE retain their checksum configuration,
+  canonical manifest and create-only condition. Focused lint passes. See
+  `deploy/media-multipart-part-verification-wire.source.json`. No service account
+  or terminal acceptance follows.
+  Multipart readback wire qualification2026-11-16: all6 controls pass. Actual
+  bounded chunks retain whole SHA, exact part digest, original CREATE nonce and
+  pinned revision. Altered, truncated, excessive or unchecksummed bytes never
+  certify the original; absence stays absence and legacy full reads remain
+  explicit. Focused lint passes. See `deploy/media-multipart-readback-wire.source.json`.
+  No real authorization, original writer FIN or terminal acceptance follows.
+  Completed-stream wire qualification2026-11-16: all7 controls pass. Every actual
+  chunk is hashed at the exact pinned version without returning another full body
+  buffer; actual bytes, not declared length, determine the count. Oversized and
+  interrupted streams cannot emit proof, changed revisions are refused, missing
+  CREATE metadata stays unknown and404 remains absence. Focused lint passes. See
+  `deploy/media-completed-stream-wire.source.json`. No account/auth or terminal
+  acceptance follows.
+  Original-metadata wire qualification2026-11-16: all6 actual HEAD controls pass.
+  Discovered/pinned revisions, byte size and original CREATE nonce retain their
+  exact evidence; changed versions and malformed sizes are refused;404 remains
+  an observation and missing metadata never invents a nonce. Focused lint passes.
+  See `deploy/media-original-metadata-wire.source.json`. Metadata alone proves no
+  original body, ACK, FIN, complete physical absence or executor stop.
+  Part-disposition qualification2026-11-16: all6 actual process-local controls
+  pass. Only the exact active invocation/token can assert withheld authority;
+  returned URLs cannot acquire it; success, failure and detached work expire it;
+  concurrent siblings and nested callers cannot borrow it. Focused lint passes.
+  See `deploy/media-multipart-part-disposition.source.json`. No remote proof or
+  provider acceptance follows.
+  Completion-manifest qualification2026-11-16: all8 controls pass. Browser ETags
+  remain exact while sizes/checksums derive only from the immutable declaration;
+  missing, extra, reordered, duplicate, resized or malformed parts are refused
+  without mutating either input or inventing received/consumed evidence. Focused
+  lint passes. See `deploy/media-multipart-complete-manifest.source.json`. No
+  provider or consumption acceptance follows.
+  Part-body declaration qualification2026-11-16: all8 controls pass. Fixed part
+  boundaries, final remainder, canonical ordering, SHA256 and bounded whole-file
+  reservations are enforced without changing the submitted declaration. Resume
+  detects a same-size different file without replacing the first manifest. Focused
+  lint passes. See `deploy/media-multipart-part-bodies-proof.source.json`. Client
+  declarations grant no provider receipt, FIN or actual I/O acceptance.
+  CREATE-baseline qualification2026-11-16: all12 controls pass. Sealing requires
+  both exact complete policy/object/version/session passes with cursor and request
+  ancestry. Existing physical resources, policy changes, truncated loops, duplicate
+  requests and sealed rewrites are refused without copying foreign private locators.
+  Focused lint passes. See `deploy/media-multipart-create-baseline-proof.source.json`.
+  No session assignment, FIN or remote terminal acceptance follows.
+  Known-CREATE proof qualification2026-11-16: all8 controls pass. Portable actual
+  finishes require no Linux path; unknown first ACK, changed UploadId, active
+  callers, incomplete pre-CREATE baselines, foreign stops, retained debris and
+  altered review/read/physical identities are refused without filling NULL FINs.
+  Focused lint passes. See `deploy/media-multipart-known-create-proof.source.json`.
+  Fictional proof inputs establish no actual host stop or provider acceptance.
+  ABORT-recovery proof qualification2026-11-16: all8 controls pass. Actual
+  portable FINs need no Linux path; missing FINs retain NULL until exact independent
+  stop proof. Changed namespaces, sessions, request sets, creator roles, runtime
+  births, descriptors, stop identity/timing and partial FINs are refused. Focused
+  lint passes. See `deploy/media-multipart-abort-recovery-proof.source.json`.
+  No remote ACK, provider absence, actual host stop or erasure completion follows.
+  Idle-retirement proof qualification2026-11-16: all7 controls pass. Exact actual
+  ABORT ACK/FIN and one original physical request are required;404, unknown replies,
+  active callers and changed identity cannot substitute. Full agreeing absence
+  accepts no retained original object/version/session or policy difference and does
+  not adopt unrelated observations. Focused lint passes. See
+  `deploy/media-multipart-idle-retirement-proof.source.json`. No real provider
+  retirement or executor claim follows.
+  Unknown-COMPLETE proof qualification2026-11-16: all13 controls pass. Exact
+  original nonce, selected parts, byte budget, physical timing and independent
+  closure are required; duplicate/overwrite requests, foreign pages, changed
+  policy, absence and later equal-body generations are refused without inventing
+  ACK/FIN or terminal fields. Focused lint passes. See
+  `deploy/media-multipart-complete-recovery-proof.source.json`. No host stop,
+  provider terminal authority, business acceptance or independent review follows.
+  Retained-identity proof qualification2026-11-16: all10 controls pass. Historical
+  first resource/CREATE/ABORT/physical identities remain distinct from current
+  permission. Late sessions compare against first digests without refilling raw
+  NULLs; exact caller/request/token/runtime and ephemeral candidate checks refuse
+  foreign evidence, mutation use and historical local-closure promotion. Focused
+  lint passes. See `deploy/media-multipart-retained-identity-proof.source.json`.
+  No certificate, kernel stop, provider outcome or compact-erasure proof follows.
+  Retirement-codec proof qualification2026-11-16: all8 controls pass. The whole
+  versioned safe body has a deterministic digest without input mutation; real NULL
+  ACK/FIN survive an explicit distinct stop review. Raw locators, changed ancestry,
+  duplicate/reordered membership, detached stop/review references, incomplete
+  inventories and truncated frontiers are refused. Focused lint passes. See
+  `deploy/media-multipart-retirement-certificate-proof.source.json`. A safe codec
+  alone grants no retirement or provider authority.
+  Retirement-job contract qualification2026-11-16: all5 scope controls pass.
+  The fixed safe admission excludes raw provider fields and requires the complete
+  frontier; durable keys distinguish proof and operation. Cloned, uninstalled,
+  detached or cancelled contexts cannot reuse the actual worker execution. Focused
+  lint passes. See `deploy/media-multipart-retirement-job-contract.source.json`.
+  Synthetic scopes alone are not genuine pg-boss execution.
+  Original applied-review proof qualification2026-11-16: all9 controls pass.
+  Exact affirmative review, original nonce/descriptor, positive inventory and
+  independent closure are required; retry, substituted references, retained debt
+  and stale/unfinished absence are refused. Portable reviewed finishes need no
+  Linux path and missing original returns remain NULL. Focused lint passes. See
+  `deploy/media-original-applied-review-proof.source.json`. Fictional proof values
+  establish no actual executor acceptance or provider outcome.
+  Target-review proof qualification2026-11-16: all4 controls pass. Exact target
+  object review preserves missing caller/physical returns; another target with
+  equal key/nonce/bytes is refused. Ordinary receipt reviews cannot become transfer
+  authority, and target reviews cannot become ordinary standalone retirement proof.
+  Focused lint passes. See `deploy/media-target-put-review-proof.source.json`.
+  Fictional scoped values establish no actual stop or provider acceptance.
+  Monotonic-DELETE closure qualification2026-11-16: all10 controls pass. Actual
+  local finish or exact independent stop is required; ambiguous DELETE is not
+  replayed by default. Missing result/ACK/FIN remain NULL, while paused, unverified,
+  foreign-birth, changed-generation, duplicate, post-fence and wrong-operation
+  attempts are refused. Focused lint passes. See
+  `deploy/media-monotonic-delete-local-closure.source.json`. Fictional stops prove
+  no real executor stop or remote ACK.
+  Ordinary retirement proof qualification2026-11-16: all16 controls pass. Exact
+  original finishes, fresh pinned absence and two complete agreeing inventories
+  are required; paused writers, extra mutations, changed generations, corrupted
+  descriptors and retained version/session/marker debt are refused without adopting
+  unrelated private resources. Focused lint passes. See
+  `deploy/media-original-retirement-proof.source.json`. Real database/private-provider
+  retirement acceptance remains open.
+  Original request-recovery proof qualification2026-11-16: all12 controls pass.
+  Exact original nonce, bytes, revision, runtime and matching complete inventories
+  are required; active callers, missing frames, extra mutations, foreign request
+  tags, retained debt and changed policy are refused without adopting unrelated
+  resources. Focused lint passes. See
+  `deploy/media-original-request-recovery-proof.source.json`. Actual DB/provider
+  recovery acceptance remains open.
+  Original recovery-quota qualification2026-11-16 (C10.32/C11.08): all6 controls
+  pass. Only the exact original reserved/settled token is recognized within its
+  byte bound; another operation, missing reservation, changed bytes or smaller
+  bound cannot invent or borrow capacity. Focused lint passes. See
+  `deploy/media-original-recovery-quota.source.json`. Hosted quota acceptance
+  remains open.
+  Late-fact quota proof qualification2026-11-16 (C10.32/C11.08): all6 controls
+  pass. Exact original charges are restored/retained without inventing a new token;
+  stale settlement reopens only for that token; smaller charges regain their
+  immutable admitted bound while larger charges stay intact. Conflicting rows and
+  invalid bounds refuse capacity changes. Focused lint passes. See
+  `deploy/media-original-quota-late-fact-proof.source.json`. Hosted acceptance
+  remains open.
+  Managed-producer lifecycle qualification2026-11-16 (C1.12/C11.08/C12.36/C8.07):
+  fresh migration108 passes6/6 real shared-service/fictional-TCP controls. Encrypted
+  member upload/access/unsend and conditional retirement retain the original nonce,
+  bytes and physical FIN; a lost reply stays pending without confirm/rebind/forget.
+  SQL refuses a different reservation birth. A real authorized gallery archive has
+  its own business-owned generation. Passive Doctor read scope performs no provider
+  mutation; explicit owner probing is audited, and raw managed PUT is refused before
+  provider I/O. TypeScript and focused lint pass. See
+  `deploy/media-managed-producers-lifecycle.source.json`. No issued-key transport,
+  real provider account, hosted platform or checklist acceptance follows.
+  Upload-reservation lifecycle qualification2026-11-16 (C1.12/C11.08): fresh
+  migration108 passes5/5 genuine upload/abort/retention/verified-erasure controls.
+  The repeated-request control exposed and fixed an artifact-ID/request-ID mismatch
+  that misclassified valid prior media receipts as foreign. The exact original UUID
+  and key digest survive without provider I/O or rewriting the old scope. Ten
+  neighboring first-capture/identity controls also pass; TypeScript and focused lint
+  pass. See `deploy/media-upload-reservation-lifecycle.source.json`. No provider
+  account, legacy upgrade, hosted erasure or checklist acceptance follows.
+  Empty-first-scope old-runtime qualification2026-11-16 (C1.12/C11.08/C11.14):
+  the unchanged four-case control PASSes against a genuinely migrated91 prefix,
+  before request-capability publication. Real empty original/transfer captures seal;
+  request/contact/scope and warm-runtime ABI mismatches refuse; a later actual upload
+  cannot rewrite the old capture or artifact. No provider privilege, physical request
+  or provider I/O is acquired. The test bootstrap now honors the existing migration-
+  skip switch for this historical boundary. TypeScript and focused lint pass. See
+  `deploy/media-empty-first-scope-lifecycle.source.json`. No current-runtime/provider
+  acceptance or C-item closure follows.
+  Empty-first-scope current-runtime qualification2026-11-16
+  (C1.12/C11.08/C11.14): a separate current108 control leaves the old-runtime oracle
+  unchanged and PASSes3/3 on a fresh database. Actual empty original/transfer captures
+  and their artifact seal; the complete-protocol lock has its documented transaction-
+  scoped authority but creates no caller/request or provider call; a forged capture
+  refuses; a later real upload cannot rewrite the sealed evidence. The first draft's
+  assumption that the full lock withheld its capability was corrected before the final
+  fresh run. TypeScript/focused lint pass. See
+  `deploy/media-empty-first-scope-current.source.json`. No product code, hosted provider
+  or checklist acceptance changes.
+  Media pure-proof qualification2026-11-16 (C1.12/C10.32/C11.08): all29 controls
+  pass across exact quota-token settlement/release, original multipart session-fact
+  classification, first-captured stopped-source review and legacy NULL-upload anchor
+  handling. Equal keys, replacement identities, missing birth/stop proof and mutable
+  historical captures remain refused. Focused lint passes. See
+  `deploy/media-pure-proof-qualification.source.json`. These immutable projections
+  supply no real kernel-stop, provider, upgrade or checklist acceptance.
+  Part-signing old-runtime qualification2026-11-16 (C1.12/C11.08): the unchanged
+  refusal oracle PASSes2/2 against a genuinely migrated97 prefix, before the durable
+  part capability exists. Real open CREATE sessions in both created/uploading states
+  preserve all original rows and provider state; the configured signer is never called.
+  The fixture was completed only with actual empty baseline reads and exact bucket/key
+  CREATE context after its first run failed before reaching the oracle. TypeScript and
+  focused lint pass. See `deploy/media-part-signing-authority-lifecycle.source.json`.
+  Issued URLs, old-binary recovery, current provider acceptance and C closure stay open.
+  Part-signing current108 regression qualification2026-11-16 (C1.12/C11.08): the
+  unchanged six-case genuine local issuer file PASSes6/6 on a fresh current database
+  after the late-original observation/quota repair. Once-only body-bound mint/FIN,
+  raw-signer/foreign-principal/named-hold refusal, pending delegated authority and old
+  untagged-call refusal all remain intact. No test or product source changed. See
+  `deploy/media-part-signing-current108.source.json`. Actual consumption, hosted provider
+  and checklist acceptance remain open.
+  Signed-part consumption current108 regression qualification2026-11-16
+  (C1.12/C11.08): four unchanged genuine lifecycle files PASS18/18 in136.21s on one
+  fresh current database. Declarations, actual checksum/full-nonce readback, lost
+  ListParts recovery, wrong/foreign/held refusal, full stored-part facts, contradictory
+  bytes, and withheld/exposed first dispositions preserve exact evidence without a
+  repeated COMPLETE or invented adoption/retirement. No test or product source changed.
+  See `deploy/media-part-consumption-current108.source.json`. Hosted provider and
+  checklist acceptance remain open.
+  Multipart terminal-recovery current108 qualification2026-11-16 (C1.12/C11.08):
+  unchanged genuine COMPLETE/ABORT files PASS11/11 in155.48s on one fresh database,
+  with29/29 supporting pure proofs. Lost replies recover through exact fresh bytes and
+  inventories without another POST/DELETE or invented first ACK/FIN. Foreign nonces,
+  retained debris, wrong namespaces, paused callers and scoped keys remain refused.
+  No test or product source changed. See
+  `deploy/media-terminal-recovery-current108.source.json`. Hosted provider, independent
+  executor and checklist acceptance remain open.
+  Retirement-certificate current108 qualification2026-11-16 (C1.12/C11.08): unchanged
+  repeat-ABORT/certificate files PASS12/12 in204.44s on one fresh database, with36/36
+  supporting identity/retirement/local-closure proofs. Same-original late-fact re-review
+  uses fresh reads/inventories and a new seal/job without DELETE replay or first-result
+  replacement. Holds, foreign locators/stops, scoped keys, live signing and rewritten
+  certificates refuse. No test or product source changed. See
+  `deploy/media-retirement-certificate-current108.source.json`. Hosted/provider and
+  checklist acceptance remain open.
+  Idle-minimization current108 qualification2026-11-16 (C1.12/C1.08/C11.08):
+  unchanged compact/catch-up/retirement files PASS21/21 in408.22s on one fresh database;
+  shared privacy reopening PASSes5/5 separately and20/20 supporting proofs pass. Real
+  workers reduce exact original locators, re-review late facts and roll back failed
+  enqueue/claim atomically without another DELETE. Copied jobs, named holds, exposed
+  links, retained debris, unknown ABORT and wrong sessions remain refused. No test or
+  product source changed. See `deploy/media-idle-minimization-current108.source.json`.
+  Hosted provider, independent executor and checklist acceptance remain open.
+  Namespace-origin/image-admission qualification2026-11-16 (C3.44/C10.32/C11.08):
+  all29 fictional-transport controls pass. DigitalOcean origin creation is one-shot,
+  unpredictably named and separately signed to its installed namespace; existing,
+  missing-request-ID and lost-reply results remain debt without another PUT. Strict
+  source/image/profile validation, safe CDN redirects and actual account/image refusal
+  occur before provider mutations. Focused lint passes. See
+  `deploy/media-namespace-origin-admission.source.json`. No real account, compatible
+  published image, installed runtime, launch or checklist acceptance follows.
+  Managed-adapter/completed-body/drain proof qualification2026-11-16
+  (C1.12/C11.08): all21 controls pass. Application raw object/session/part mutations
+  stay refused before provider I/O while reads remain unchanged. Completed multipart
+  bodies require exact original CREATE nonce, FIN, descriptor, full bytes and revision;
+  transfer-drain release requires the complete unchanged captured/current cohort.
+  Focused lint passes. See `deploy/media-adapter-completed-drain-proof.source.json`.
+  These structural controls do not close provider, kernel-stop or C-item acceptance.
+  Stored-part readback qualification2026-11-16 (C1.12/C11.08): all7 controls pass.
+  Original part boundaries and canonical SHA256 are verified independently of stream
+  chunks; altered/missing/extra bytes, malformed manifests and verifier replay refuse.
+  The result retains only the exact selected manifest digest, never a full body or
+  caller FIN. Focused lint passes. See `deploy/media-stored-part-readback.source.json`.
+  No provider, caller-terminal or checklist acceptance follows.
+  Current resumable-media qualification2026-11-16 (C1.12/C11.10): the focused
+  private-S3 and expiring-phone controls pass2/2 on fresh migration108. The positive
+  control now exercises actual declaration, signing, body-bound PUT, inspection,
+  COMPLETE, exact original CREATE/readback binding, asset registration and idempotent
+  retry; all prior final assertions remain. TypeScript and focused lint pass. See
+  `deploy/media-current-resumable-lifecycle.source.json`. The earlier broad media run
+  TIMED OUT at600s; its initial fixture failures are superseded only for these two
+  cases. Capture timeout/trailing resets and raw-write raster fixtures remain open.
+  Complete current-media regression qualification2026-11-16 (C1.12/C11.10): after
+  the focused capture/raster/ownership repairs, the unchanged complete media file now
+  PASSes48/48 in241.58s on a fresh current108 database. Validation, asset/rendition
+  lifecycle, malware/quarantine, deletion, private resumable upload, expiration and
+  usage-reference controls all compose; the earlier600s timeout does not reproduce.
+  Seven stored-part proofs also pass. No test or product source changed. See
+  `deploy/media-current-complete-current108.source.json`. Hosted provider/performance
+  and checklist acceptance remain open.
+  Integrated fast-gate qualification2026-11-16 (C11.17): `pnpm gates` PASSes full
+  TypeScript, full ESLint139.9s, license/release/plan/playground checks and44 contract
+  files with387 passing/26 explicit database-skipped cases. No failure is hidden and no
+  product source changed. Browser, recipe, SEO, upgrade, hosted and clean-room suites
+  remain separate and open. See `deploy/integrated-fast-gates-20261116.source.json`;
+  no checklist row closes.
+  Production-artifact qualification2026-11-16 (C11.17): `pnpm build` exits0 in216.72s
+  and runs the standalone gate:4395 files/153667318 bytes with no source or environment
+  leakage. Build-only locales/packages/src roots were scrubbed. Existing optional ts-mls
+  module warnings and the expected missing production DB/session build-page message stay
+  visible; neither is called a runtime startup pass. No product source changed. See
+  `deploy/production-build-20261116.source.json`. Hosted startup and C11.17 remain open.
+  Package-consumer qualification2026-11-16 (C11.17): `pnpm packages:verify` PASSes,
+  packing/installing/exercising all7 published packages outside the workspace. No product
+  source changed. See `deploy/package-artifacts-20261116.source.json`. Ownership drill and
+  image upgrade remain unrun locally because psql/Docker are unavailable; C11.17 is open.
+  Local Linux-release smoke qualification2026-11-16 (C3.44/C11.17): the normal dirty
+  guard first refused; explicit local-only `--allow-dirty` packaging then produced the
+ 83.8MB beta6 x64 tarball with SHA256 ee8d7e9b0338f609bb2d056fdeb9e4b8977b23ea164cfb3c9311b47108c2f7a0.
+  A freshly extracted copy migrated a new database with its bundled runtime, then booted
+  with the genuine worker: health and DB both ok:true,124 registered/mounted jobs and
+  one current worker. The smoke server was stopped. This is not an official release,
+  owner claim or hosted acceptance. See `deploy/local-release-smoke-20261116.source.json`.
+  Source-continuation repair2026-11-16 (C11.17/C1.08/C11.14): the full standard source
+  run had5124 passes and three exact-hash failures. Approved successors predated current
+  privacy-coalescing, migration-skip and commercial-amendment deltas. Exact forward
+  continuations now restore those approved predecessors before the unchanged original
+  oracles; all three focused files PASS24/24. One intermediate continuation literal was
+  corrected without touching source. See `deploy/source-continuity-current108-20261116.source.json`.
+  Renewed full source PASSes601 files/5127 cases with zero failures in667.00s;361 files/
+  3806 cases explicitly skip without a database, and full ESLint passes. Hosted, clean-room
+  and signed acceptance remain open; no C row closes.
+  Full local browser qualification2026-11-16 (C11.17): the named journey command
+  PASSes3/3 broad Chromium journeys in1.4m on a fresh database, and the separate full
+  accessibility command PASSes1/1 in2.2m on another fresh database. Visitor-to-paid,
+  phone capture, setup/editing/publishing/API/MCP/recovery and setup/admin/editor/
+  storefront/portal accessibility all pass. No product source changed. See
+  `deploy/full-local-browser-20261116.source.json`. Hosted, upgrade and owner-signed
+  acceptance remain open; no C row closes.
+  Complete-browser failure audit and repair2026-11-16 (C1.08/C1.12/C3.22/C5.19/C9.38/
+  C11.17/C12.23/C12.38): the actual189-case run was NOT GREEN:156 passed,31 failed,
+  2 skipped. Nine raw privacy fixtures now use the required identity lock; the member
+  upload fixture restores real contact ownership; archive cleanup has a cycle-free
+  guarded deletion entry; the legacy merchant trial declares its actual scope version.
+  Focused privacy/import PASS13/13 and archive/member/trial PASS9/9. All35 selected
+  media controls pass after isolating database-resetting files. The real pending-membership
+  parallel-read fix PASSes native1/1 and its production-browser control. Genuine signed
+  return-callback controls PASS2/2 and all8 localized return journeys PASS. Every original
+  failure now has a focused pass, but the complete source/browser reruns remain required.
+  See `deploy/browser-failure-repairs-20261116.source.json`; no C row closes.
+  Native media-isolation repair2026-11-16 (C1.12/C11.17): three full-source attempts
+  timed out; the second exposed eight capture failures after an erasure case stalled.
+  The third passed capture/subscription-billing before the harness deadline. The stalled
+  case generated3182 entries from accumulated shared local media. Vitest
+  now supplies a unique temporary media root per run unless explicitly configured.
+  The complete capture file PASSes17/17 under that ordinary configuration, including
+  its concurrent-upload control. The final full source/browser reruns remain open.
+  Framework security/performance qualification2026-11-16 (C11.10/C11.17): Next.js
+  moves16.4.2→16.4.6, including the official November security fixes
+  (https://nextjs.org/blog/november-2026-security-release). The dependency audit now
+  reports no known advisories. Small-dataset performance PASSes10/10 on a fresh database;
+  the patched build/artifact gate passes with4399 files/152787678 bytes and no leakage;
+  all7 package consumers pass again. A source-continuation entry covers the exact Next
+  version delta and its two affected contracts PASS52/52. Final full source PASSes601
+  files/5127 cases with zero failures in662.16s, preserving361 files/3806 explicit skips.
+  See `deploy/next-security-performance-20261116.source.json`. No independent
+  security review or stable acceptance follows.
+  Recovery-browser current qualification2026-11-16 (C1.12/C11.08/C11.17): the old
+  fixture's direct NULL-birth PUT/resource inserts were correctly refused by current
+  guards. Genuine failed ordinary PUT evidence now uses the native sidecar/absence
+  pattern, and genuine lost-CREATE evidence comes from a separate current Vitest producer
+  with UUID-only handoff. The stale audit assertion names applyOriginalPutRecovery.
+  Final Chromium PASSes4/4 across en/es/fr/ar with step-up,320px/RTL,both themes,Axe,
+  exact recovery, private audit and anonymous refusal. TypeScript/focused lint pass. See
+  `deploy/media-storage-recovery-browser-current.source.json`. No product code or C row changes.
+  Publication-consent browser qualification2026-11-16 (C8.16/C11.17): the unchanged
+  Chromium journey PASSes1/1 in20.6s on a fresh current database. Grant/expiry/withdrawal,
+  the preserved decision ledger, both themes and Axe pass. No product source changed.
+  See `deploy/media-consent-browser-current.source.json`. Full clean-room and signed
+  acceptance remain open.
+  Editor-media browser qualification2026-11-16 (C1.12/C11.17): the unchanged Chromium
+  journey PASSes1/1 in37.0s on a fresh current database: canvas upload, crop/focal point,
+  save and published-page rendering. Local disposable storage supplies no hosted claim.
+  No product source changed. See `deploy/editor-media-browser-current.source.json`.
+  Full clean-room and signed acceptance remain open.
+  Hosted-source media browser qualification2026-11-16 (C3.22/C11.17): unchanged
+  Chromium journeys PASS4/4 in46.9s across en/es/fr/ar on a fresh current database.
+  Origin approval, staged-media review and cancellation pass. Local/synthetic fixtures
+  supply no live provider or C-item acceptance. See
+  `deploy/import-hosted-media-browser-current.source.json`. No product source changed.
+  Raster-fixture qualification2026-11-16 (C1.12/C11.10): the full file passes15/15
+  on fresh migration108. Three legacy fixtures now seed through genuine original
+  receipt admission rather than forbidden raw managed PUT. SVG never reaches Sharp;
+  changed stored bytes and non-raster registration still refuse, and valid JPEG/PNG
+  rescan/rendition assertions are unchanged. TypeScript and focused lint pass. See
+  `deploy/media-raster-guard-lifecycle.source.json`. Capture timeout/reset and actual
+  provider/checklist acceptance remain open.
+  Capture-erasure lifecycle qualification2026-11-16 (C1.12/C11.08/C11.10): the
+  previously timed-out original-pointer case reproduced in isolation without a lock
+  wait and completed its genuine evidence work in61.9s. A120s per-case ceiling replaces
+  the inappropriate30s default without changing any oracle. The full capture file now
+  passes17/17, including79s erasure and all trailing resets. TypeScript/focused lint
+  pass. See `deploy/media-capture-erasure-lifecycle.source.json`. Provider, hosted
+  performance and checklist acceptance remain open.
+  Watermark-backfill fixture qualification2026-11-16 (C1.12/C8.04): all11
+  controls pass on fresh migration108 after three legacy setups move to genuine
+  original-receipt admission. Visible marks, non-image skip, repeat suppression and
+  pending-race sweep behavior retain every original assertion. TypeScript and focused
+  lint pass. See `deploy/media-watermark-backfill-lifecycle.source.json`. Actual
+  provider/checklist acceptance and the older multipart-receipt fixture repairs stay open.
+  Multipart-receipt/current-recovery qualification2026-11-16 (C1.12/C11.08):
+  the full older file passes9/9 on fresh migration108. Its fixture now exercises real
+  declaration/signing/PUT and retained CREATE/readback evidence. Lost CREATE remains
+  unadopted/pending; COMPLETE uses exact applied review; ABORT never replays; active
+  assets stay unretired. A genuine TS/SQL digest mismatch for absent unversioned S3
+  versionId was fixed; all12 inventory proofs pass. TypeScript/lint/changelog output
+  pass. See `deploy/media-multipart-receipts-current.source.json`. No real provider
+  account, legacy fixture or checklist acceptance follows.
+  Historical-control routing2026-11-16: empty-scope4/4 and part-signing2/2 PASS again
+  at their genuine pre-capability boundaries. They now run only with the explicit
+  migration-freeze switch, so current suites report them as selected historical skips
+  rather than impossible current-runtime failures. Focused lint and source hashes pass.
+  Transfer-preview historical-receipt fixture qualification follows below; no
+  C-item closes.
+  Write-ownership fixture qualification2026-11-16 (C1.12/C3.22/C11.08): all5
+  controls pass on fresh migration108. Active-write mocks now retain genuine observer
+  context; late bytes use the low-level owned provider fixture only after application
+  failure. Original witnesses, parallel renditions and unresolved reservations survive.
+  Replacement local roots explicitly refuse cleanup without deleting original bytes.
+  TypeScript and focused lint pass. See `deploy/media-write-ownership-lifecycle.source.json`.
+  No C closure follows.
+  Late-erasure qualification2026-11-16 (C1.12/C11.08): all4 controls pass on fresh
+  migration108 with genuine synthetic TCP. A real provider-controlled late reapplication
+  of a retired original PUT exposed that accepted+deleted receipts did not reopen their
+  erasure cohort. Positive late facts now clear that retirement marker and reopen recovery;
+  minimized proof still requires exact restoration before cleanup. Published/unrelated
+  assets and both named holds retain their original guarantees. TypeScript/lint/changelog
+  pass. See `deploy/media-late-erasure-lifecycle.source.json`. No hosted/provider/C closure.
+  Write/late-erasure post-repair qualification2026-11-16 (C1.12/C3.22/C11.08):
+  the unchanged ownership and late-erasure files PASS9/9 in108.23s on one fresh current
+  database after the shared late-original caller/quota repair. Original and parallel
+  rendition witnesses survive lost ACKs, unresolved writers never expire into absence,
+  replacement namespaces cannot acknowledge deletion, and late bytes reopen exact
+  erasure debt while published/unrelated/held assets remain protected. No test or
+  product source changed. See `deploy/media-write-late-erasure-current108.source.json`.
+  Hosted provider and checklist acceptance remain open.
+  Transfer-preview historical cohort qualification2026-11-16 (C1.12/C11.08):
+  each new scratch database builds the genuine0..81 prefix, retains explicit accepted,
+  repeated and unknown historical receipts before the reservation guard, then runs the
+  real82..108 upgrade. All3 current preview controls pass47.63s: repeated receipts
+  change inventory proof, unknown history and wrong principals/resources stay refused,
+  named holds persist, and neither provider I/O nor receipt mutation occurs. TypeScript
+  and focused lint pass. See `deploy/media-transfer-preview-history.source.json`.
+  This test-only repair supplies no provider/copy/closure acceptance; no C-item closes.
   Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and
   signer handoff require a dedicated unpublished durable-part capability;
   generic storage/request flags cannot mint new browser PUT URLs. Existing
@@ -3999,6 +7088,52 @@ reading chat logs.
   retains all assembly/receipt/idempotency assertions. Full per-part recovery,
   old-runtime/issued-URL retirement, full-protocol/provider acceptance and this
   C item remain open. See `deploy/media-part-signing-containment-2026-11-13.md`.
+  Ordinary retirement source checkpoint2026-11-13: the existing cleanup path
+  now prepares exact original-UUID conditional deletion, retained actual caller
+  returns, fresh pinned absence and complete two-pass physical-version/session
+  proof before retiring its two exact receipts and releasing only the original
+  quota token. Four new owned82 functions/two guards add no models or published
+  capability; all16 pure and six native declarations are unrun. Crash/stop,
+  failed/unattempted admission recovery, multipart, quota initialization,
+  cutover, translated recovery and actual acceptance remain required. See
+  `deploy/media-original-retirement-source-2026-11-13.md`. No C row closes.
+  Source-only continuation: a genuine finished unattempted preflight can admit
+  a separately born caller; unknown or acknowledged physical DELETEs cannot be
+  replayed. The exact original family retains prior returns and first digests.
+  Thirteen additional pure cases and one added native leaf remain unrun; no
+  request capability or completion status advances. See
+  `deploy/media-original-delete-continuation-source-2026-11-13.md`.
+  Pre-enable namespace fence source repair2026-11-13: shared full-writer tags
+  cannot authorize ordinary logical or physical mutations through a captured
+  drain/active source claim. Two new owned82 functions/three guards require
+  exact genuine transfer caller ancestry for the narrow exception and keep GET
+  recovery distinct. Six native controls are prepared/unrun; no production
+  incident, capability publication or C completion is claimed. See
+  `deploy/media-original-namespace-fence-source-2026-11-13.md`.
+  Stopped original PUT source slice2026-11-13: the existing person-only
+  recovery flow accepts an optional exact independently verified executor stop
+  ID, requires fresh original nonce/body and complete agreeing inventory for
+  affirmative applied recovery, and preserves NULL actual returns/finishes.
+  Four-locale UI guidance and14 pure controls are prepared/unrun. Linux is an
+  optional actual executor path; portable actual finishes need no Linux proof.
+  Stopped-caller absence/retirement, other executor adapters, final SDK
+  regeneration and all native/provider qualification remain open. See
+  `deploy/media-original-stopped-put-source-2026-11-13.md`.
+  Current-controller correction source2026-11-13: genuine old transfer ancestry
+  cannot cross another live source claim or an unrelated/later executor drain.
+  Shared logical/physical admission and SQL independently require exact current
+  plan/phase/original stop digest. Twelve pure and two native controls are
+  prepared/unrun. Additional crashed-executor association/release and browser
+  multipart part issuance remain required; capability is still unpublished.
+  See `deploy/media-transfer-controller-fence-source-2026-11-13.md`.
+  Finished acknowledged DELETE source2026-11-13: an actual successful provider
+  ACK plus real original caller/request finishes can proceed to fresh proof
+  only after failed local result retention. No second DELETE is dispatched;
+  the first failure/ACK remain immutable and a separate review requires pinned
+  absence/full physical inventory. Seven pure and one native regression are
+  prepared/unrun. Unknown outcomes without ACK, stopped-origin retirement,
+  multipart/quota/cutover and all acceptance remain open. See
+  `deploy/media-finished-delete-recovery-source-2026-11-13.md`.
   (`0029_closed_rockslide.sql`; rollback-compatible large-file accounting and
   legacy-write inventory trigger; signature/extension/type/size validation;
   private-S3 multipart resume and terminal idempotency; streaming ClamAV seam;
@@ -4353,7 +7488,14 @@ reading chat logs.
 - [x] **C1.33** Code submissions: patch/diff/PR URL, DCO attestation, license
   notice, never auto-merge; a determination may cite a §43 ID;
   CONTRIBUTING.md and SECURITY.md pointers.
-  (patch without DCO refused; `externalUrl` GitHub-only; determination
+  (patch without DCO refused; `externalUrl` restricted to an allowlist of
+  hosts — `github.com` always, plus any host named in
+  `FREEHOLDER_CODE_LINK_HOSTS`, compared against a parsed URL so scheme,
+  userinfo and look-alike suffixes are settled explicitly
+  (`isAcceptedCodeLink`, proved by `tests/core/contribute-code-link.test.ts`);
+  it was GitHub-only until 2026-11-18, which left an instance keeping its code
+  on its own forge unable to cite the repository the work was done in;
+  determination
   `checklistId`; CONTRIBUTING.md channel paragraph **F04** `/admin/contribute` code-submission kind. **F05** `contribute.submit` with the code-submission kind at `/api/v1/contribute.submit`, MCP `contribute_submit` (never auto-merge). **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contribute.test.ts` is the composition proof.)
 - [x] **C1.34** Reply hub determinations to the speaking instance: store a
   reply URL and capability token on ingest, POST status on determine, apply
@@ -5076,7 +8218,7 @@ human, collaboratively, without code, lock-in markup or accidental publication.
 - [x] **C2.26** Deliver a public blog index with published post discovery, pagination, locale-aware links and metadata, an editable index block and an owner publish workflow. Drafts and gated bodies remain private.
   *(Closed 2026-10-14 against `C2.26` on `main` (`f9b155be`, released as 0.2.0-beta.3 and live on freeholder.ai). Evidence: `tests/modules/customer-surfaces.test.ts` (published-only listing, drafts and working copies hidden, page 2 pagination, reviewed fr translation) and `tests/browser/customer-surfaces.spec.ts` (owner writes and publishes at /admin/blog; post appears on /blog only after publish; Axe light/dark); /blog serves 200 with a canonical link; scope and limits in `deploy/customer-surfaces-2026-10-07.md`; F01–F12 rows in `deploy/f-criteria-matrix.md`. **F04** `app/(admin)/admin/blog/page.tsx` and `/blog`. **F05** `cms.listBlogPosts` in `src/modules/cms/blog.tsx`, projected to HTTP/MCP and `packages/sdk/src/generated.ts`. **F07** customer ownership and privacy in `tests/modules/customer-surfaces.test.ts`. **F09** provider and deployment limits recorded in `deploy/customer-surfaces-2026-10-07.md`. **F12** `tests/browser/customer-surfaces.spec.ts` composed journey. Live payment-provider settlement stays with C11.05.)*
 
-- [ ] **C2.27** Blog categories and tags: hierarchical categories, flat tags,
+- [x] **C2.27** Blog categories and tags: hierarchical categories, flat tags,
   owner CRUD, post assignment, public archive pages, sitemap and slug-move
   redirects through the same scoped services on UI, HTTP and MCP.
   Hosted qualification 2026-11-10 on `demo.freeholder.ai` at main
@@ -5094,11 +8236,33 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   `deploy/blog-wordpress-2026-11-07.md` records the exact image and limits.
   Scale and source-specific qualification remain open; this is not stable
   or production acceptance.
-- [ ] **C2.28** Blog authors: account-linked or guest profiles, private email,
+  *(Closed 2026-11-15 for the stated taxonomy scope. Current native blog controls
+  PASS27/27 and the real Chromium category-create/assign/publish/move journey
+  PASSes with both-theme Axe. The hosted run above proves parent/child archives,
+  sitemap entries and one literal301. **F04** `/admin/blog/categories`,
+  `/admin/blog/tags` and public archives. **F05** `cms.listTerms`/`saveTerm`/
+  `deleteTerm` use the shared scoped projections. **F07** published-only archive,
+  draft/privacy and redirect-isolation controls. **F09** the qualification/limits
+  document above. **F12** `tests/core/blog-structure-comments.test.ts`,
+  `tests/core/blog-playground.test.ts` and `tests/browser/blog-structure.spec.ts`.
+  Scale and source-specific cutover remain explicitly outside this closure.)*
+- [x] **C2.28** Blog authors: account-linked or guest profiles, private email,
   public bylines/bios and author archives; preserve WordPress authors, terms,
   post dates and exact archive paths at import. Owner administration and
   four-locale labels are required before checking this item.
-- [ ] **C2.29** Public blog comments: moderated threads with owner controls,
+  *(Closed 2026-11-15. Current native blog/customer/playground controls PASS27/27;
+  the real Chromium owner→guest-author→publication/comment journey and both-theme
+  Axe checks PASS, with private email absent. The verified hosted run on
+  e65773459a9e1d8cde977a0e16432e91bf65d796 additionally edited the author/bio
+  and reached its public archive. Import dates/terms/paths, merge, export and
+  erasure are covered in `tests/core/blog-structure-comments.test.ts`.
+  **F04** `/admin/blog/authors` and the public byline/archive. **F05**
+  `cms.listAuthors`/`saveAuthor`/`deleteAuthor`/`authorAccounts` use the shared
+  scoped service projections. **F07** private email and hidden-publication tests.
+  **F09** `deploy/blog-wordpress-2026-11-07.md`. **F12** the native and Chromium
+  journeys above. Related taxonomy scale, comment and source-cutover acceptance
+  remain with their own rows.)*
+- [x] **C2.29** Public blog comments: moderated threads with owner controls,
   spam/honeypot and rate limits, unified contacts resolution/merge/privacy,
   notifications and WordPress comment import. Never expose a comment email.
   *(Import-reader privacy repair 2026-11-11: actual PostgreSQL repros found
@@ -5167,6 +8331,19 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   child refusal, original receipt/source ownership and existing hold/erasure
   checks. Evidence: `deploy/import-reader-privacy.md`. Protected qualification
   and the full existing C2.29/C3.46 requirements remain open.)*
+
+  *(Closed 2026-11-15 for the stated comment scope. Current native moderation
+  controls and 49 reader/import privacy/provenance controls PASS; real Chromium
+  proves pending→approved publication, escaped text, replies and no private-email
+  exposure, with both-theme Axe. **F04** `/admin/blog/comments` and the public
+  thread. **F05** `cms.submitReaderComment`/`listReaderComments`/
+  `moderateReaderComment`/`readerCommentsForOwner`/`importReaderComment` use the
+  shared service boundary. **F07** honeypot/rate/publication/privacy/merge/erasure
+  controls in the named native files. **F09** `deploy/blog-wordpress-2026-11-07.md`
+  and `deploy/import-reader-privacy.md`. **F12**
+  `tests/core/blog-structure-comments.test.ts`, the four current reader/import
+  files and `tests/browser/blog-structure.spec.ts`. Source-specific cutover and
+  independent product-wide review remain with C3.46/C3.47/C11.10.)*
 
 ### 43.8 C3 — Living contract, plugins, packages, and portable operation
 
@@ -5412,7 +8589,7 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   `render.yaml`, and `deploy/docker-selfhost/infra/compose.yml`. Every recipe binds
   PostgreSQL, private S3-compatible storage, health checks and secret inputs;
   `scripts/recipe-matrix.sh` boots the built image for all six target contracts
-  against PostgreSQL/MinIO and runs the authenticated canonical Doctor in CI.
+  against PostgreSQL/S3-compatible storage and runs the authenticated canonical Doctor in CI.
   Parsed/current-IaC coverage in `tests/core/recipes.test.ts`. **F04** `packages/cli` doctor/migrate, not a new admin screen. **F05** N/A — IaC recipes (`replit.nix`, `render.yaml`, compose, DO/Railway); operator CLI is C10.21. **F07** `tests/core/recipes.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/recipes.test.ts` is the composition proof.)
   *(HTTPS follow-up 2026-11-05: `deploy/docker-selfhost/infra/compose.yml`
   serves plain HTTP on port 3000, so owner passkeys could not work on a
@@ -6151,6 +9328,18 @@ deployments are portable, testable and incapable of silently forking the truth.
   reader 78 preserves identical product and migration source; its ancestry
   differences contain documentation and test corrections only. Protected
   qualification and actual provider acceptance remain open. C3.34 remains unchecked.)*
+  *(Destination-boundary re-audit, 2026-11-15: the original account/key checks
+  and frozen request precede provider I/O. A fresh migration93 database passed
+  the existing 49 form/intake controls. The added accepted legacy-event control
+  proves that an enquiry with no original notice or destination cannot use a
+  replacement account or create a lead-copy witness. A fresh focused run passed
+  all five original-delivery, legacy-refusal, origin/key-replacement and
+  unknown-outcome controls. Two complete reruns also passed every product
+  assertion they reached; three setup-only failures were the unchanged 25-second
+  full-schema reset timing out under disk-sync load, not behavioral failures.
+  TypeScript, focused lint and an independent static audit found no new defect.
+  See `deploy/form-lead-destination34.source.json`. This supplies no live
+  provider acceptance; C3.34 remains unchecked.)*
   *(Credential-binding follow-up, 2026-11-12: protected CodeQL identified an
   unkeyed provider-secret fingerprint. Its replacement uses a purpose-separated
   HMAC with independently configured private material and explicit retained
@@ -6250,7 +9439,19 @@ deployments are portable, testable and incapable of silently forking the truth.
   `tests/core/launch-template.test.ts`, `tests/core/private-preview.test.ts`;
   changeset `launch-template-private-preview.md`. A free intro call is a
   request form, not a calendar booking: the booking flow prices every
-  bookable service, and a zero price is refused.)* *(Progress 2026-11-06:
+  bookable service, and a zero price is refused.)*
+  *(Credential-boundary repair, 2026-11-15: an actual before control showed that
+  any `Authorization` header bypassed the proxy for every API path. The gate now
+  limits header exemptions to `/api/v1` and `/api/mcp`; their shared handlers
+  require a genuinely resolved actor or the signed preview cookie before any
+  business operation. Other API routes cannot trust a forged header. The real
+  dispatcher refuses a forged bearer and serves an anonymous public read with
+  the signed cookie. Fresh migration93 controls pass 23/23 for preview and
+  signed webhooks, 41/41 for shared HTTP/proxy behavior, and the interrupted MCP
+  ping control passes separately. TypeScript and focused lint pass. See
+  `deploy/private-preview-credential35.source.json` and changeset
+  `private-preview-api-authorization.md`. C3.35 remains unchecked until its
+  hosted real-plan acceptance.)* *(Progress 2026-11-06:
   Stripe's signed webhooks reach a preview. A `POST` with `Stripe-Signature`
   to exactly `/api/payouts/stripe_connect/webhook` or
   `/api/payments/webhooks/stripe` passes the gate; the route verifies the
@@ -6284,6 +9485,17 @@ deployments are portable, testable and incapable of silently forking the truth.
   `tests/core/preview-mail-unknown-cap.test.ts` reproduced a second queued
   message after a cap of one, then passed after the count included unknown
   physical outcomes. Hosted sign-in delivery remains unverified.)*
+  *(Physical-delivery boundary repair, 2026-11-15: an actual native before
+  control queued a stranger's message before preview mode, enabled the preview,
+  and observed the worker return `submitted`. The worker now rechecks recipient,
+  current route and reserved cap before provider I/O, durably holds disallowed
+  transactional mail with its encrypted body, and refuses pre-preview bulk work.
+  The cap check excludes the current delivery's existing reservation. Fresh
+  migration93 controls pass 12/12, including pre-preview stranger, console and
+  bulk transitions plus the existing lost-ACK cap case. TypeScript and focused
+  lint pass. Evidence `deploy/preview-mail-delivery36.source.json`; changeset
+  `preview-mail-delivery-policy.md`. C3.36 remains unchecked until hosted
+  sign-in delivery.)*
 - [ ] **C3.37** Service intake and delivery: a form marked as an intake opens
   a project for the person who sent it. In the portal it reads New,
   In progress or Delivered (`enquiry`/`active`/`complete`). The owner's
@@ -6341,6 +9553,30 @@ deployments are portable, testable and incapable of silently forking the truth.
   links and erasure; `tests/browser/intake-project-files.spec.ts` covers the
   owner view, private bytes, quarantine and both themes. Changeset
   `intake-files-on-projects.md`. The hosted-preview acceptance remains open.)*
+  *(Physical-recovery lock repair, 2026-11-15, also C1.12/C3.47: the current
+  file suite failed a valid image after a rejected disguise. A deterministic
+  native probe traced parallel rendition recovery to non-blocking shared and
+  exclusive contact-identity locks rejecting one another without any merge.
+  Background physical writers now take a waiting shared lock and dependent
+  recovery a waiting exclusive lock; interactive identity behavior is unchanged.
+  The observation fixture creates its required genuine reservation rather than
+  weakening migration guards. Fresh migration93 controls pass 21/21 across form
+  files, accepted-after-rejected image recovery and committed-observation debt.
+  TypeScript and focused lint pass. The browser launcher now completes the
+  dedicated migration before opening the app; two prior startup failures had
+  tripped migration86's drain guard. Existing `.mjs` helpers load lazily inside
+  their async factories, preserving behavior. The corrected browser fixture uses
+  genuine owner HTTP reservation/upload and CSRF evidence. Real Chromium passes
+  private download, both themes, Axe, quarantine and anonymous refusal. Evidence
+  `deploy/media-rendition-recovery-lock.source.json`; changeset
+  `media-rendition-recovery-lock.md`. Hosted file acceptance remains open.)*
+  *(Current Chromium requalification2026-11-16: the unchanged intake-file journey
+  PASSes1/1 in27.2s on a fresh current database. Genuine owner HTTP upload, exact private
+  download bytes/no-store, both themes with Axe, anonymous404 and quarantine refusal pass.
+  Two initial launcher selections were rejected before app startup because they lacked an
+  explicit compliant disposable database; the final named a11y database passed. See
+  `deploy/intake-files-current-browser.source.json`. Local test storage supplies no hosted
+  acceptance; C3.38 remains open.)*
 - [ ] **C3.39** Launch spec version 2 for a working preview. It adds customer
   accounts in the navigation (sign in, My Account), an onboarding intake
   form with optional file fields on `/start`, intake on offer requests, and
@@ -6488,9 +9724,182 @@ deployments are portable, testable and incapable of silently forking the truth.
   unparsed source from recreating an erased person. Prove a real source above
   500 entries through review, interrupted resume, publication and rollback;
   parser-only counts or a larger synchronous limit do not complete this item.
+  Transport acceptance controls prepared2026-11-13 (SOURCE ONLY): actual
+  incoming TCP routes with fresh synthetic owner-issued keys, normal typedSDK
+  fetch and MCP JSON-RPC cover501 WXR,501 real REST, bounded review/resume,
+  draft/publication/rollback, private-helper/uploader/scope/revocation refusal,
+  exact private originals, actual cleanup payloads and audit identity. Existing
+  direct-service/two-index-process controls stay unchanged. Frozen738 SDK lacks
+  public advanceCrawl/crawlProgress wrappers; the parent must regenerate the
+  final combined catalog before types/native qualification. All new controls
+  remain UNRUN; no C-item/provider/stable acceptance follows. See
+  `deploy/import-transport-acceptance-2026-11-13.md`.
+  *(Transport qualification 2026-11-15: the current combined migration93 source
+  now passes each prepared leaf independently and all three together on fresh
+  PostgreSQL, 3/3 in 117.16 seconds. Real incoming TCP, generated typed SDK and
+  MCP cover the exact501 WXR upload/resume/review/draft/publish/rollback, the
+  scoped/uploader/helper/revocation refusals with no business writes, and501
+  actual REST records with eight private original responses and exact rollback.
+  The combined generated SDK contains both crawl wrappers. No unexpected failure
+  occurred. This is not a deployed Next server, official MCP client, packed-SDK,
+  source-cutover or provider/owner acceptance. C3.47 remains open.)*
   This splits a required delivery portion from C3.22; both remain open until
   their complete source and acceptance criteria pass. Migration 73 follows
   merged mail recovery 72 in the contiguous journal.
+  Finite full81 proof2026-11-13: frozen acbb/eadc/b0e source on
+  SQL80=3a686245/81=955a04d2 passed NEW ordinary0–81/all82 identities,
+  22-model/guard/capability proof and unchanged original501-WXR full-erasure
+  AFTER6.568s plus original URL-only media-key AFTER6.312s. Actual held-upload
+  boundary5.826s, accepted500-CMS-child refusal19.209s and later501-generation
+  boundary6.511s pass, with independently read exact scope/namespace/physical
+  facts and native before/after ownership or retained bytes. The prior8c
+  domain-digest failure remains preserved; the corrected955 used a NEW DB.
+  Historical NEWv1 reproduced the exact old79 final-marker bug and ordinary81,
+  then stopped before recovery because its one-item later fixture correctly
+  used finite preview. V1 remains untouched. Test-only78af builds an actual501
+  later graph without relaxing old-marker/recovery/idempotency/no-DELETE checks.
+  NEW historicalv2 then passes actual old79->ordinary81 and real shared-service
+  reopening: controller26.222s/current recovery case1.024s. Verified intact
+  request becomes pending recovery, original task/keys remain exact, one durable
+  claim is replay-idempotent, all initial captures stay0/old key digestNULL,
+  old/later graphs gain no retirement authority, later501 bytes are unchanged
+  and no extra DELETE occurs. Historical unknown membership is not fabricated.
+  Source586e passed full types/whole lint/384 contracts+nine focused assertions;
+  test-only78af passed types/changed lint/four pures. Explicit native skips are
+  not acceptance evidence. All finite probes saved minimal hashes/counts and
+  actual empty-client readback; no old failure/golden DB was cloned or exported.
+  Evidence and preserved failures:
+  `deploy/import-upload-index-erasure-source-2026-11-13.md` and
+  `deploy/import-uploaded-history-recovery-2026-11-13.md`.
+  Public-path finite follow-up on d25/955: small REST shared-service lifecycle
+  passes6.842s with mocked download bytes, real owner/storage and preserved
+  draft/date/byline/publication/owned rollback. Real TCP501 lifecycle passes
+  52.825s, original180s/children60s unchanged:8 captured originals, distinct
+  actual child PIDs/fresh sessions0->500->501, zero refetch and all82 hashes
+  unchanged with resolved childglobalSetup[]/no reset/migrate/seed. Actual
+  shared PNG GET1/no outbound credentials, accepted500-child fresh-owner resume,
+  501draft->published->rollback/defaultCMSexact/assetusage0/media200->404 pass.
+  Independent501 witnesses/batches500+1+media/17table-schema digests/exact
+  original-namespace PUT+raw hashes/child exit/PG[] are saved. Private original
+  bytes remain retained; this is a lifecycle, not an erasure/account proof.
+  All four stronger WXR/ZIP rollback/privacy cases now pass, unchanged60s/
+  bail1/retry0, on ce/955: WXR late-reader6.939s/held7.356s and ZIP late-reader
+  7.574s/held7.366s. Both late-reader outcomes complete with500 minimized
+  entries/marker0/exact capture/task/physical retirement. Both hold cases
+  protect raw originals until named hold removal, then delete them; their
+  actual retained partial receipts and500 unminimized entries/marker1/tasks0
+  do not prove post-release completion. Same-request resume, seven other small
+  REST authority/cancellation/recovery cases, live API/MCP/SDK, four-locale production
+  browser, broader old-image/recovery and owner/provider/security/stable gates
+  remain required. Mocked small REST does not prove live HTTP routing; real TCP
+  public-source fetching does not prove incoming API/MCP/SDK. Later financial/
+  source composition needs fresh qualification.
+  Canonical original-retention draft 2026-11-12: a second actual control on
+  protected main reproduced the same pre-verification hold gap for uploaded
+  WXR bytes. New unpublished80 capture receipts and immutable source/generation
+  members distinguish known empty from missing history. Checkpoint witnesses
+  become compatibility projections; shared cleanup rechecks ownership inside
+  actual physical admission, with SQL fences for older workers. Domain wiring,
+  source/SQL qualification, a new normal-v8 database and actual unchanged
+  legacy AFTER/boundary controls remain pending. See
+  `deploy/privacy-canonical-retention-source-2026-11-12.md`.
+  Composed normal80 v8 source qualification 2026-11-12: Node22 full types,
+  changed-source lint and 29 source controls pass across documented finite
+  runs; 24 database controls are explicitly skipped without a database.
+  The stale compatibility inventory was corrected to require the actual80
+  rename, breaking declaration, stop/drain and exact rollback acknowledgement.
+  Canonical release notes are regenerated. SQL SHA256 remains1ac4652c;
+  fresh migration/model parity and actual held-byte/canonical native controls
+  remain pending. No old v7 database or provider acceptance is implied. See
+  `deploy/merchant-collection-v8-source-2026-11-12.md`.
+  Fresh normal80 v8 migration qualification 2026-11-12: exactf64c54db and
+  SQL1ac4652c migrated ordinary0–80 into a NEW disposable v8 database5.877s,
+  with81 journal entries/max1793310000060. Both actual retention Drizzle
+  models match SQL columns/types/null/defaults/ordered primary and foreign
+  keys/delete actions/check names; six guards and two indexes are present.
+  Existing refund-table/setup guards remain present. All database work drained.
+  This is fresh schema qualification only: actual unchanged held-byte and
+  canonical lifecycle controls, populated upgrade, cold-runtime and provider
+  acceptance remain required. Original v7 SQL/database/evidence are preserved.
+  Exact a67/v8 local boundary qualification now passes the unchanged upload
+  oracle (8.39s), its four lifecycle cases (22.10s total), five canonical
+  transaction/SQL integrity controls and actual old847 write/cleanup refusal.
+  The paired current setup/old cleanup preserves bytes with zero provider
+  DELETEs even after checkpoint loss. These are frozen-source local proofs;
+  current protected REST/ZIP/reader/storage source is now being composed
+  separately before final qualification. All published0–79 SQL files and
+  journal entries remain byte-identical; unpublished80 stays1ac4652c.
+  This new current-main composition has not yet passed source/native/SDK
+  qualification and supplies no provider or stable sign-off.
+  HTTP graph source draft 2026-11-12: distinct saved response objects now have
+  normalized graph and entry bindings, short original-authorized index
+  claim/apply phases, exact credential-ID leases and bounded request/entry/
+  physical-byte counters. The shared reader-source hold collector gathers
+  legacy nonce and crawl generations before one canonical completion receipt;
+  no second writable hold authority remains in81. Empty actual HTML responses
+  retain their original manifest membership without invented positive ranges.
+  The unregistered, unjournalled48964767 source now composes full CURRENT46
+  with published0–79/journal and80SQL958 unchanged. FullNode22 types/focused
+  lint and110 pure controls pass; six database cases are explicitly skipped.
+  The revised81 schema/runtime remains unqualified; its general-writer hold
+  fence still needs a distinct actual capture witness. Global catalog/commit,
+  selective crawl erasure, late facts and full source acceptance remain open.
+  See `deploy/import-http-graph-source-2026-11-12.md`.
+  Revised be979/c70 draft qualification: a NEW current-v9 database applied
+  real normal0–80/958 then explicit unjournalled81; six read-only model cases
+  passed591ms with journal81/max60 unchanged. Actual missing-collector hold
+  refusal passed11.40s, and actual TCP response→normalized graph indexing
+  passed9.02s. Independent server/PG drain passed. This remains disabled source
+  work: no normal81, full catalog/commit/privacy lifecycle or hosted acceptance
+  is supplied by these finite controls; C3.47 remains open.
+  Next HTTP source increment: normalized response-bounded commit now reuses
+  actual CMS/media child receipts and root publication/rollback, with stable
+  credential leases and selective original cleanup. New81 SQLc623 adds the
+  deferred entry-witness and held-URL/physical-retirement fences. This revision
+  is unapplied and unqualified; c70/v5 and earlier evidence remain preserved.
+  Actual commit/zero-response hold oracles are prepared only. Full privacy,
+  old-runtime compatibility, recovery and above500-entry lifecycle still govern
+  this unchecked item; no new deferral or completion claim is introduced.
+  Indexed-input boundary 2026-11-12: an unchanged e498/c623 oracle genuinely
+  failed8.94s after physical PUT/DELETE retirement and a false completed erasure
+  receipt: the normalized entry still held its synthetic title/SEO marker.
+  An actual populated clone preserves matching19-table hashes, journal and full
+  schema; deleted physical bytes were not restored. A new disabled source-only
+  draft adds exact original erasure-capture completion, including true empty,
+  and guarded projection minimization before acknowledgement. Missing old
+  membership remains recovery debt; no later generation is adopted. Frozen2f601
+  fullNode22 types, seven-file lint and108 pure controls pass (22 native/model
+  skips). Full current80 composition, NEW eight-model SQL/native, old-runtime
+  and recovery qualification remain pending.
+  Exacte5dfa782 now composes only the47 owned Crawl paths on current81e/
+  buyer-terms881a, preserving its full ordinary0–80 prefix. FullNode22 types,
+  40-file lint and108 pures pass (22 native/model skips). A NEW normal0–80/881a
+  plus explicit unjournalled81/466931a7 diagnostic and8 read-only models pass;
+  the unchanged278e indexed oracle passes12.00s with exact1-source/2-response
+  completion, zero marker/projection copies and actual PUT2/DELETE2 retirement.
+  Independent TCP/runner/client drain passes. Queue delivery remains disabled;
+  registered bodies used actual durable payloads. Old-runtime/held/late/recovery/
+  expiry and full501 acceptance remain required. Preserved v6/c623 and its
+  actual false-completed clone are untouched;81 remains unregistered.
+  Actual old847 native application-source refusal now passes on new v7: real
+  e498 TCP setup12.53s, populated missing-capture refusal6.52s with unchanged
+  bytes/rows and no intervening reset, then true-empty refusal8.21s. Current
+  callback789/e5 reuses that actual verified empty request without reset and
+  passes7.74s with real first immutable0/0 capture and intact completed receipt.
+  Independent TCP/runner/client drain and the ordinary80 journal are unchanged.
+  This is not historical-completion reconstruction or production-artifact
+  acceptance; the untouched false-completed golden still needs reviewed recovery.
+  Historical review on a NEW copy of the untouched c623 golden genuinely
+  fails3.23s: valid original artifact/audit/retired cohorts reopen only their
+  known2 jobs and in_progress status, but recoveryRequired is0 while complete
+  capture tables are absent. No migration/reset ran; readiness/schema/journal
+  stamps and golden hashes remain unchanged. Final ACK-refusal was not reached.
+  A disabled source-only correction now flags missing capture/guard recovery
+  and blocks worker physical admission when required guards are unavailable.
+  Source qualification and a NEW golden-derived AFTER remain pending; the
+  populated work BEFORE and golden remain preserved. No old scope is inferred.
+  No ordinary81, above500-entry or privacy-completion claim is made; this item
+  remains open. See `deploy/import-http-graph-source-2026-11-12.md`.
   Original-hold snapshot source increment 2026-11-12: an actual new HTTP-crawl
   control recorded a pending reader hold but cleanup deleted its private
   original because membership was only captured at fulfillment. A separate
@@ -6529,6 +9938,84 @@ deployments are portable, testable and incapable of silently forking the truth.
   durable live crawl response/frontier storage and actual cutover remain
   required; no schema81 or C3.47 closure is claimed. Exact evidence:
   `deploy/import-source-graph.md`.)*
+
+  Uploaded-input privacy source checkpoint (2026-11-13, C1.08/C3.47/C11.14):
+  unpublished81 now drafts exact initial uploaded-source scope/membership,
+  guarded unaccepted index minimization and atomic original-task completion
+  alongside the HTTP originals repair. The real `f1b5d6a3` WXR oracle is
+  unchanged. This source is unqualified/unapplied: current80 composition,
+  new ordinary81 migration/model/guard proof, unchanged AFTER and retained/
+  accepted/later-generation controls remain required. Historical missing
+  captures remain explicit recovery. See
+  `deploy/import-upload-index-erasure-source-2026-11-13.md`.
+  The isolated full runtime candidate now composes that checkpoint with the
+  eight-model saved-HTTP runtime and four-locale owner controls, registers the
+  three uploaded witnesses and private inventories, and drafts normal journal81.
+  SQL80 is still the provisional881a predecessor; the candidate is unqualified
+  and unapplied until the complete current80 predecessor is supplied and a NEW
+  ordinary0–81 database proves it. No stable or transport acceptance is claimed.
+  The subsequent source merge includes the full current80 `22d24c39` predecessor
+  (assembled80 SHA3a686245…) with all predecessor files/journal entries preserved.
+  Candidate81 SHA5c96bd06… and normal journal81 remain unapplied and the whole
+  composed source remains unqualified; no database, transport or stable proof
+  is inferred from this source assembly.
+  A further source-only predicate binds actual accepted PUT/DELETE retirement
+  to the immutable first graph/chunk capture after rollback releases the mutable
+  descriptor; later aliases/writers/holds/accepted ownership still refuse.
+  This historical source checkpoint changed unpublished81 and required a
+  NEW database. Subsequent exact955 ordinary-schema and four unchanged
+  real-session WXR/ZIP controls are recorded above; held post-release index/
+  receipt completion remains open.
+
+
+
+
+
+  Above500 actual HTTP lifecycle qualification at a9946538: real owned TCP
+  REST responses yielded501 entries/exact bindings and one shared copied PNG.
+  Fulltypes/fixturelint and incrementaltypes pass; the first native passed
+  46.613s within its initial180s limit, with actual pacing/budgets unchanged.
+  Real media/500-page/1-page children resume across fresh owner sessions,
+  explicitly publish501 pages and roll back all imported ownership while
+  preserving the three actual CMS defaults. The exact shared asset moves to
+  recoverable trash/usage0/public404. Independent topology/byte/TCP/client
+  readbacks pass with journal81 unchanged. Eight originals are retired and
+  hash-present with cleanup durably queued(workers off), not physically erased.
+  This is private shared-service qualification on ordinary80/881a plus explicit
+  unjournalled81/4669; no second-process or production owner-UI proof is claimed.
+  Normal81/runtime/public continuation, preserved-history recovery and full
+  cancellation/expiry/erasure acceptance remain required; C3.47 stays open.
+  See deploy/import-http501-lifecycle-2026-11-12.md.
+
+  A further C3.47 actual-native boundary at b716e252 genuinely retained a
+  private image URL in an unaccepted media key after completed reader erasure.
+  The populated failure is preserved. A new unjournalled81 source repair keeps
+  the original row/digest witness and permits opaque key minimization only for
+  the exact unheld, physically retired original scope with no admitted plan,
+  batch, asset or file receipt. Accepted or unresolved work requires recovery;
+  a flag alone cannot establish erasure. New-database/nine-model/native
+  qualification remains required; no checklist closure is claimed. Evidence:
+  `deploy/import-http-media-key-erasure-2026-11-12.md`.
+
+  C3.47 runtime activation is now a separate source checkpoint: shared public
+  bounded start/advance/progress/cancel, eight-model privacy/job inventories,
+  four-locale owner controls, exact settled-original response recovery and an
+  explicitly distinct new source review. Actual wrapper completion has its own
+  immutable capability-bound fact; clocks and GETs do not establish it. The
+  source is unqualified and81 remains unjournalled pending full latest80
+  composition, new-schema/model checks, actual public transport/two-process
+  continuation and production browser/recovery acceptance. No checkbox closes.
+  `deploy/import-http-runtime-activation-source-2026-11-12.md` records the scope.
+
+  Combined current80/import81 source qualification (2026-11-13, C1.08/C3.47):
+  full Node22 types and whole-lint coverage pass after the preserved narrow
+  financial lint corrections; all44 static-contract files supply384 actual
+  passing assertions/26 declared skips/zero pending, and18 affected import/
+  privacy/source files supply83 pure passes/40 explicit database skips. Normal81
+  remains unapplied (SQL80 SHA3a686245…,81 SHA8c65864e…). The unchanged original
+  WXR oracle,12-model/guard diagnostic, native ownership/recovery and public
+  two-process/browser/SDK acceptance remain open. Exact evidence and limits:
+  `deploy/import-upload-index-erasure-source-2026-11-13.md`.
 
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 
@@ -7320,6 +10807,15 @@ owner operations, never substitute for them.
   browser feedback is seeded; actual enabled-provider and full fulfillment
   acceptance remain required. C5.19 stays open. See `deploy/commerce-payments.md` and
   changeset `return-provider-reconciliation.md`.
+  Current-protocol fulfillment qualification2026-11-16 (C5.19/C12.38): the
+  direct-seller fixture now uses actual merchant collection, tax and accepted-quote
+  services; retains authenticated charge evidence before settlement; verifies the
+  current per-party route and absence of a legacy route; and exercises the current
+  refund create/ACK/observe and exact-resource recovery protocol. Wrong-account
+  feedback and premature closure remain refused. Fresh108 passes26/26; TypeScript
+  and focused lint pass. This test-only repair supplies no enabled-provider or
+  browser acceptance and closes no checklist row. See
+  `deploy/catalog-fulfillment-current-protocol.source.json`.
 - [x] **C5.20** Build persistent/contact-attached carts, saved carts/wishlists,
   cross-device restore, price/stock refresh and abandonment events.
   *(Evidence: `carts`, `cart_items`, `wishlists`, `wishlist_items` in
@@ -9872,8 +13368,12 @@ customer has one secure, comprehensible home for the relationship.
   worst outcome available here.
   Sixteen tests in `tests/modules/loyalty-rewards.test.ts`; the C9.11 suite
   passes unchanged. Changeset `loyalty-tiers-rewards.md`. **F04** `/admin/loyalty` tiers/rewards. **F05** `loyalty.saveTier`/`saveReward`/`redeem`/`reevaluateTier`/`tiers`/`rewards` at `/api/v1/loyalty.*`, MCP `loyalty_*`. **F07** `tests/modules/loyalty-rewards.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/loyalty-rewards.test.ts` is the composition proof.)
-- [x] **C9.13** Build plans, the subscription lifecycle and its events, trials,
+- [ ] **C9.13** Build plans, the subscription lifecycle and its events, trials,
   `manual` billing, pause/cancel and portal self-service.
+  (Reopened 2026-11-12: an actual no-card trial with a 500-minor-unit
+  setup fee raised its first renewal for 2000 rather than 2500. The narrow
+  accepted-fee snapshot and first-invoice witness repair awaits composed
+  schema and native acceptance; historical unknown fees must not be backfilled.)
   (Split under §43.17.1: the original line carried seven capabilities, and
   three of them turn on something the platform does not have yet. **C9.33**
   takes the two automatic billing modes and proration. §4.15 wants `platform`
@@ -9916,6 +13416,14 @@ customer has one secure, comprehensible home for the relationship.
   `subscriptions.cancelMine`, which resolves the contact from the session and
   can only ever reach their own row.
   Migration `0140_subscriptions.sql`; `tests/modules/subscriptions.test.ts`. **F04** `/admin/subscriptions` plans. **F05** `subscriptions.enroll`/`list`/`get`/`cancel`/`changePlan` at `/api/v1/subscriptions.*`, MCP `subscriptions_*`. **F07** `tests/modules/subscriptions.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/subscriptions.test.ts` is the composition proof.)
+  Current-period billing repair2026-11-16 (C9.13/C9.33/C11.05/C12.38): a genuine
+  first-period stored-method charge was skipped because its period end was mistaken
+  for a future start. The guard now targets only future periods/plan changes. Ordinary
+  deferred plans no longer invent a seller-merchant amendment requirement; retained
+  commercial evidence still gates entitlement. The final native billing file passes58/58
+  and both commercial-amendment security controls pass. TypeScript/lint/changelog pass.
+  See `deploy/subscription-current-period-billing.source.json`. Provider/hosted acceptance
+  and the checklist row remain open.
 - [x] **C9.14** Build entitlements/grants for subscriptions, passes, retainers,
   one-time unlocks, loyalty tiers and manually granted access.
   (Access lives in core, not in the subscriptions module: a grantor can be a
@@ -10578,7 +14086,13 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   C10.33 in `deploy/f-criteria-matrix.md`; do not weaken those gates. This is a
   source packaging/documentation defect, separate from storage runtime quality.
   Focused source checks do not close hosted build or operational acceptance.
-
+  *(Scoped-fixture qualification 2026-11-15: the first current run had nine
+  failures because its direct calls predated original-caller admission. The
+  repaired controls use genuine started intents, admitted original callers and
+  observed synthetic TCP S3 responses, with no weakened SQL guards. Independent
+  fresh migration93 execution passes 11/11; TypeScript and focused lint pass.
+  See `deploy/storage-quota-scoped-fixture.source.json`. No runtime defect or
+  hosted acceptance follows.)*
 
 - [ ] **C10.33** Make hosted cutover use a durable operation-owned app/DB
   admission fence shared with member/group call starts and canonical jobs.
@@ -10885,7 +14399,19 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   (`load_config`), the standard app/db/caddy + S3 recipe enforced by
   `inventory()`, exact publisher cosign identity
   (`publish-image.yml@refs/heads/main` + GitHub OIDC issuer) in `verify()`,
-  forward-only commit ancestry via the public compare endpoint, a private
+  forward-only commit ancestry via the public compare endpoint,
+  with an optional root-configured `publisher` block (2026-11-18) for an
+  installation that publishes and signs its own images — all of
+  `image`/`cosign_key`/`compare_api` or none, a root-owned non-group-writable
+  key, `cosign verify --key` *instead of* the keyless identity rather than
+  beside it, and a Forgejo-shaped ancestry proof, since that API returns
+  `total_commits` with no `status` or `merge_base_commit` and the upstream
+  reading would refuse every candidate while looking like a bad signature
+  (`validate_publisher`/`verify_forward_on_forge`, 16 added drills in
+  `tests/host/test_docker_updater.py`, 90 passing); its publishing half is
+  `.forgejo/workflows/publish-image.yml`, which builds at an exact revision,
+  refuses one with no successful forge CI run, signs the pushed digest and
+  verifies that signature against the public half in the same run, a private
   root:operator-group 0660 Unix socket exposing only GET /status and
   POST /apply (`make_handler`/`prepare_socket_path`), restored-backup rehearsal
   into a no-egress scratch DB with the unchanged schema+journal sha256 gate
@@ -10989,8 +14515,10 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   deployment nor recoverability, and target recipes remain manual operator
   procedures *requiring a tested backup and immutable image pins*. The pins
   half was already enforced — `operations.rollback` must name a `PREVIOUS_*`
-  artifact (matrix gate), image-swap rollback refuses without a
-  `ghcr.io/campdenman/freeholder@sha256:<64>` digest
+  artifact (matrix gate), image-swap rollback refuses without an immutable
+  `<repository>@sha256:<64>` digest, where `<repository>` is
+  `FREEHOLDER_IMAGE_REPOSITORY` and defaults to
+  `ghcr.io/campdenman/freeholder`
   (`recipeUpdateTarget.rollbackCutover` in `src/core/update/targets.ts`), and
   both compose files interpolate `${FREEHOLDER_IMAGE:-…}` so the pin actually
   selects the image. The tested-backup half landed with this change:
@@ -11009,8 +14537,15 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   **F07** a target with no rollback command refuses; image-swap rollback
   refuses a non-digest pin; a recipe with no backup, a plain-text dump, a
   missing restore or a non-`pg_restore` restore fails the matrix — each
-  refusal asserted in `tests/core/update-targets.test.ts` (38 tests) and, for
-  the gate script, exercised against the real recipes. **F09** SPDX headers on
+  refusal asserted in `tests/core/update-targets.test.ts` (41 tests) and, for
+  the gate script, exercised against the real recipes. The repository half of
+  that pin became `FREEHOLDER_IMAGE_REPOSITORY` on 2026-11-18: the safety
+  property is the **digest**, never which registry serves it, and hardcoding
+  `ghcr.io/campdenman/freeholder` meant an instance serving its own images
+  from a mirror or its own forge could not roll back at all — the deployments
+  most likely to need one. `isImmutableImageDigest` keeps refusing a bare
+  repository, a moving tag, and a short, over-long, upper-case or non-hex
+  digest, each asserted directly. **F09** SPDX headers on
   `src/core/update/targets.ts`, `scripts/recipe-update-actions.mjs` and
   `tests/core/update-targets.test.ts`. **F12** the recipe matrix runs the gate
   once per target on every PR (`scripts/recipe-matrix.sh:138`; workflow run
@@ -11540,6 +15075,70 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.08** Prove both fresh install → role-guided productive demo and
   WordPress/generic-site crawl → staged/reconciled imported site → full export
   → restore on another Tier-1 target → signed update → failed-update rollback.
+  First fresh ordinary83 migration stopped before business/native operations
+  at PostgreSQL42601 in the owned82 inventory guard. The failed V1 database
+  stays preserved. Source-only correction parenthesizes all8 scalar CASE
+  expressions on6 owned82 lines without changing comparisons or branches;
+  no parse/migration/native pass is claimed. Root must use a genuinely new
+  database for renewed qualification. See
+  `deploy/media-original-first-capture-source-2026-11-13.md`.
+  Original first-capture/minimization source continuation 2026-11-13 prepares
+  a sealed16th media scope model, NULL-preserving original reservation birth,
+  exact queued worker tuple/immutable first membership and retirement-gated
+  original provider/quota locator minimization.11 pure and3 native declarations
+  remain entirely unrun. Owned82 is UNAPPLIED and the complete capability stays
+  unpublished. Standalone physical retirement, tracked stop, multipart session/
+  pinned completion, quota initialization, chained/cutover and full qualification
+  remain unfinished. Root integrates and qualifies this finite baseline before
+  further source expansion. See
+  `deploy/media-original-first-capture-source-2026-11-13.md`. No item closes.
+  Original provider privacy/quota-debt source continuation 2026-11-13 prepares
+  exact original parent/cohort exports, captured-ID worker containment, immutable
+  physical observation versions and original-token late quota charge restoration
+  or namespace refusal.12 pure and2 native declarations remain entirely unrun.
+  The15 transfer models/owned UNAPPLIED82 stay inactive. Immutable original
+  reservation capture, full locator minimization, physical retirement/crash/
+  multipart/chained semantics and actual qualification remain unfinished. See
+  `deploy/media-original-provider-privacy-source-2026-11-13.md`.
+  Finished-original-PUT recovery source continuation 2026-11-13 prepares
+  existing shared recovery phases, original nonce/full-byte read, immutable
+  two-pass original inventory, append-only review and exact original-token
+  quota settlement.18 pure and4 native controls remain entirely unrun; private
+  projection inventory gains phase memberships without changed assertions.
+  The15 models/owned UNAPPLIED82 stay disabled. Crash/stop, all-version physical
+  retirement, multipart pinned completion and ordinary privacy/minimization
+  composition remain unfinished. No actual provider or launch claim follows.
+  See `deploy/media-finished-put-recovery-source-2026-11-13.md`.
+  Original ordinary/multipart request source continuation 2026-11-13 prepares
+  same-transaction originating callers, actual per-request nonce/facts/finish,
+  quota-token binding, multipart protocol accounting, portable finished-caller
+  identity and genuine worker cancellation scope.28 pure/protocol and3 native
+  declarations are entirely unrun. The15 models and owned UNAPPLIED82 remain
+  inactive: complete inventory/recovery, stop review, quota retirement, pinned
+  reads and exact ordinary privacy composition are unfinished. All legacy
+  ordinary recovery stays restricted; no actual account incident is asserted.
+  See `deploy/media-original-request-source-2026-11-13.md`.
+  Durable provider-inventory source checkpoint 2026-11-13 adds five request/
+  inventory models, immutable two-pass page application, actual original PUT
+  revision capture, exact source/target generation erasure and scoped privacy
+  coverage. The complete request capability is deliberately unpublished;
+  ordinary cleanup remains restricted. All source/native controls are prepared
+  and entirely unrun. Original caller-stop/unknown recovery, ordinary multipart
+  provenance, pinned adopted reads, cutover and actual acceptance remain
+  unfinished; this is not source completion or an account incident. See
+  `deploy/media-durable-provider-inventory-source-2026-11-13.md`.
+  Durable lifecycle source checkpoint 2026-11-13: isolated source adds complete
+  application-inventory first capture, actual writer/caller facts without
+  historical backfill, private byte/revision copy proofs, atomic adoption,
+  conditional source retirement, exact all-copy privacy/retention recovery,
+  canonical contact pointers, original queued phases and four-locale owner
+  controls.18 controls are prepared, unrun/uncollected. The10-model owned82
+  SQL tail is UNAPPLIED; published0–81 and original fixtures are unchanged.
+  Provider-complete inventory, Replit request-level accounting, tracked-crash/
+  additional executor proof, chained/cutover and non-privacy lifecycle review,
+  all source/native/owner/transport gates and actual cross-target/provider
+  acceptance remain required. See
+  `deploy/verified-media-transfer-lifecycle-2026-11-13.md`. No item closes.
   Verified-transfer source foundation 2026-11-12: four unregistered models
   keep immutable source/target locators, distinct logical and physical target
   keys, exact original receipt membership and original receipt contact subjects.
@@ -12212,9 +15811,63 @@ schema they inherit reads as a designed thing rather than an excavation.
   *(Cheap audit-label follow-up: CI on the card-setup increment caught missing
   owner activity labels. The existing seven-control mutation/locale inventory
   now also runs in local fast gates so this omission is caught before pushing.)*
+  Recovery-suite CI capacity repair 2026-11-13 (C11.13/C11.17): the
+  unpublished combined financial/import regressions exceed the unchanged
+ 32-shard predicted deadline (1,519,601ms versus1,500,000ms). The candidate
+  uses40 isolated native shards, preserving every test, the25-minute deadline,
+  seven-times degraded-runner budget and protected aggregate checks. Existing
+  partition/topology tests remain unchanged and require qualification; this
+  does not supply new product failure-drill or stable acceptance.
+
 - [ ] **C11.14** Verify every user-owned record participates correctly in
   search, permissions, audit, export, restore, retention, erasure and contact
   merge; there are no orphan or shadow stores.
+  Empty first media scope metadata source continuation2026-11-13 separates
+  exact request/scope/contact-bound empty header authority from provider I/O.
+  The original ABI and inventory fence recheck the complete empty ordinary,
+  transfer, quota/session and legacy/held ancestry graph; only intact sealed
+  empty headers may coexist. No full provider writer tag, caller privilege or
+  capability publication is granted; old unknown captures cannot be refilled.
+  Two owned82 metadata functions/guard continuation and4 actual-service native
+  controls remain entirely unrun. No model/published journal/original oracle
+  changes; root reviews/assembles new82 and qualifies a genuinely new database.
+  Physical producers/full source/business/provider/security/stable gates remain
+  open. See `deploy/media-empty-first-scope82-source-20261113.md`.
+  Empty transfer ownership merge scope source repair2026-11-13: actual CI701
+  original merge/outbox controls reached the deliberately inactive media
+  capability before checking for any scoped transfer subject. The shared
+  reference now proves exact two-contact subject absence under the original
+  inventory fence before empty capture/no-op repoint; nonempty scopes still
+  require every complete capability and full original lineage guard. Existing
+  oracles remain unchanged and AFTER qualification is unrun. No physical
+  retirement, empty erasure capture or capability publication is inferred. See
+  `deploy/media-empty-transfer-merge82-source-20261113.md`.
+  Source-only original media proof policy audit2026-11-13 adds the actual
+  transfer subject contact-FK private-search/noTTL reasons and documents all17
+  original proof tables' parent-scoped recovery/privacy lifetime. Invalid header
+  and quota labels leave the contact-FK/source-only opt-out maps; actual core
+  exports, privacy/accounting/recovery producers and asset search stay intact.
+  Existing conformance tests are unchanged and unrun; no fake source or purge
+  coverage is added. See
+  `deploy/media-original-first-capture-source-2026-11-13.md`. No item closes.
+  Finite imported-input privacy follow-up2026-11-13: the exact3a/955 candidate
+  supplies ordinary82-journal/22-model and shared-source registration proof,
+  unchanged WXR/media-key minimization, held/accepted/later ownership boundaries
+  and actual populated old79->81 truthful historical recovery. Missing capture
+  remains explicit pending review; no new scope, original key or current graph
+  is inferred. These local private-store fixtures preserve actual task/receipt
+  identity and accepted physical facts with minimal independent hashes/counts.
+  Subsequent small mocked-REST lifecycle6.842s and actual TCP501/two-process
+  lifecycle52.825s pass with exact default-CMS/owned rollback, source receipts,
+  byte hashes, full journal and closed clients. Four subsequent unchanged
+  WXR/ZIP privacy rollback controls pass; both late-reader cases complete with
+  500 minimized entries, while both held/release cases end raw-deleted but with
+  retained partial receipts/500 unminimized entries/one private marker/no task.
+  Their same-request resume/final completion, seven other public recovery/authority
+  cases, live API/MCP/SDK/browser, other record families, restore/recovery breadth
+  or provider accounts. C11.14 stays open. See
+  `deploy/import-upload-index-erasure-source-2026-11-13.md` and
+  `deploy/import-uploaded-history-recovery-2026-11-13.md`.
   *(Reopened 2026-11-11 by actual unchanged-main controls: an exact
   `forms.delete` API key permanently removed held submissions, the same route
   removed already-trashed held evidence, and tracked-demo cleanup cascaded over
@@ -13729,10 +17382,1484 @@ whatever is best for the people using the site.
   and revokes mid-call against a recording SFU adapter; the browser test has
   a member leave mid-call through the real LiveKit and checks the others keep
   decoding on the new key. Changeset `member-call-removal.md`.)*
+  Buyer proration export projection checkpoint 2026-11-13 (C1.08/C12.38):
+  the subject archive explicitly whitelists accepted buyer commercial/calendar/
+  tax/credit/status fields and actual FK-bound invoice cash consideration,
+  rather than returning raw retained snapshot/destination/notice JSON. Internal
+  originals and full financial row hashes remain unchanged. Four nested-canary,
+  genuine-null/trial, foreign-invoice and lifecycle controls are PREPARED/UNRUN;
+  no observed current-writer fee disclosure or qualification is claimed. See
+  deploy/subscription-proration-buyer-export82-source-20261113.md. All native
+  privacy, financial and stable acceptance requirements remain open.
+  Charge-only original feedback source checkpoint 2026-11-13 (C12.38/C1.08):
+  the failing unassigned fixture had supplied a PI-bearing callback, correctly
+  retained by the managed path. Its corrected signed charge-only form now
+  discovers real positive observation/receipt charge ancestry before a first
+  cash owner. Exact original platform/account and genuine receipt aliases are
+  required; ambiguous owners or a contradictory present PI cannot be replaced
+  by an amount match. Namespace bodies/composite feedback IDs and original bank
+  signatures remain unchanged. Twelve pure/adapter cases plus corrected/new
+  native path and actual NULL-payment receipt assertions are PREPARED/UNRUN;
+  the failed V4 evidence is preserved. No CPU/PG/SQL or qualification claim;
+  see deploy/charge-only-original-feedback82-source-20261113.md. All existing
+  financial, privacy, provider and stable acceptance requirements remain open.
+  Commercial assembly checkpoint 2026-11-13 (C12.38): SQL80/cf1e now
+  appends the six attestation/credit/gross/fee/boundary/card tails while
+  preserving the entire qualified397928-byte0cff prefix and unchanged81.
+  Five final function replacements preserve the newer original predicates,
+  including late resumption; see
+  `deploy/full82-commercial-function-review-2026-11-13.md`.
+  Full types pass at6ddf7b50; migration/parity/business gates remain open.
+  Private financial inventory checkpoint 2026-11-13 (C3.47/C12.38): renewed
+  full types and all21 reported lint locations pass atf9e923de; the42-file
+  source-contract run then stops on20 missing registered system-helper names.
+  Exact declarations and real collectors were reviewed;30 financial/controlled
+  system phases and one authenticated private own-card authorization are now
+  listed explicitly. At94190601 the complete core and private-boundary files
+  pass34 actual assertions with no database, including all literal inventories
+  and HTTP/OpenAPI/MCP projection exclusions. See
+  `deploy/commercial-private-inventory-2026-11-13.md`; broader renewed gates
+  and actual transport/provider acceptance remain open.
+  Full integration wiring 2026-11-13 (C1.08/C12.38): buyer, frozen merchant
+  profile and subscription merge evidence now select the exact24-family
+  commercial/card footprint, including cashless/trial history. Existing evidence
+  kinds and empty-history hashes remain; incomplete or oversized whole cohorts
+  refuse undo. Merchant and buyer exports compose authorized safe projections.
+  See `deploy/current-full82-integration-2026-11-13.md`. Source qualification,
+  unpublished SQL assembly and actual new-path acceptance remain open.
 - [ ] **C12.38** Let sellers be the merchant of record: direct or
   destination charges at checkout through the payout provider (Stripe
-  Connect first), with the site fee taken as an application fee, refunds
-  and disputes on the seller's account. Split from C12.26 on 2026-10-15.
+  Connect first), with the site fee taken as an application fee. Direct
+  charge, refund and dispute objects belong to the original seller account;
+  destination charge, refund and dispute objects belong to the original
+  platform account, with the original connected recipient and settlement
+  merchant recorded separately. `on_behalf_of` does not move destination
+  refunds, disputes or Stripe's platform balance liability to the seller's
+  account. Split from C12.26 on 2026-10-15. This follows Stripe's current
+  [charge types](https://docs.stripe.com/connect/charges) and
+  [refund/dispute documentation](https://docs.stripe.com/connect/marketplace/tasks/refunds-disputes).
+  Marketplace bootstrap repair2026-11-13: normal CI passed production TypeScript
+  with the existing8GiB allowance, then page-data collection for /portal/listings
+  exposed a catalog→public booking→merchant policy→member subscription→catalog
+  import cycle. Seller invoice ancestry now lives in a schema-only helper shared
+  by both consumers; its exact query body and shared transaction are preserved,
+  as is the member-subscription compatibility export. The actual production
+  rebuild and existing member subscription/merchant journeys remain required.
+  Cumulative-return qualification2026-11-13: the unchanged three-generation
+  journey passed on normal V3, with independent original-principal, invoice,
+  refund,83-journal/profile and empty-client proof. The lost second recipient
+  response case recovered without another POST and retained8400 of12600 minor
+  units returned, but its old oracle searched only original POST acknowledgements.
+  Minimal read-only diagnosis proved the distinct actual GET/auxiliary UUID and
+  resource-reference hashes. The oracle now follows that exact inspection
+  ancestry and additionally requires the original failed POST facts unchanged;
+  no runtime money rule changed. The corrected lost-response case passed in
+ 15.486s on fresh V4 with independent two-generation totals/journal/profile/drain
+  proof. Failed V3 is preserved. The separate unassigned case failed its raw-path
+  assertion because its PI-bearing callback was correctly managed; V4 is also
+  preserved. The genuine charge-only repair below remains source/native work.
+  Historical import fixture preparation2026-11-13: normal CI reached the
+  populated migration73 control, whose isolated rollback setup now encounters
+  three real migration81 foreign keys. Its setup explicitly proves those future
+  child scopes empty, removes only the three named edges within that transaction
+  and verifies all installed definitions return after rollback. Original preview,
+  checkpoint and old-writer refusal assertions remain unchanged. No shipped
+  migration, constraint or guard is removed. The actual corrected fixture passed
+  in6.373s on V5; independent before/after proof restored all four guard function
+  hashes and all three validated FK definitions, with empty import/financial
+  rows, exact83-entry journal/profile and no clients. This is not a complete
+  populated-site update/rollback qualification.
+  Real SQL typing correction2026-11-13: the renewed NULL-payment receipt
+  control retained its actual paid cash and original feedback, then stopped
+  with PostgreSQL42P18 in the agreement-fee financial witness. A parameterized
+  jsonb_build_object key had no inferable type even with WHERE false. That exact
+  whitelisted key now has an explicit text cast; no identities, membership or
+  money policy changed. Failed V5 and its independent journal/profile/drain
+  proof are preserved. Fresh V6 normally applied all83 entries in6.998s.
+  The unchanged actual NULL-payment receipt journey then passed in10.078s,
+  including genuine charge-only feedback, original privacy/export/undo
+  footprints and retained cash with zero canonical payments/invoices/refunds.
+  Independent read-only proof verified receipt1, authenticated feedback, all83
+  journal hashes, UTC/fsync/jit profile and zero clients. The two complete
+  affected witness suites also passed12 actual controls with no skips.
+  Evidence: /tmp/freeholder-current-full82-feedback-receipt-native-v2-20261113
+  (-result.json and -ledger-v2.json),
+  /tmp/freeholder-financial-json-key-source-v1-20261113-result.json.
+  This component proof supplies no provider-account or stable acceptance.
+  Controlled raw-finance native preparation2026-11-13: the first newly
+  executed positive-intent interruption control stopped before controlled
+  provider admission because its synthetic Stripe edge supplied a secret but
+  omitted webhook configuration, making the real adapter unavailable. Failed
+  V6 is preserved with zero controlled resources/facts and canonical money,
+  exact83-entry journal/profile and drained clients. The fixture now explicitly
+  supplies its own fictional webhook secret instead of depending on inherited
+  process configuration. No production availability guard changed. Both actual
+  raw-finance controls still require a fresh database and original assertions.
+  Source callback checkpoint 2026-11-13 (C12.38/C1.08/C11.10): new optional
+  private original-holder validation authenticates each actual inspection refund
+  capture with its original admission/caller and occurrence UUID/time. Late or
+  foreign callbacks retain raw money independently and cannot be adopted as that
+  read by a semantic FK. Legacy defaults remain intact. Six pure and one actual
+  shared-service/HTTP controls are PREPARED/UNRUN; no schema/SQL or financial
+  permission changes. This grants no recovery/money authority. Genuine positive
+  observational context, causal comparison, bank proof and full acceptance remain
+  REQUIRED; no C/stable closure. See
+  deploy/original-cash-inspection-capture83-source-20261113.md.
+  Independent-stop inventory correction2026-11-13: v24 full types and
+  affected lint passed, then the explicit service-boundary test found the new
+  recovery plan listed as BOTH system-only and caller-authorized private. Its
+  real permission is scoped/person-only with external:false. The mistaken
+  system-list entry is removed, retaining the explicit caller-authorized
+  private entry and every permission/HTTP/MCP assertion. No product permission
+  changes. Failed v24 is preserved; complete renewed contracts remain pending.
+  Independent-stop helper validation2026-11-13: the precise callback input
+  exposes the adapter-level optional platform-account field. The test now
+  parses the actual callback through the real shared service input schema,
+  exactly as its handler does, instead of asserting or inventing a required
+  account. Failed v23 type evidence is preserved; renewed qualification stays
+  pending.
+  Independent-stop initial source qualification2026-11-13: full TypeScript
+  passed56.115s at007315b9. Focused lint stopped on one native-test callback
+  declaration: the generic call parameter is unknown, so its union with
+  undefined was redundant. The helper now derives its callback input from the
+  actual service Zod schema. No handler, test oracle or lint rule is relaxed;
+  the failed v22 log is preserved. Renewed source and all143-model/native
+  acceptance remain pending.
+  Independent-stop parent composition2026-11-13 (C12.38/C1.08/C11.14): signed
+  current-family5ed83538 and leaf-only callback97c11c76 are integrated without
+  future six collection models. The exact4283-byte owned stop tail is copied to
+  NEW0083_original_cash_inspection_stops, SHA8bde27cacfcfd8e9363821bafac053a87e104e4ed0b23c1b6fc51669d2037409;
+  the whole previous83 journal/SQL identities remain unchanged. Target cohort
+  is143 models, with two new guard functions/five new triggers. Full stop-row
+  PostgreSQL SHA participates in actual refund, invoice and frozen-profile undo
+  witnesses, including a real unrouted original invoice before the no-route
+  exit. Buyer invoice, merchant profile and NULL-payment receipt-only exports
+  select exact original parents and expose only inspection ID/review time/
+  stopped:true/no-bank-evidence; authentication/nonce/process/hosting material
+  remains private. Aggregate5000 bounds and seller payment filters remain.
+  The original live-child/actual-exit/native oracles are retained and extended
+  to prove a new stop changes actual parent undo fingerprints and safe export.
+  Generated SDK update, full source/143-model/84-journal proof, actual child
+  recovery/callback/privacy tests and all provider/stable acceptance are pending.
+  Current cash-reader source qualification2026-11-13: full TypeScript passes
+  at4cc200a9. Whole-repository lint stops only at two new issues: schema imports
+  used solely as types and an unbound actual Stripe inspection method in the
+  native helper. The source now uses type-only imports and binds that genuine
+  method to its original adapter. No lint rule, runtime policy or financial
+  oracle is relaxed. Failed v17 logs remain preserved. Renewed full types55.463s,
+  seven affected lint files7.726s and355 actual controls in59 complete files
+  32.366s passed, with64 native cases explicitly skipped. A sandbox EPERM on
+  the license gate Git child was preserved; only the remaining metadata gates
+  reran with approval at the exact same source. License, notes and plan passed
+  (source v18 plus exact-head continuation v19). Three actual reader journeys
+  then passed individually at4be0b712: bare admission blocks the successor
+  before its first callback9.878s; neutral current evidence cannot invent a
+  returned disposition or replay its GET9.427s; later actual refund invalidates
+  the old snapshot and refuses late callbacks10.128s. The four original cash
+  journeys renewed individually: cumulative returns22.247s, lost recipient
+  response15.435s, genuine charge-only unapplied remainder19.894s and managed
+  PI-bearing feedback9.527s. Independent financial totals/full-row table SHAs,
+  all83 journal hashes, PostgreSQL profile and zero-client proof passed before
+  every subsequent reset. Real Stripe reads retain progressive snapshots: the
+  first independent inspector incorrectly assumed one snapshot/read. That
+  inspector is preserved; replacement v2 proves every contiguous sequence,
+  genuine caller/finish and latest complete refund/dispute state without
+  changing product oracles or resetting the dataset. Evidence prefixes under
+  /tmp: freeholder-current-full82-cash-inspection-{bare,neutral,latest}-native-
+  v1-20261113 (-ledger-v2.json); freeholder-current-full82-partial-{three,
+  lost-recipient,unassigned,managed}-native-v6-20261113 (-ledger-v6.json).
+  These are synthetic-provider component checks, not independent stopped-read
+  recovery, full positive collection, provider-account or stable acceptance.
+  Actual external-money continuation2026-11-13: combined dcd1ea1e (same tree
+  at48d20e4e) passed full types, affected lint,368 actual controls in61 complete
+  files and license/notes/plan, with101 native cases explicitly skipped there.
+  NEW V9 applied all83 entries in6.780s; strict v18 passed142 models/282 guards/
+  227 function bodies in11.410s/3357 queries. The unchanged actual offline
+  payment journey then caught PostgreSQL42702 before its first attestation: a
+  local refunds record r conflicts with applied-credit reservation alias r.
+  A broader owned-body source scan also found the same clause in both final
+  attestation redefinitions and eligibility payment alias p conflicting with
+  the declared payment record. These exact three aliases are now distinct
+  applied_reservation/eligible_payment names; all financial conditions remain
+  unchanged. Failed V9 is preserved with independent table/journal/profile/
+  client-drain proof. No first payment/attestation was partially committed.
+  Fresh V10 normally applied all83 entries in6.773s. Strict read-only v19
+  passed all142 models,282 guards and227 exact installed function bodies in
+  11.432s/3357 queries, with unchanged parser and full prior controls. The
+  unchanged actual offline journey passed10.429s: partial1 then final4724,
+  exact4725 paid invoice, preserved access until paid, two owner-attested
+  payment receipts, real canonical refund of4724 and separate original fee
+  remittance/return. The unchanged gross-proration journey passed53.559s:
+  exact5250 debit, original2100 credit and3150 new cash (1 then3149), original
+  calendar/terms unchanged and paid access only after full actual consideration.
+  Three attested payments and the credit funding/reservation/application remain
+  intact. Independent minimal financial/table SHA, all83 journal/profile and
+  zero-client proofs passed before each reset. Evidence under /tmp: freeholder-
+  current-full82-parity142-v19-{result,drain}-20261113.json and freeholder-current-
+  full82-financial-{offline,gross}-native-v2-20261113 (-result.json and
+  -ledger-v2.json). No production TypeScript changed after the368-case source
+  qualification; exact generated-output and license/notes/plan checks passed
+  again for the SQL-only correction. These are owner-attested external-money
+  component controls, not independent bank/provider or stable acceptance.
+  All142 models and0–79/81/82 stay unchanged.
+  Related external-money alias audit2026-11-13: source review found the same
+  trigger OLD collision in all three owned guard_commercial_attestation bodies
+  (commercial attestation, agreement fee and gross proration). Signed af8c4b77
+  changes only payments old to prior_payment and its field references. Root
+  replaces each complete owned fragment exactly once in unpublished SQL80,
+  preserving the entire397928-byte prefix and every original condition/fee
+  epoch. SQL80 is605453 bytes/SHA931337667425e57f4fa9e25288109a07be4c0be86630ab8f3323efdc9dc268ee;
+  0–79/81/82 and all142 models remain unchanged. Fresh normal migration, strict
+  installed-body parity and the existing real shared-service offline-payment
+  and gross-proration native journeys are required; no acceptance is claimed.
+  Controlled origin SQL correction2026-11-13: after the fixture availability
+  correction, the original interruption/recovery journey reached its actual
+  cash receipt and caught PostgreSQL42703. The origin trigger used table alias
+  old, which PL/pgSQL resolved as its trigger OLD record, lacking the schedule
+  provider_observation field. The owned unpublished fragment and its identical
+  assembled SQL80 body now use prior_schedule. Every original ownership
+  exclusion stays intact; the entire old397928-byte prefix and0–79/81/82 are
+  unchanged. Failed V7 and all independently verified journal/profile/drain
+  evidence remain preserved. NEW V8 normally applied all83 entries in6.829s;
+  strict read-only v17 passed all142 models,282 guards and227 installed
+  function bodies in11.400s/3357 queries, with the parser and all prior model
+  controls unchanged. The unchanged positive-intent interruption/recovery
+  journey passed10.832s: the original positive fact and thrown finish stay
+  byte-identical, genuine recovery retains one original cash receipt and no
+  canonical invoice/payment. The separate unpaid nonzero invoice/processing
+  intent control passed9.929s with zero cash receipts/invoices/payments and
+  unchanged accepted subscription. Independent component SHA/count, all83
+  journal/profile and drained-client proofs passed before either reset.
+  Evidence: /tmp/freeholder-current-full82-parity142-v17-{result,drain}-20261113.json;
+  /tmp/freeholder-current-full82-controlled-raw-{positive,unpaid}-native-v3-20261113
+  (-result.json and -ledger-v3.json). These are synthetic-provider component
+  checks, not full positive collection, provider-account or stable acceptance.
+  Invoice applied-credit CHECK source correction2026-11-13: strict v14 schema
+  parity stopped at the first genuine model/source mismatch in the named
+  nonnegative invoice amount CHECK after125 complete models. The unchanged
+  model also includes credit in invoices_paid_bounded, while the old source
+  did not. The owned unpublished credit fragment now replaces both exact named
+  CHECKs; existing credited bounds and already-correct paid-status/total/refund
+  arithmetic remain intact. No model waiver or diagnostic exemption is added.
+  Failed V2/v14 proof stays preserved. The repair is assembled after the whole
+  old0cff prefix with0–79/81/82 unchanged; NEW V3 normally applied all83 entries
+  and strict v15 passed all142 actual model comparisons, including both CHECKs.
+  This schema evidence does not establish business acceptance. See
+  `deploy/subscription-proration-credit-check-parity80-source-20261113.md`.
+  Allocation-scoped merge source repair 2026-11-12: the actual mixed-seller
+  control failed because an unrelated seller's refund changed the first
+  seller's whole-invoice collection fingerprint. A new internal scope
+  derives exact payments from original allocation routes; ordinary buyer
+  invoice fingerprints retain their default behavior. Full Node22 types and
+  focused lint pass; the unchanged actual mixed-seller control now passes
+  6.63s on the same normal-v7 schema, including successful unrelated-party
+  undo and refusal after the original seller's new child. Backend drain and
+  independent ledger inspection pass; whole financial/provider acceptance
+  remains open.
+  See `deploy/merchant-allocation-merge-scope-2026-11-12.md`.
+  Seller refund merge source increment 2026-11-12: the existing parsed tax
+  profile fingerprint now includes bounded original payment/cash ownership
+  and all fifteen immutable refund child families. Selection follows exact
+  original allocation, booking and agreement routes, including unapplied
+  subscription cash; another seller's payment on the same invoice is not
+  adopted. Overflow blocks undo. Full Node22 types/focused lint pass; the
+  actual mixed-invoice fixture is prepared but unrun pending fresh refund
+  schema assembly and the companion subscription-profile index. Historical
+  artifacts are unchanged and may conservatively refuse unprovable undo.
+  See `deploy/merchant-tax-refund-merge-source-2026-11-12.md`.
+  Original refund source increment 2026-11-12: the optional Stripe adapter
+  freezes the exact refund body, preserves a physical resource ACK before
+  money parsing, and accepts an actual subscription cash receipt without
+  inventing a local invoice/payment. Dashboard, nullable and customer-action
+  facts remain visible recovery debt. Explicit Node22 full types, changed-file
+  lint and34 no-database controls pass (12 capacity,22 intercepted-HTTP).
+  Unregistered financial drafts, atomic cash disposition, fee/recipient debt,
+  complete native/browser integration and actual provider acceptance remain
+  required; the new model stays disabled. See
+  `deploy/merchant-refund-source-2026-11-12.md`.
+  Original returned-cash read boundary 2026-11-12: authenticated primary
+  money/refund observations precede auxiliary reads. Closure math checks actual
+  original refund inventory, full fee/transfer return, terminal zero-capturable
+  PI and dispute coverage. Full Node22 types/lint and52 no-database controls
+  pass (34 previous,18 new). Actual caller/snapshot authority, atomic core
+  disposition, SQL guards, native/human flows and provider acceptance remain
+  required; this optional read helper does not close a financial lifecycle.
+  Physical refund-caller before control 2026-11-12: actual current80 checkout
+  and payment capture reached a second identical refund POST while the first
+  caller stayed paused. Body/key equality passed; admission failed5.672s on
+  product0ecf99d1 plus test328fa48f/v6ea06. The simulated provider accepted
+  one refund and returned409 for the concurrent request; no duplicate money
+  effect or actual-main breach is claimed. Both callers and database work
+  drained. The unregistered core fence still requires complete integration
+  and native after proof; see `deploy/merchant-refund-source-2026-11-12.md`.
+  Shared refund-fence isolated wiring 2026-11-12: common reservation capture
+  and cancel/fail/start/settle checks now bind one physical original request
+  in the isolated repair. Explicit Node22 types/lint pass; no normal80 SQL,
+  registry/native after proof or activation is claimed. Unknown physical
+  requests cannot be released by local cancellation or time. Full state,
+  fee/reversal, privacy and human-flow integration remain required.
+  Physical refund-caller AFTER 2026-11-12: frozen5a5763c0 and freshly
+  migrated normal0–80/v7 SQLd060f9a8 passed the exact unchanged case6.255s.
+  The second invocation conflicts while the original POST is paused; only
+  one physical POST occurs. Read-only convergence proves one succeeded500CAD
+  refund, payment.refundedMinor500, one original dispatch/returned finish,
+  physical ACK and matching bound raw money observation. Fresh migration
+  verified81 journal entries/max1793310000060 and all fifteen refund tables;
+  this is not populated-upgrade or actual provider-account acceptance.
+  Prior v6ea06/0ec BEFORE5.672s and all prior evidence remain preserved.
+  Shared metadata/private phases and the source guards are now composed;
+  complete bank/action state, exact fee/reversal, return allocation, privacy,
+  human/browser and runtime-upgrade qualification remain required. The new
+  merchant model remains disabled, C12.38 open. See the same source report.
+  Returned-line commission BEFORE 2026-11-12: actual isolateda652/v8SQL1ac
+  failed5.354s after real5400CAD-cent sale and1200 return/refund. The credited
+  line freezes100 commission; gross-ratio reconciliation accepted112 instead.
+  A synthetic fee edge supplies the provider result, not actual account
+  acceptance. Genuine populated history is cloned unchanged with eight money
+  table hashes; the proposed exact original-line/source-bound repair remains
+  unqualified. No accepted fee, refund or payout is rewritten. See
+  `deploy/merchant-return-line-fee-source-2026-11-12.md`. C12.38 stays open.
+  Returned-line fee integration AFTER attempt 2026-11-12: shared causal
+  target100 was computed, but unchangedv8SQL1ac still enforced112 and refused
+  the INSERT6.464s before any fee POST. Customer refund1200 and its original
+  credit remain recorded; fee operations/observations are0, database drained.
+  A new owned guard fragment is unassembled/unapplied and needs freshnormalv9;
+  existingv8 and the actual112-history clone remain unchanged. This is not
+  a passing AFTER or full C12.38 qualification.
+  Original-line fee guard source freeze780 now passes Node22 types,
+  helper/verifier lint and exact old-guard preservation proof. The new owned
+  SQL fragment is still unassembled/unapplied; freshnormalv9 on the reconciled
+  current-main candidate and unchanged native AFTER remain required. No old
+  v8 database, accepted112 resource, or original source proof is rewritten.
+  Unreadable fee success BEFORE 2026-11-12: unchanged7d784/current17d/v9SQL958
+  failed6.468s after actual factory/HTTP barriers. An accepted100 response was
+  unreadable; a concurrent earlier inspection completed afterward. The first
+  operation was falsely refused and a new key accepted another100, within the
+  original500 resource capacity although the canonical retained target is400.
+  Both calls and database work drained. Actual populated history is preserved
+  with eight original money-table hashes and unchanged keys/SQL. A narrow
+  source repair keeps dispatched exceptions unknown and recovers the original
+  operation; full Node22 types/changed-source lint/three generated-changelog
+  controls pass and drained. Byte-identical unchanged AFTER passed6.345s on
+  a146/v9SQL958: one original key1/resource100/bound observation, retained
+  target400 and customer refund1200 intact, with one physical POST and actual
+  database work drained. Dedicated populated-history review passed0.429s:
+  actual returned200 inspection stays review/commission debt, zero POSTs,
+  original eight-table golden hashes and keys/SQL unchanged, database drained.
+  No missing original resource binding is inferred or history rewritten.
+  The response fault and provider edges are synthetic. See
+  `deploy/merchant-fee-unreadable-success-2026-11-12.md`; C12.38 remains open.
+  Original installment fee split 2026-11-12: test-only457/current17d with
+  normal-v9 SQL958 passed6.800s. One300CAD-cent invoice freezes20 commission;
+  actual50+250 captures freeze3+17 fees. Returning its zero-tax100 line refunds
+  customer50+50 and original fees3+7, with bound observations and canonical
+  retained targets0+10. Both reconciliations replay without another fee POST;
+  separate database work drained. All provider edges and contrast tax are
+  synthetic. This qualifies that split, with no historical money or SQL
+  changes, new model activation, actual provider or full C12.38 closure.
+
+  Exact returned-line fee AFTER 2026-11-12: reconciled current-main source
+  17d08426 and freshnormalv9 SQL95822693 pass the byte-identical a652 case
+  6.833s. Independent ledger confirms1200 customer refund and original line
+  credit, one accepted100 fee/bound observation, canonical retained target400;
+  the fixture asserts one customer and one fee POST. Database work drained.
+  Actual provider edges are synthetic. Oldv8 and the actual accepted112 clone
+  stay unchanged. Separate populated112 review passed0.549s using qualified
+  component source and the clone's originalSQL1ac: review/debt remained, zero
+  provider POSTs, all eight original financial-table golden hashes unchanged,
+  journal81 unchanged and no v9 target function. This does not apply the new
+  guard to old history or establish an actual production/provider upgrade.
+  Remaining full fee/bank/partial/human/provider controls still require
+  qualification. C12.38 is open.
+
+  Stale fee dispatch BEFORE 2026-11-12 (C5.19/C12.38): exact64347385 on
+  normal v9/SQL958 failed in 7.261s after two real caller promises drained.
+  One caller paused before dispatch; another completed the original operation.
+  A terminal return then bypassed the first caller's dispatch refusal. Under a
+  documented provider-key pruning model and Date-only simulated 25-hour advance,
+  the same original key created two distinct 100-cent resources. Independent
+  readback retained one accepted operation, both bound physical observations,
+  canonical target400 and the intact customer refund/credit1200. The populated
+  before database and eight original money-table hashes are preserved separately.
+  A minimal source correction checks dispatch eligibility before the terminal
+  idempotent return. Full Node22 types/changed-source lint/actual generated
+  release note/three changelog controls/metadata gates pass. The byte-identical
+  original AFTER passed in6.609s on exact72ac85e8/SQL958: one original key,
+  accepted100 resource and bound observation, customer refund/credit1200 intact,
+  all caller/database work drained. The populated BEFORE clone remains unchanged;
+  its dedicated non-resetting review passed in0.399s on exact4c4de105:
+  real factory inspection reported returned200, review/commission debt remained,
+  zero POSTs occurred and all eight original money-table golden hashes/counts,
+  both physical observations and SQL958/journal81 stayed unchanged. Database
+  clients drained. Whole current-source integration remains open.
+  No SQL or old money changes. C12.38 stays open. See
+  `deploy/merchant-fee-stale-dispatch-2026-11-12.md`.
+  Current subscription commercial composition source 2026-11-12: the eleven
+  owned terms/phase/exemption/buyer-cohort deltas through ddee2f75 are composed
+  onto current425642af without whole-file replacement or cherry-pick conflicts.
+  Accepted terms are registered with private search/retention decisions and a
+  bounded exact-profile seller merge witness; buyer terms evidence is retained.
+  New unpublished80 hash881a7901 appends the owned terms fragment after the exact
+  SQL958 byte prefix, preserving all published SQL and the81-entry journal.
+  NEW database/source/model/native/SDK qualification is pending; all earlier
+  artifacts stay preserved. Provider admission remains closed, and amendments,
+  money-finisher integration and full provider acceptance are still required.
+  See `deploy/current-subscription-terms80-source-2026-11-12.md`.
+  Current-source follow-up at81e42159: fresh ordinary0–80 SQL881a migration
+  passed5.753s on a NEW V10 database; three actual retention/terms models passed
+  full SQL parity. All384 source assertions passed with26 explicit DB skips,
+  composed finisher types/lint/40 focused assertions and616-note metadata pass.
+  Four separate actual buyer-erasure journeys passed: paused cancellation6.354s,
+  current hold/release5.946s, corrupt original artifact5.748s and a hold after
+  money completion/before customer DELETE5.700s. Independent per-case ledgers
+  verify scope outcomes, credentials, original resource/cohort and seller
+  preservation, unchanged81-entry journal and no remaining database clients.
+  This uses a synthetic prior-create journal with actual shared services/jobs
+  and intercepted provider HTTP; it does not prove new provider creation,
+  accepted-terms signup or actual provider-account acceptance. Actual terms
+  merge witnesses, paid/returned cash, missing/restored queue recovery, late
+  positives, amendments and complete browser/provider acceptance remain open.
+  Provider phase admission remains false; C1.08/C12.38 and stable stay open.
+  Separate recovery controls at885a37f2 then genuinely failed: a restored
+  local-mode change allowed agreement-erased status and local credentials
+  minimization despite an active original provider resource(5.805s); missing
+  completed original money payload caused the repair transition to roll back,
+  leaving the request completed despite unknown resource/pending cohort(5.875s).
+  Both actual populated failures are preserved in separate NEW V10 clones with
+  thirteen original table count/SHA256 goldens, unchanged SQL881a/journal81 and
+  drained clients. No actual provider-account failure or repaired AFTER pass is
+  claimed. Source repairs and unchanged controls remain required; the earlier
+  four targeted passes do not establish complete privacy acceptance.
+  Actual live-registry SDK generation passed8/8, produced the two external
+  quote services and typed accepted terms, and passed fresh-process8/8 drift
+  verification after incremental types. Both runs drained clients and preserved
+  journal81/SQL881a. Generated-file lint is deliberately ignored by repository
+  policy, not extra coverage. The two demonstrated recovery findings remain open.
+  Minimal current-source repair8f06564c subsequently fixes those two local
+  findings without SQL/money rewrite: frozen original history determines
+  inventory; missing original money work commits explicit recovery before worker
+  refusal; pending buyer ACK requires its actual retained money-finisher task.
+  Component fulltypes and actual current incrementaltypes/five-file lint/41
+  source assertions all pass. Both unchanged failing natives pass(localmode
+  6.047s/missing5.888s); all four affected original journeys pass again
+  (5.890/6.126/5.905/5.890s). Each has independent state/client-drain readback and
+  unchanged SQL881a/journal81. Both failing clones remain preserved/unmigrated.
+  Full preserved-history recovery, accepted terms/profile merge, nonempty cash,
+  late positives, new provider creation and browser/provider acceptance remain
+  required. These targeted repairs leave C1.08/C12.38/stable and review open.
+  A preserved original untagged customer task then exposed another candidate
+  defect(f49128aa/426.29ms): actual intercepted DELETE1 and false completed
+  request while its original resource stayed active. The new13-table workcopy
+  preserves that result; the original golden/schema/journal remain untouched.
+  Minimal all-task preflight99f566b9, composed356306b7, passes component fulltypes
+  and current incrementaltypes/three-file lint/41 source assertions. The unchanged
+  preserved oracle passes375.55ms on a NEW after-copy with0 provider I/O and
+  explicit in-progress recovery. Three actual queued legacy controls also pass:
+  safe cleanup/UUID/namespace/no-I/O replay7.029s, missing original hash7.112s,
+  and a later same-contact hold7.162s. Per-case exact task/claim/hold readbacks,
+  unchanged normal881a/journal81 and drained clients are retained. Initial global
+  queue-count inspection assumptions and an ineligible-hold fixture refusal
+  are preserved separately; corrected inspections/fixture did not alter product
+  expectations or deadlines. The no-reset missing original-finisher review
+  also commits recovery from its actual retained repair without provider I/O,
+  new original claims or reconstructed payloads; its golden13 remain unchanged.
+  Actual accepted manual terms/profile witnesses now pass6.371s and5.959s:
+  frozen original month/trial/setup/price/tax promises survive plan edits; foreign
+  accepted-term or exemption children allow undo, owning children block undo,
+  with profile/version rows unchanged in the exemption control. Exact erasure
+  claims/terms IDs/merge receipts and independent journal/client readbacks pass.
+  These are synthetic actual-service controls, not new provider creation, real
+  certificate or independent review. Affected full18 provider-erasure native
+  regression, updated original buyer journeys, amendments/provider phases and
+  complete C1.08/C12.38 acceptance remain required. See
+  deploy/subscription-original-customer-preflight-20261113.md.
+  Current-main financial composition 2026-11-12: exact `73e145af` merges protected
+  main `bad846e4` (#694) and both fee repairs while preserving SQL958, all published
+  migrations and helper `46a6ec02`. Full source gates passed at `5f53daf5` (384 assertions,
+  26 explicit DB skips); exact `73e145af` post-merge types, six-file lint, 12 CI controls,
+  metadata and workflow gates pass. Five targeted native controls also pass:
+  legacy caller 5.257s, merchant caller 6.062s, installment fee 6.967s, unreadable
+  success recovery 6.451s and stale dispatch 6.355s. Independent per-case ledgers
+  verify original cash/resource ownership and no remaining database clients.
+  The new collection model stays disabled; full financial/browser/provider/
+  recovery acceptance and C12.38 remain open. Exact scope and preserved evidence
+  are in `deploy/current-financial-source-2026-11-12.md`.
+  Combined current financial source checkpoint 2026-11-13 (C1.08/C12.38):
+  current buyer/customer fixes, bank recovery, accepted terms, auxiliary/phase
+  callers, legacy read journals and the dated-trial repair are composed.
+  Full types, whole-tree lint with three precise corrected diagnostics, all44
+  static plus13 affected source files (498 pass/26 explicit DB skips), license,
+  notes and plan gates pass. Newunpublished80 SHA3a686245 preserves the entire
+  e783 prefix and all published migration/journal entries. A NEW V12 normal
+  0–80 migration passed6.158s with81 journal entries,11 actual model definitions
+  and45 required tables/guards. The V12 fixture-only form-body failure remains
+  preserved. After the precise mock/producer teardown fix03f71deb, a NEW V13
+  passed all five actual legacy read lifecycle controls (29.571s total), each
+  with independent UTC ledger and empty client inventory. Exact original
+  create-platform/protocol fields remainNULL; no merchant request is invented.
+  New source composition with948c4544 and4064c081/4e5d05d7 adds stop/current
+  tails after complete3a. Source4e9 passed64 actual files/556 assertions with
+  35 explicit DB skips, types/lint/license/notes/plan; no pending bail rows count.
+  Actual V14 SQL42601 in the legacy guard is preserved; parenthesized CASE
+  correctioncd3 yields unpublished80 SHAc1893b08. NEW V15 normal0–80 passed
+  5.969s/81 journal entries/twelve named models/46 tables/five extra guards.
+  Root witnesses include exact current-receipt children and bounded counts.
+  All five unchanged merchant-bank regressions (35.437s) and four authentic
+  legacy-current cases (24.282s) pass individually with independent per-case
+  UTC money/receipt/journal ledgers and empty client inventories. Current-only
+  receipt changes refuse unsafe merge undo; old create metadata staysNULL.
+  Recovery, actual schedule producer/stop, amendments/future invoice lineage,
+  upgrade/SDK/browser/provider acceptance remain required; model admission is
+  still closed. Exact limits:
+  `deploy/current-commercial80-source-2026-11-13.md`.
+  Next recovery composition 2026-11-13 (C1.08/C12.38): isolated source
+  composes a828 schedule GET/PI-void recovery,8f0 supported draft finalization
+  and28da stopped legacy readers/causal replacements. Root witnesses include
+  exact stop and signed lineage children with complete six-array bounds.
+  Unpublished80 SHA2100aa76 appends exact owned recovery tails after the whole
+  c189 prefix; published0–79 and journal remain byte exact. Sourceef45 passes
+  types/wholelint/72 nonempty files/607 assertions with45 explicit DB skips and
+  metadata gates; the only initial type issue was the now-paired form label.
+  NEW V17 ordinary0–80 passes6.005s/81 journal entries/13 named models/47tables
+  and additional guards. First actual causal legacy refund case passes7.858s
+  (paid1000/refunded800/three400 refunds/one authentic lineage/six returned
+  reads/62 facts); reservation-only merge-undo control passes5.952s
+  (paid1000/refunded0/childcreated/no extra IO). Per-case independent UTC
+  ledger/full source journal/empty-client checks pass. Remaining four legacy
+  and three schedule recovery cases, combined regressions/upgrade/SDK/browser/
+  provider and RMA/amendment/future-lineage work remain required. All earlier
+  prototypes/goldens stay untouched. No model admission or live C-item closes.
+  Actual phase-producer repair 2026-11-13 (C12.38): test-only3ea on c189
+  genuinely failed5.776s after an actual original schedule ACK and returned
+  caller, because the real adapter DTO lacks the core projection version.
+  Source135f normalizes version1 internally; actual fixture and SQL stay byte
+  unchanged. Types/lint/38 affected phase assertions plus one explicit native
+  skip and metadata gates pass. NEW V16 normal0–80 passes6.028s/all81 hashes;
+  unchanged producer oracle passes7.144s. Independent active-resource/caller/
+  inventory and zero-cash checks pass, with NULL linked subscription preserved.
+  Original failed V15 operation/resource digests and full journal recheck
+  unchanged. Actual account/stop/recovery/amendment/future-invoice acceptance
+  remain required; model admission and stable remain closed.
+  Original bank-refund current-state isolated draft 2026-11-12: source now
+  retains repeated capture occurrences, exact original-resource read/finish
+  receipts, nullable/action/failure-balance facts and current cash projections.
+  Issued return credits remain unchanged; exact original RMA parts reopen and
+  outstanding refund promises keep financial review debt. Masked owner/buyer
+  status and the scoped original-resource recovery path are drafted. Full
+  Node22 types, changed-file lint and63 DB-free controls pass; initial import
+  and fixture type-only lint diagnostics were corrected and preserved. At that
+  isolated checkpoint no SQL, financial native, browser or provider acceptance
+  had run.
+  That isolated fragment was unassembled and its assembled80 SQL958 stayed
+  unchanged. Subsequent owned composition onto current885a37f2 appends the
+  bank fragment after accepted terms: new unpublishedSQL e7834c90 preserves
+  the entire881a byte prefix, published0–79 and the journal. This current
+  union at38c997c5 passes full Node22 types,48-file lint and74 affected
+  source assertions with25 declared database skips. No bank native or SDK
+  business qualification has run. A subsequent NEW V11 ordinary0–80
+  diagnostic on productf45e4bde/e783 passed5.927s:81 journal/max60/hash,
+  full seven-model parity, original/new financial guards, fsync on and final
+  independent backend[] drain. This is schema structure only, not populated
+  upgrade, actual bank state/credit/native or provider acceptance. Prior
+  databases/clones stay unchanged; final gates remain required. Generic/manual
+  causal discharge and legacy bank recovery remain unfinished work. An isolated
+  follow-up now drafts a fresh-human-confirmed generic refund replacement:
+  exact current failed resources, finished callers, one signed causal chain,
+  cash-locked admission, shared buyer/debt status, four locales and original
+  financial merge/privacy witnesses. It refuses RMA ownership and unrelated
+  equal-amount refunds. The existing mutable journal carries authenticated
+  evidence; it is not claimed to be DB append-only. This follow-up at e4a39f30
+  passes full Node22 types, 15-file lint and 63 DB-free proof/private/audit
+  controls, with no native, provider or historical-bank proof, and does not change
+  unpublished SQL e783 or the preserved V11 database. See
+  `deploy/merchant-bank-replacement-2026-11-12.md`. This does
+  not activate the new model or close C12.38. See
+  `deploy/merchant-refund-current-state-2026-11-12.md`.
+  First generic bank-replacement native on a6c3dd47/V11 e783 subsequently
+  passes 8.118s: original400 bank failure, independent unrelated400 and one
+  explicitly causal400 replacement; replay creates no additional refund and
+  the buyer cannot pay again. Independent ledger verifies4200 paid/800 current
+  returned, three finished original resources, one causal journal and retained
+  failure-balance history. UTC inspection matches the actual application's
+  mandatory session configuration and confirms original FAILED/child SUCCEEDED
+  receipts; bare Vancouver inspection is preserved separately, with no stored
+  writes or golden-hash claim. All clients drained. This case has no issued
+  credit and does not prove RMA reuse. Four other bank natives, legacy recovery,
+  final source union, SDK/browser/provider and full financial acceptance remain
+  open; this does not activate the model or close C12.38.
+  The next two-resource native found a genuine repeat-processing audit event
+  refusal after actual failed400 and action/null600 state reads passed. Its
+  pending600 primary fact and current receipt survived; logical projection
+  rolled back at the existing transition constraint, preserving paid4200 and
+  refunded0. Before source287/a490/e783 failed7.062s and is retained with a
+  separate 15-table UTC golden-equal populated clone (0.479s, journal81/e783,
+  clients drained). A one-line source repair now skips only the impossible
+  same-status transition event, retaining actual code/update/audit/outbox/fee
+  effects. Source2a191d44 passes full incremental Node22 types, changed-file lint
+  and63 finite core checks; unchanged oracle48cf8407 AFTER passes7.381s on
+  V11/e783. Actual failed400 plus independent600 action/null/pending/restored
+  success leave4200 paid/600 refunded; UTC readback verifies both current
+  receipts, retained raw facts, two finished original resources and real bank
+  state events, with no remaining clients. The RMA-credit, stale-read and
+  strengthened caller natives remain unrun. No schema, historical money,
+  oracle or model activation changed; final combined/legacy/provider acceptance
+  remains open.
+  First RMA-credit bank native on e007/2a191/e783 failed6.617s at a genuine
+  notification-topic validation refusal. Actual4200 success then bank action
+  leaves4200 paid/0 current refunded, processing refund, same issued4200
+  credit and original part, but the bank listener's transaction rolls back
+  and the return stays refunded. Its actual outbox error remains pending;
+  terminal failure/replacement is unrun. A separate23-table UTC golden-equal
+  template clone preserves that BEFORE state (0.145s, journal81/e783, clients
+  drained). Source now changes only the notification topic and matching eight
+  locale keys to valid lowercase, retaining timeline/event names, old money,
+  schema and original oracle. Sourcebd549214 passes full incremental Node22
+  types, changed-file lint and88 actual i18n/parity controls. The unchanged RMA
+  AFTER passes7.093s: same issued4200 credit/lines and original4200 part, old
+  failed4200 plus one exact-part successful4200 replacement, two original
+  finished callers/keys, paid/current-refunded4200, no new credit or buyer
+  charge. Actual attention notification and bank callbacks now commit; UTC
+  ledger/journal81/e783 and all client drains pass. Before/source/clones remain
+  preserved. The final two distinct controls on a50/bd549, unchanged48cf and
+  V11/e783 pass separately once: staleGET5.778s retains its old successful raw
+  capture and actual finish without a current receipt after a newer signed
+  action; a fresh action read alone receives a valid receipt, paid4200/current
+  refunded0. Strengthened paused caller6.236s proves committed actualACK and
+  rawsuccess400 with finish0, refuses externalGET until the actual wrapper
+  returns, then converges with finish1/currentreceipt1, paid4200/refunded400
+  and one physicalPOST. Paused-time facts are actual test assertions; independent
+  final UTC ledgers verify exact original resources, current receipts, retained
+  facts, journal81/e783 and empty backends. Five distinct controls now have
+  component evidence; final combined-source, legacy-bank, SDK/browser and
+  provider acceptance remain open. This does not enable the model or close
+  C12.38; details and limits remain in the bank-replacement evidence above.
+  Separate legacy-bank exact-read adapter foundation is source-only: it reads
+  an actual historical refund/payment/account without creating a merchant
+  request or refund attempt. Its freshly authenticated platform and explicit
+  read protocol are distinct from unknown original-create metadata, which
+  remains null. The callback retains nullable or contradictory raw response
+  facts before terminal policy. A staged full cash/refund/fee/recipient/dispute
+  reader also reuses the bounded primary-first provider collector, preserving
+  every callback before a later page can fail; unmatched resources are not
+  associated by amount. Its fresh-read wrapper keeps original-create metadata
+  unknown. Exact adapter67665ea2 now passes full Node22 types8GB, four changed
+  TypeScript files' lint and15 actual factory HTTP controls, with no skips or
+  database connection. Logs are `/tmp/freeholder-legacy-bank676-*`.
+  A separate finite legacy lifecycle source slice now adds three private
+  original-refund-owned models, guarded unapplied SQL and real registered
+  claim/fact/actual-finish services. Its private orchestrator reads only the
+  authentic HMAC-bound original resource, then bounded cash inventory; each
+  actual callback is held before persistence, and a settled wrapper can flush
+  the same retained facts/finish without new I/O. A missing original finish
+  remains debt and blocks a new read. Original create platform/protocol remain
+  null, and unmatched refunds remain unassigned. Financial repair pointers and
+  a bounded exact-refund child-witness helper are supplied, but final seller/
+  buyer financial-witness composition remains required. Four actual-service
+  native controls are drafted. This new lifecycle slice is UNQUALIFIED and its
+  fragment is unapplied; normal80/e783 and all prior databases are untouched.
+  Current-state proof, money projection, causal replacement, stopped-reader
+  recovery, UI/API/SDK, populated upgrades and actual legacy acceptance remain
+  required. See `deploy/legacy-bank-read-lifecycle-2026-11-13.md`.
+  Legacy current-proof source checkpoint 2026-11-13 (C5.19/C12.38/C1.08):
+  a separate UNQUALIFIED slice adds an actual fourth current-receipt model,
+  immutable original-resource revisions and real returned-caller proof. It
+  retains nullable raw bank states, reuses the shared original invoice/payment
+  cash projection, and keeps new or older unsubmitted refund keys blocked by
+  unresolved legacy bank debt. Current-state and deferred-balance guards also
+  refuse an old positive-result replay after a newer bank reclassification.
+  Original create metadata remains null; no
+  merchant request is manufactured. Root3a SQL and all five prior lifecycle
+  fixtures are unchanged; a separate unapplied suffix needs a new combined
+  candidate/hash/database. Eighteen pure controls and three actual-service
+  native controls are drafted, not run. Fourth-child central financial
+  composition, causal replacement, stopped-reader recovery, populated upgrades,
+  return/credit and UI/API/SDK journeys and actual provider acceptance remain
+  required. No completion or stable sign-off is claimed. See
+  `deploy/legacy-bank-current-proof-2026-11-13.md`.
+  Legacy recovery source checkpoint 2026-11-13 (C5.19/C12.38/C1.08):
+  an isolated UNQUALIFIED slice adds separate actual hosting-stop receipts,
+  preserves interrupted partial facts without forging a wrapper finish, and
+  permits a new exact read only after the original stop is reviewed. Signed
+  actual-refund-ID chains bind fresh human-authorized causal replacements to
+  exact failed resources; equal unrelated refunds cannot discharge a promise.
+  All original physical callers and current cash inventory remain required,
+  shared payment locks serialize signed/physical facts, and changed current
+  merchant routing cannot adopt old money. Owner recovery/stop controls use the
+  shared services, four locales and masked customer promise views.21 pure/five
+  contract/five native controls are drafted, not run. The separate unapplied
+  suffix needs a new full candidate/hash/database; root3a and both prior native
+  fixture files remain unchanged. Financial child composition, actual worker
+  recovery, RMA issued-credit integration, populated upgrades, SDK/browser and
+  real provider acceptance remain required. No completion, activation or
+  stable sign-off is supplied. See `deploy/legacy-bank-recovery-2026-11-13.md`.
+  Legacy RMA/raw-feedback source checkpoint 2026-11-13 (C5.19/C12.38/C1.08):
+  an isolated UNQUALIFIED increment proves existing return allocation, original
+  payment and credit-line ownership before signed parent/child legacy bank
+  replacement. It retains the same credit and original payment principal,
+  keeps unknown/action/failed parts open, and shares owner/customer recovery
+  and generated API contracts. A sixth legacy immutable raw-feedback model
+  commits normalized authenticated financial facts before applying policy,
+  including genuine unassigned callbacks and feedback before the first GET.
+  Unknown original create metadata remains null; actual retained creator ACKs
+  cannot stand in for fresh current proof or an unknown creator finish. Seven
+  bounded financial child arrays are supplied; root-owned central/invoice
+  before-first-read feedback composition remains required. A separate unapplied
+  suffix needs new combined SQL/parity/new databases. Prior fragments and
+  lifecycle/current/recovery fixture bodies remain unchanged.38 pure/five
+  contract/five native controls are prepared, not run; no CPU qualification,
+  migration or provider I/O ran for this increment. Populated upgrades,
+  integrated financial witnesses, UI/API/SDK journeys, actual acceptance and
+  independent review remain required. No stable or model activation sign-off
+  is supplied. See `deploy/legacy-bank-rma-2026-11-13.md`.
+  First actual feedback-only owner control hit an existing any-cart
+  non-undoable precondition before the financial target; V20 failure/old oracle
+  are preserved. Its isolated fixture-only successor uses real cartless manual
+  invoices/payments/physical refunds for just that ownership leaf, with all
+  financial assertions and both real undo attempts unchanged and explicit
+  initial undoable assertions. The other four actual checkout/RMA/credit bodies,
+  product/cart policy and17bfSQL are unchanged. Corrected setup fulltypes/
+  focusedlint/43actualproof-contract assertions pass, with5explicitnative
+  skips and metadata gates green/drained. Corrected actual native remains
+  UNRUN pending freshV21; no completion follows.
+  Full-original-cash return source checkpoint 2026-11-13 (C12.38/C1.08): a
+  separate UNQUALIFIED bounded increment supplies four immutable authenticated
+  original-owner/physical-operation/raw-fact/full-closure models. Human-confirmed
+  shared recovery can drive receipt-owned unapplied customer cash, original fee
+  refund and destination recipient reversal without inventing a canonical
+  payment, logical refund, old process birth or creator finish. Actual GETs and
+  POSTs have separate caller proof; unknown outcomes keep their original keys.
+  Owner recovery, four locales, privacy outbox pointers and bounded four-array
+  financial witnesses are present. Root central merge/export/bounds integration
+  remains required.19 pure/seven adapter/13 contract/four native controls are
+  prepared, UNRUN; no CPU qualification, migration, database or provider request
+  ran. The separate suffix is unassembled/unapplied; prior SQL/evidence is
+  unchanged. Exact cumulative partial recipient/fee targets and unassigned
+  partial-return remainder composition remain required source work immediately
+  after this finite checkpoint, with no new deferral or blanket destination-debt
+  waiver. Receipt-only subscription native, combined source/SDK/browser/provider
+  acceptance, independent review and stable sign-off remain open. See
+  `deploy/original-cash-return-source-2026-11-13.md`.
+  The unchanged actual RMA lifecycle then genuinely failed after a successful
+  causal child POST/retained finish/ACK but before any fresh child GET; V21
+  remains preserved with original issuedcredit1000, paid2000/refunded1000,
+  three1000refunds and childreads0. Shared source repair separates that actual
+  creator result into a typed exact-child bank-proof continuation, preserving
+  public refusal and reaching existing fresh whole-family reads before guarded
+  cash/return closure. SQL17bf/all original native oracles remain unchanged;
+  four pure continuation refusals pass within104 actual NoDB assertions,
+  14nonempty files and25explicitDBskips. Fulltypes/focusedlint/metadata pass
+  and processes drain. Actual AFTER remains UNRUN pending freshV22; no
+  C-item/stable completion follows.
+  Cumulative-original-partial cash source checkpoint 2026-11-13
+  (C12.38/C5.19/C1.08): a separate UNQUALIFIED bounded increment derives
+  cumulative fee/recipient targets from exact original principal, completed
+  return allocation/issued-credit lines, current actual refund resources and
+  original versioned fee authority. Accepted order v1 per-line floors remain
+  distinct from booking/subscription v0 aggregate floors; BigInt residuals
+  retain actual original line/resource ownership. Whole RMA credits remain
+  reserved through the canonical credit-disposition query, never transferable
+  after the same cash refund. Actual finished/stop-reviewed callers and
+  original ACK/metadata GET recovery precede new target generations; unknown
+  outcomes cannot obtain another POST. Fresh human review of an actual
+  unassigned raw receipt permits only its original unapplied remainder without
+  inventing a payment, logical refund, old caller or amount-based association.
+  The same four models now expose five bounded financial witness arrays,
+  including authenticated original feedback before any cash owner or first
+  read. Root central merge/export/bounds integration remains required. Shared
+  services/owner recovery/audit/four locales and13 pure/two adapter/nine
+  contract/three native controls are prepared, UNRUN. No compiler, lint, build,
+  tests, migration, database or provider request ran; the new separate suffix
+  is unassembled/unapplied and prior SQL/test bodies/evidence are unchanged.
+  Combined qualification, concurrent/late-feedback/NULL-payment subscription
+  acceptance, populated upgrades, browser/SDK/customer/provider journeys and
+  independent review remain required. No new deferral, destination-debt waiver,
+  model activation or stable sign-off is supplied. See
+  `deploy/original-cash-partial-source-2026-11-13.md`.
+  Root cash-history integration 2026-11-13 (C12.38/C1.08): the combined
+  unpublished candidate includes all five authenticated owner/operation/fact/
+  closure/feedback arrays in central financial fingerprints, invoice history
+  and bounded subject exports. Exact original invoice payments and actual
+  agreement receipt aliases preserve NULL-payment source identity without
+  inventing a payment. Raw feedback already owns review before any cash owner
+  or first GET. Merchant export derives receipt-only sources from their frozen
+  subscription profile; private nonce/caller/hosting evidence stays excluded.
+  Financial80 is assembled as0cff2c61 after unchanged701 prefix plus full-cash
+  ab894 and partial b1cad tails; import81 remains43808cb3. This assembly is
+  UNAPPLIED and UNQUALIFIED; no database, SDK, browser, provider or stable
+  acceptance is supplied. See deploy/original-cash-financial-integration-2026-11-13.md.
+  Subsequent isolated partial source NoDB qualification on cacb80bd: full
+  Node22 types/whole lint PASS;25-file JSON246PASS/30explicitDBSKIP/0FAIL,
+  including new pure/adapter/contracts and registry/internal/composition/
+  retention/merge/four-locale gates. License/notes/plan/whitespace PASS.
+  Earlier source/type/lint failures remain preserved. New cash natives,
+  Carrier canonical-credit integration, root's newer five-array composition,
+  combined SQL, actual provider acceptance and stable sign-off remain open.
+  Exact raw-feedback privacy-owner source checkpoint 2026-11-13 (C1.08/
+  C12.38): a bounded UNQUALIFIED slice resolves verified raw feedback to an
+  unchanged authentic legacy admission or actual retained positive payment/
+  subscription-receipt namespace, including real resource aliases for a
+  contradictory observed PI. Real receipt FKs may link actual local payments;
+  absent/corrupt/ambiguous or foreign frozen merchant scope remains debt.
+  HMAC, complete5000 bounds and frozen platform/account checks precede private
+  profile repair; raw facts/outbox still commit before repair. No payment,
+  refund, old caller or namespace is invented.10 pure/three native controls
+  are prepared UNRUN, with the existing combined producer fixture unchanged.
+  No CPU, PG, native, provider or schema/model assembly ran. Root's three
+  central files and prior SQL/evidence remain unchanged. Actual outbox,
+  NULL-payment, foreign/legacy corruption, combined source qualification and
+  independent acceptance remain required. See
+  `deploy/original-feedback-owner-source-2026-11-13.md`.
+  Subscription undo identity correction (2026-11-13, C1.08/C12.38): an
+  isolated SOURCE ONLY parser repair preserves exact original feedback
+  `namespaceDigest:feedbackUUID` identities for `refund_financial`, alongside
+  compatible historical UUID financial entries. Other evidence kinds remain
+  strict UUID; table identity remains folded into the existing complete-array
+  fingerprints.29 strict parser cases and an actual receipt-only financial
+  snapshot assertion are PREPARED/UNRUN. No financial history, SQL or cash
+  namespace changes; global merge/undo/native qualification remains open. See
+  `deploy/subscription-financial-undo-ids81-source-20261113.md`.
+  Actual full-cash component qualification 2026-11-13 (C12.38/C5.19):
+  all four unchanged controls pass on d8a92d54/SQL0cff+438, with independent
+  money/receipt/13-table digests/all82journal/profile/drain checks before each
+  owned passing-data reset. Full return retries add no duplicate POST; actual
+  unapplied cash returns without fabricated settled payment/refund/credit; an
+  unreadable accepted fee recovers by its exact GET; a paused actual recipient
+  caller refuses a second POST and records its real finish. Source labels and
+  strict inventories/CI capacity were repaired, while the reader-stop module
+  still exposes import-order cycles under a separately qualified source fix.
+  These are component controls with synthetic provider edges, not actual bank,
+  partial RMA, receipt-only subscription, browser or stable acceptance. See
+  `deploy/original-cash-financial-integration-2026-11-13.md`.
+  Exact model-expression review 2026-11-13 (C12.38/F01): a strict
+  read-only diagnostic matched all 82 migration identities and two of 86
+  models, then found that declared subscription tax CHECK grouping differed
+  from the unchanged installed SQL. Both subscription scope and commercial
+  terms models now apply IS TRUE to the entire original conjunction, exactly
+  matching their frozen fragments. No SQL, data or validation strength was
+  relaxed; no reachable invalid-row acceptance is claimed from this grouping
+  finding alone. Full types and remaining model/guard parity must be renewed.
+  Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
+  carry a pointer in the existing transactional outbox; original owner/profile
+  resolution and erasure receipt repair run only after commit. Raw original
+  child/caller evidence also participates in financial debt. This draft has
+  now passes full Node22 types/changed-file lint and37 source controls with
+  one declared DB skip. Native/completed-cohort/outbox failure controls remain
+  pending except the actual corrupt-artifact/raw-positive case: it passed
+  6.138s on d156/v7d060. Read-only ledger proves the500CAD raw/logical refund
+  and payment balance survived while three repair events remain durably pending
+  and the corrupt artifact/checksum stayed unchanged. This is already-pending-
+  cohort failure isolation, not completed-cohort or full financial closure.
+  No new schema, negative provider proof,
+  model activation or completion claim. See
+  `deploy/merchant-refund-erasure-outbox-source-2026-11-12.md`.
+  Original return allocation BEFORE 2026-11-12: actual two-seller checkout
+  and RMA preparation reserved seller c2's1050CAD return against seller003's
+  earlier4200 payment, genuine assertion failure5.943s on test e689/productf6
+  and normal-v7 SQLd060. No refund POST occurred. Isolated source now selects
+  immutable original allocation-line/payment budgets and refuses inconsistent
+  frozen plans; full Node22 types/changed-file lint and eight affected private/
+  changelog controls pass. Exact unchanged AFTER passed6.109s on0bd/v7d060;
+  read-only ledger proves seller003's4200 return reserved only against its
+  own later original payment, with the other seller's1050 payment untouched
+  and zero refund dispatches. The fixture deliberately chooses the actual
+  later payment, so UUID ordering does not weaken this comparison. Ordinary
+  split-tender/populated-plan and full refund acceptance remain due.
+  Legacy C0 remains on its original path. Exact
+  credited-line fee/reversal and complete acceptance remain required; see
+  `deploy/merchant-return-allocation-source-2026-11-12.md`.
+  Original fee-job runtime repair 2026-11-12: the first actual mixed-order
+  capture control reached payment completion and exposed an unregistered
+  invoicing.reconcileOriginalMerchantFee job on unreleased80 sourcee4500e3e.
+  The independently committed physical charge observation survives, while
+  the logical settlement transaction correctly rolls back. The invoicing
+  module now exports the real defined recovery job through its normal boot
+  loader. Actual native payment completion then settled both original
+  portions; the three earnings after-controls pass. This is development-source
+  evidence, not a claim about main or an actual provider account.
+  Original single-invoice earnings increment 2026-11-12: an actual public
+  merchant booking, canonical issued invoice and captured payment exposed the
+  remaining legacy-route assumption: the8400CAD-minor invoice was paid with
+  its original route and verified observation, but no earnings were recorded.
+  Settlement now uses retained booking/agreement payment scopes and original
+  frozen invoice commission. Full Node22 TypeScript and changed-file lint
+  pass, as do15 focused composition/internal/SDK-schema controls. Both
+  direct and destination booking after-controls pass, including
+  automatic earnings and replay; the agreement branch remains source-only.
+  An attempted historical subscription regression creates a new agreement
+  without its required tax declaration and correctly refuses; it supplies no
+  pre80 compatibility evidence. Genuine old-software upgrade qualification
+  remains required. See `deploy/merchant-invoice-earnings-source-2026-11-12.md`.
+  Original per-business earnings source increment 2026-11-12: new version1
+  order payments reconcile each original allocation, line commission and
+  provider namespace before recording seller earnings. Recipient, commission,
+  creator, refund or dispute debt keeps that seller in review; a second seller
+  cannot inherit another portion's paid state. Refund listeners reconcile
+  seller portions separately and never dispatch these already-collected
+  earnings again. Legacy direct references and settlement logic remain on
+  their original path. Actual native before qualification reproduced the
+  paid-invoice earnings refusal on the previous single-seller path. All three
+  after-controls pass: direct and destination orders preserve each original
+  allocation's fees/reference, automatic earnings and replay; missing actual
+  settlement proof keeps only the affected portion in review. Final full
+  TypeScript, whole-tree lint, licensing, release notes, plan, F-matrix,
+  playground and all44 source-contract suites pass (384 controls,26 skips),
+  with the separate missing activity-label/playground decisions repaired.
+  The fee-job and replay
+  fixture failures remain recorded in
+  `deploy/merchant-earnings-source-2026-11-12.md`.
+  This increment does not close C12.38 or supply actual provider acceptance.
+  New subscription provider-origin source work verifies the authenticated
+  original subscription/invoice/PaymentIntent relation on its explicit charge
+  namespace, without inventing an order payment-attempt identifier. Nineteen
+  bounded read-only protocol controls pass; the helper is ready for shared
+  provider observation integration. The new agreement scope, exact tax/fee
+  lifecycle, complete source qualification and actual acceptance remain open.
+  New-agreement setup source progress preserves the verified original platform
+  through customer creation, hosted setup and read-only recovery. Destination
+  SetupIntents stay on that platform and prove their actual settlement merchant;
+  the recipient is never substituted as the customer namespace. Six new mocked
+  HTTP controls and 28 existing setup controls pass. Legacy requests retain
+  their account scope. This adapter increment enables no new agreement model;
+  frozen agreement capture, durable renewal receipts, tax/fee reconciliation,
+  privacy integration and actual provider acceptance remain required.
+  Disabled agreement source foundation in progress: new seller agreements use
+  explicit routing epoch1 and freeze platform, charge namespace, recipient,
+  settlement merchant and the deliberately declared tax profile UUID/version
+  with the buyer's tax destination. Existing epoch0 rows and unknown platform
+  identities are not backfilled. Positive automatic renewal money has a
+  separate committed original invoice/subscription/intent receipt before
+  invoice application; missing fee facts can be completed without replacing
+  observed cash. Parent subscription ownership covers bounded child evidence
+  in merge undo, customer export and guarded destination minimization. A local
+  cancellation cannot prove an external schedule stopped: new external
+  dependencies currently refuse tax revision and erasure completion pending
+  original provider quiescence. This is unapplied80 source work, with no new
+  model activated. Full native/upgrade/browser qualification, exact taxed
+  scheduled billing, explicit amendments, provider quiescence/recovery and
+  actual acceptance remain required; none is deferred.
+  The composed source passes full typecheck, focused lint,62 bounded
+  origin/setup/scope controls and all five private-service boundary controls.
+  These checks do not apply80 or prove an actual provider outcome.
+  Auxiliary-product recovery source checkpoint (2026-11-13, C12.38): frozen
+  creation source `f2e612d2` passes full Node22 types,14 targeted lint paths
+  and50 finite source assertions with no skips. A separate unqualified
+  recovery-read workflow now binds the original ACK and finished creating
+  caller to a private GET ticket, preserves the actual returned read, and
+  refuses stale convergence without admitting another POST. It does not
+  enable provider admission, qualify a new schema or supply native/provider
+  acceptance. Exact recovery qualification and complete phase/amendment/cash
+  integration remain required; see
+  `deploy/subscription-phase-product80-source-20261113.md`.
+  Dated trial tax repair in progress (2026-11-13, C12.38): an actual
+  seven-day manual-trial acceptance retained4500 as its first-paid total
+  although the buyer's current exemption had a known one-day expiry. The
+  actual tax preview at its real trial end returned225 tax and4725 total;
+  the unchanged native oracle failed5.600s. A20-table/schema/journal-matched
+  populated BEFORE golden is preserved. The narrow source repair quotes known
+  trial/renewal boundaries with the existing UTC billing calendar, without
+  rewriting accepted history. Combined recovery/trial source `421e0cce` passes
+  full Node22 types,nine lint paths and39 finite source assertions with no
+  skips. The unchanged trial AFTER passes5.442s; independent readback confirms
+  initial0/first-paid4725tax225/renewal4200tax200, no invoice or payment, and
+  unchanged BEFORE golden/current schema/journal with drained clients. Exact
+  recovery-native and complete phase/amendment/cash acceptance remain required;
+  see `deploy/subscription-trial-tax-calendar-2026-11-13.md`. C12.38 stays open.
+  Accepted amendment and future-invoice source checkpoint (2026-11-13,
+  C12.38/C9.38): explicit owner/customer consent preserves earlier terms and
+  invoices, a retained amendment job stops old resources before a distinct
+  provider generation, and normalized actual invoice/price lines bind the
+  admitted phase to canonical net/setup, dated tax and the existing shared fee
+  receipt before cash applies. Positive cash remains committed before later
+  auxiliary failure; zero invoices invent no cash/payment. Amended access waits
+  for the exact fully paid invoice. Localized owner/customer review/recovery,
+  bounded buyer/merchant merge fingerprints and privacy export accompany the
+  source. All new controls, types/lint, native SQL and browser qualification are
+  UNRUN. The owned unapplied SQL suffix follows the earlier stop/recovery tails;
+  root owns new assembly/hash/database. Late-boundary re-consent/recovery and
+  broader business/provider acceptance remain required; this checkpoint closes
+  no C-item and does not activate collection. See
+  `deploy/subscription-commercial-amendments80-source-20261113.md`.
+  Missed-boundary re-consent source checkpoint (2026-11-13,
+  C12.38/C9.38/C9.33/C1.08): a fresh explicit future start binds the actual
+  generation, complete operation/evidence revisions and original stopped proof
+  in an immutable receipt. Shared provider/financial recovery precedes consent;
+  older amendment tasks are inert before stop claims, and exact paid invoice
+  ownership/net/setup/tax/merchant proof precedes access. Gaps are not billed or
+  granted access. Earlier unknown schedule/product readers remain debt despite
+  a later verified GET. All new controls and SQL/types/lint/native/browser
+  qualification are UNRUN. Authentic owner recovery for lost readers and full
+  mid-cycle proration variants remain required; this finite source slice closes
+  no item and adds no deferral. Root owns the new suffix assembly/hash/database
+  and central merchant witness integration. See
+  `deploy/subscription-amendment-late-reconsent80-source-20261113.md`.
+  Original reader runtime recovery source checkpoint (2026-11-13,
+  C12.38/C1.08/C9.38): NEW schedule/product GET admissions retain their actual
+  process birth and signed immutable ticket; actual nonce-owned finishes use
+  the original process key. A separately signed, freshly verified human runtime
+  stop review refuses live processes and preserves historical sparse birth
+  provenance. Only then may a fresh GET proceed; stopped-reader callbacks and
+  invented finishes refuse. Owner UI and shared HTTP/MCP services, exact SQL
+  receipt/projection guards, privacy/export and bounded buyer witnesses are
+  source-only. Root must integrate the additive merchant witnesses and assemble
+  a new SQL hash/database. Sixteen pure controls and one actual stopped-child
+  native control are UNRUN, as are types/lint/SQL/browser qualification. Actual
+  provider/hosting acceptance and full §4.15/C9.33 proration remain required;
+  no C-item or stable gate closes. See
+  `deploy/subscription-provider-reader-recovery80-source-20261113.md`.
+  Proration foundation and implementation decisions (2026-11-13,
+  C9.33/C9.38/C12.38): exact separately-rounded unused-fraction arithmetic and
+  the owner unpaid-upgrade guard are an unqualified finite source repair.
+  Root's implementation decisions within the full-spec task preserve accepted
+  trial ends with zero old paid principal/unused credit and no trial-window
+  charge; preserve original manual/platform calendars across interval changes;
+  and require explicit consent to provider preview's actual anchor/reset and
+  invoice effects. Negative adjustments issue original shared credits without
+  automatic cash refunds. A real canonical noncash credit-application extension,
+  explicit mid-cycle merchant consent and an independently admitted actual
+  provider preview/update/invoice lifecycle remain required. The new arithmetic,
+  calendar and ordinary paid-period native controls are UNRUN; this checkpoint
+  supplies no provider/SQL/business acceptance and closes no item. See
+  `deploy/subscription-proration-foundation80-source-20261113.md`.
+  Manual-commercial implementation decision (2026-11-13, C12.38/C9.33):
+  the shared authorized offline-payment/refund action records actual external
+  principal with immutable merchant, invoice, currency, reference and evidence
+  receipts. This is recorded/attested money, never independently bank-verified
+  cash. It invents no Stripe account, transfer or collected application fee.
+  Original shared fee obligations are OWED until actual remittances are
+  recorded; nonallocation refunds preserve the existing original fee epoch's
+  proportional retained-fee rule. Actual fee returns reference their exact
+  original remittance. Fully recorded principal may settle customer access;
+  unpaid or over-remitted fees remain separate financial/privacy debt.
+  Original credit applications preserve cash ancestry and do not create a
+  fake payment or automatic refund. These decisions must appear in the same
+  explicit quote/consent. Implementation and qualification remain in progress;
+  no C-item, provider acceptance or stable gate closes here.
+  Gross proration implementation decision (same date, C9.33/C9.38/C12.38):
+  the new canonical path separately preserves the old paid line's dated
+  tax/fee credit and the new dated debit invoice. The old credit is locked
+  exclusively to its explicitly accepted target in the same transaction;
+  it cannot become transferable while old paid access remains and the target
+  is unsettled. Only exact full canonical consideration switches access.
+  A lower-price change may release its unused credit remainder after that
+  actual switch. Expired effective instants require fresh reviewed consent;
+  access is never backdated and gaps are never silently billed. Recovery must
+  retain actual partial cash, fee duties and the complete issued credit
+  promise; it cannot erase them by voiding a target or inventing a refund.
+  The legacy net-only invoice policy and its separate paid-access repair are
+  historical compatibility behavior, not proof of this new gross path.
+  Gross/manual fee-carry source increment (2026-11-13, same items): shared
+  owner/customer review/acceptance creates actual dated gross debit and exact
+  old paid-line tax credit, locks the whole original credit to its target and
+  retains the real effect enqueue/body. Manual attested principal and original
+  fee carry remain separate from actually collected commission. Exact fully
+  paid consideration alone can switch access at the real accepted instant;
+  old terms/calendar stay immutable and an uncharged trial retains its end.
+  The duty40/new-cash1 variant is refused before acceptance until the required
+  bounded original commission receivable/assignment slice exists; it is not
+  waived, fictitiously collected or deferred from the full specification.
+  Authentic late/partial recovery, complete platform-card orchestration and
+  independently admitted provider preview/zero-bootstrap/controlled-draft
+  collection remain required. Full-row child witnesses, safe receipt-only
+  subject export, private retention and four-locale review are source work;
+  17 principal pure controls, nine fee-carry controls and three actual manual
+  native journeys are PREPARED/UNRUN. The new owned SQL tail is UNAPPLIED and
+  unqualified; no item or stable gate closes. See
+  `deploy/subscription-gross-proration80-source-20261113.md`.
+  Original commission assignment increment (same date/items): the new gross
+  target freezes its exact whole fee epoch and original credit/cash assignments
+  before collection. Physical fees respect actual cash capacity; the remainder
+  is a separately owed merchant receivable with actual remittance/return
+  receipts. Only authentic full canonical settlement/effect establishes fee
+  eligibility. Later duty uses all retained cash AND noncash consideration:
+  `floor(F*(C+A)/T)`, less retained original credit/cash duties K/Q; excess
+  assigned duty stays original-source review. Refunding the last cash1 while
+  credit1499 remains valid does not waive receivable39. Initial expected duty
+  is separate from current duty, which can move from an original returned cash
+  fee but stays bounded by frozen F and actual source disposition. Four-locale
+  consent explains this; owed commission and attested/provider-proved actual
+  collection remain distinct. Unknown/noncash-reversal disposition stays debt,
+  never zero. Ten pure controls and one additional actual dated-tax/manual
+  native journey are PREPARED/UNRUN; the owned SQL tail is UNAPPLIED. Complete
+  provider/platform orchestration, authentic late/partial recovery and full
+  qualification remain required; no item or stable gate closes. See
+  `deploy/subscription-agreement-fee80-source-20261113.md`.
+  The same source composes authentic exact-source raw cash feedback before
+  owner/GET/domain application: raw-only signed refund feedback is principal
+  review until a genuine current returned bank inventory covers the exact
+  occurrence and canonical money agrees. Callback amounts never decrement
+  principal. NULL-payment receipt review retains NULL principal and supplies
+  no invoice/payment/access fiction. Typed primary-caller debt is separate
+  from ancillary fee/recipient duty; original full-return closure still needs
+  full quiescence. Eight bank-fact pure controls, an actual raw-before-domain
+  native and two existing actual receipt-only refusal controls are prepared,
+  UNRUN. Parent ordinary-reader contracts and current cash source are required
+  assembly dependencies, not a passing provider or recovery claim.
+  Actual principal boundary increment (same date/items): provider object birth,
+  a supplied processedAt and PostgreSQL transaction-start defaults cannot prove
+  on-time funding. Immutable exact cash/application confirmations now force
+  database clock_timestamp retention time. Fully paid effect/commission
+  eligibility also require every actual positive source retained by the chosen
+  instant. Late real money stays recorded for fresh consent; it cannot revive
+  expired access. Entirely local acceptance that cannot commit before that
+  instant rolls back its new documents/credit. Four-locale consent/export and
+  additive full-row witnesses are source work; two actual clock/rollback native
+  controls are PREPARED/UNRUN, new SQL is UNAPPLIED/unqualified. Actual platform
+  card mandate/POST/independent GET recovery and full provider/late recovery
+  remain required; no item closes. See
+  `deploy/subscription-proration-boundary80-source-20261113.md`.
+  Financial history/export correction (same date/items): exact accepted target
+  invoice/source FKs now discover reserved credit before application, retaining
+  full funding/reservation/release fingerprints. Buyer exports retain principal
+  and fee receipt identities while excluding private commission amounts. One
+  combined5000 bound covers actual invoice children, recovery/cash, credit,
+  commission and credential/exemption families. Six synthetic-reader/pure
+  controls are PREPARED/UNRUN; no compiler, lint, database or native ran. Root
+  central merchant composition and all combined qualification remain required;
+  no SQL, historical evidence, C-item or stable gate changes. See
+  `deploy/proration-financial-export81-source-20261113.md`.
+  Additive financial-reader adapter (same date/items): an ordinary internal
+  SOURCE ONLY adapter selects all17 proration/attestation/credit/commission/
+  boundary families through exact invoice, subscription or frozen-profile
+  parents before payment routing. It retains cashless/trial promises and
+  bounded source/target/inherited credit ancestry with full PostgreSQL row
+  hashes; missing, foreign or contradictory lineage refuses a partial witness.
+  Root's three central readers and existing five cash arrays are unchanged
+  and require explicit composition. Ten synthetic read-driver controls are
+  PREPARED/UNRUN; no compiler, lint, database, native or provider ran. No SQL,
+  activation, item or stable gate changes. See
+  `deploy/proration-financial-witness81-source-20261113.md`.
+  Stored-method gross-proration source increment (same date/items): explicit
+  consent now names the actual original active stored method and remaining
+  changed-price amount. The accepted transaction retains its exact original
+  collection task/body. One fixed original attempt admits its physical POST;
+  actual positive observations commit before finish/domain failures. Saved
+  and hosted gross-payment recovery select the first captured explicit API
+  protocol and independently admit each actual GET/cancel caller. Unknown old
+  callers remain debt; later reads cannot supersede them. Original process
+  finish proof and an independently reviewed genuine hosting stop are distinct;
+  fresh human stop approval refuses API keys/agents and actual live births.
+  Owner/customer collection, owner recovery, safe bounded subject history and
+  four-locale consent share the same services. Actual collection still requires
+  enabled current authority and a fresh effective instant; only fully paid
+  exact consideration can switch access at that instant. Original period,
+  old paid access and fee/cash separation remain intact. Seven new child
+  families carry full-row SQL witnesses under a combined5000 bound. Six pure
+  controls (including an actual OS birth/stop) and three actual HTTP-adapter
+  native journeys are PREPARED/UNRUN. SQL is an owned UNAPPLIED additive tail;
+  this source is unqualified and closes no item or stable gate. Authentic
+  late/partial target recovery and the actual provider preview/birth-safe
+  zero-bootstrap/pause-readback/exact draft-fee/finalize/pay lifecycle still
+  require implementation and qualification. See
+  `deploy/subscription-proration-card80-source-20261113.md`.
+  Card financial-reader composition (same date/items): the ordinary internal
+  SOURCE ONLY adapter additionally retains the seven original card families,
+  with exact accepted invoice/proration/profile and actual protocol/mandate/
+  payment/job/read ancestry. Hosted reads do not need a stored-method attempt;
+  finish and independent stop remain distinct. All24 families share one5000
+  bound and full PostgreSQL row hashes; no private bank/caller bodies enter
+  the UUID parent projection. Seven synthetic read-driver controls are
+  PREPARED/UNRUN. Root central composition and full qualification remain open;
+  no SQL, activation, item or stable gate changes. See
+  `deploy/proration-card-financial-witness81-source-20261113.md`.
+  Merchant financial-export composition (same date/items): an ordinary
+  SOURCE ONLY helper exports the24 adapter-owned families through exact
+  frozen-profile/table/UUID parents and explicit scalar whitelists. It retains
+  the merchant's own principal/credit/commission/remittance amounts and actual
+  identities/times while excluding private buyer destinations, actor/evidence,
+  bank/caller/credential/hosting/task bodies. Full internal row hashes and a
+  complete final witness reread remain required; all selected families and
+  the caller's existing history share one5000 bound. Seven prepared read-driver
+  controls are UNRUN; no compiler, lint, database, native or provider ran.
+  Root central authorization/composition and full qualification remain open;
+  no SQL, activation, item or stable gate changes. See
+  `deploy/proration-merchant-export81-source-20261113.md`.
+  Merchant identity financial snapshot source checkpoint (same date/items):
+  actual collection invoice/frozen-profile/source subgraphs and actual
+  subscription-policy subscription UUIDs now bind the24-family financial
+  witness even before any routed payment or invoice. Shared-platform mixed
+  ownership without exact allocation/source proof stays non-undoable/review;
+  unrelated same-profile histories are excluded. Nonempty table-bound hashes
+  extend existing
+  identity fingerprints; empty histories and strict UUID receipt shapes stay
+  unchanged. Parent/distinct-child rows share5000 with root's separately owned
+  payment-dependency count integration. Eleven prepared groups (14 expanded
+  cases) are UNRUN; no compiler, lint, database, native or provider ran. No
+  SQL, activation, item or stable gate changes. See
+  `deploy/merchant-identity-financial81-source-20261113.md`.
+  Full82 commercial source correction (same date/items): the first actual
+  full type check failed15 diagnostics; its failure remains preserved. Source
+  changes address the seven commercial/subscription diagnostics: actual safe
+  applied credit now reaches the authorized customer invoice DTO/balance,
+  principal review reuses its concrete Zod schema, card skip narrowing retains
+  all guards, and prepared fixtures use real seller actors and original queue
+  names. Actual customer-output partial-credit assertions are PREPARED/UNRUN;
+  no compiler, lint, tests, database, native or provider ran in this slice.
+  Root media repairs and full renewed qualification remain required; no SQL,
+  activation, item or stable gate changes. See
+  `deploy/commercial-types82-source-20261113.md`.
+  Full82 commercial lint source correction (same date/items): the first actual
+  whole lint failed41 diagnostics in24 files; its failure remains preserved.
+  Three type-only import bindings and18 control-flow-redundant assertions now
+  address the21 assigned commercial diagnostics by source inspection. Runtime
+  guards, amounts, output contracts and all original/prepared native oracles
+  remain unchanged; no renewed lint/compiler/test/database/native/provider ran.
+  Root media/storage corrections and full renewed qualification remain required;
+  no schema, SQL, activation, item or stable gate changes. See
+  `deploy/commercial-lint82-source-20261113.md`.
+  First-scope compiler repair 2026-11-13 (C1.12/C11.08): first renewed
+  compilation stops at two omitted query projection fields. Multipart erasure
+  now selects the real reservation UUID before membership checks and the
+  stored original artifact SHA before integrity validation. No value or
+  historical birth is invented from the current key/body. Renewed source and
+  actual native acceptance remain pending.
+  Actual draft CI migration failure 2026-11-13 (C12.38): all test shards
+  stop before product tests at PostgreSQL42601 in freeholder_credit_fee_receipt.
+  The original CASE expression in its IF condition is now parenthesized; fee
+  predicates and arithmetic are unchanged. Reassembled80 retains the entire
+  qualified0cff prefix; fresh local ordinary migration is still required. The
+  actual CI error log is preserved; this is no native-product acceptance.
+  Combined83 source assembly 2026-11-13 (C1.12/C11.08/C12.38): signed
+  first-scope checkpoint3a96 supplies SQL82/a092 (115604bytes), including16
+  owned media models and NULL-preserving original reservation identity. The
+  existing cohort model will also receive full parity, giving142 model targets
+  with the commercial/controlled baseline. All83 journal entries retain their
+  identities; SQL80/1c2e and81/438 are unchanged. No83 database has been created
+  or migrated yet. The media request capability remains unpublished; standalone
+  retirement, crash/multipart recovery and cutover remain required work. New
+  source checks, a fresh ordinary database and strict model/guard/function
+  parity are required before actual native acceptance. Earlier313 source test
+  passes remain component proofs of the preceding138-model source baseline.
+  Controlled assembly checkpoint 2026-11-13 (C12.38): the frozen ee87
+  nine-family provider tail now follows the six commercial tails in SQL80/1c2e
+  (603826bytes), retaining both entire earlier cf1e and0cff prefixes. It adds
+  eight new function names with no older-function replacement. SQL81 and the
+  published0–79 identities are unchanged. This remains unapplied source; parent
+  reader composition, final82 assembly and fresh migration/parity/native gates
+  are pending, and positive provider collection remains mechanically closed.
+  Parent reader compiler repair 2026-11-13 (C12.38): first compilation
+  after f7 consumer integration stops at11 possibly-undefined parent/terms
+  diagnostics. The existing unconditional refusal now uses an explicit
+  never-returning function declaration so compiler control flow recognizes
+  the unchanged throwing branch. No non-null assertion or guard removal is
+  used; renewed full source qualification is pending.
+  Controlled provider source renewal 2026-11-13 (C12.38): at2ecffdbc full
+  types pass in62.647seconds; the broader source cohort passes298 actual
+  assertions with44 explicit database skips across46 complete files. Whole
+  lint then stops at eight new provider diagnostics. Source fixes use explicit
+  type imports, retained JSON-object validation and concrete test URL types;
+  original fields and all request/body/nonce/finish assertions remain. Renewed
+  gates and fresh actual database/native qualification are pending.
+  Controlled source type repair 2026-11-13 (C12.38): the first compiler
+  run after this checkpoint stops at two broad database-row/literal-protocol
+  scope mismatches. Admission now validates the real retained scope through
+  the existing exact schema before constructing the provider request; invalid
+  legacy/API epochs refuse explicitly. No cast invents a current protocol.
+  Renewed source and actual provider acceptance remain open.
+  Controlled raw financial review source correction (2026-11-13, same items):
+  the nine-family zero-only protocol now retains review debt from actual raw
+  positive intent/invoice/payment evidence even when cash_observed/receipt
+  bridging never ran. Nonzero unpaid/pending invoices/intents/lines/recurring
+  resources also require review; status/amount alone never becomes canonical
+  cash. Original bootstrap/discovery ancestry is preserved, unrelated discovery
+  results and nonpayable previews are not adopted, and a newer zero read cannot
+  release an older actual caller or erase an earlier positive occurrence.
+  Both actual coverage and receipt namespace consume the same ordinary helper.
+  Eight signed-caller controls and two actual shared-service/HTTP native fault/
+  recovery controls are PREPARED/UNRUN. Source only: no SQL/model/guard epoch,
+  compiler/lint/test/PG/provider operation or stable/acceptance closure here.
+  Future positive-protocol target/disposition and complete current principal
+  authority remain required; owned nonpayable drafts must be proved exactly,
+  never blanket-clear cash debt. See deploy/controlled-raw-financial9-source-20261113.md.
+  Controlled provider transport source checkpoint (2026-11-13, same items):
+  actual zero-NET bootstrap, independent pause readback, original-resource
+  discovery, exact calendar cancellation/readback and complete invoice/payment
+  enumeration now have their own immutable real caller/fact lineage. Actual
+  positive bank facts commit before canonical receipt bridging or later failure;
+  the additive child binds the SAME canonical receipt to its exact controlled
+  resource/operation/call/fact, preserving all older phase/generation owners.
+  An independently reviewed actual runtime stop never invents an SDK finish.
+  Actual canceled zero-only preparation can close only with complete terminal
+  zero-invoice/payment/balance proof; paid access and positive-money closure are
+  separate. Owner recovery, HTTP/MCP, four locales, private subject export and
+  bounded merge history use shared services. Nine families carry full physical
+  SQL-row witnesses and authentic signed/raw coverage under a combined5000 bound.
+  The parent readiness query must be genuinely registered and complete before
+  creation; coverage readiness never erases actual caller/raw-cash debt. Its
+  optional exclusion is only the exact same latest planned operation with zero
+  actual children. Five signed-proof controls, three actual HTTP-adapter controls
+  and five actual shared-service native journeys are PREPARED/UNRUN. The new
+  owned SQL tail is UNAPPLIED; no compiler/lint/test/database/provider operation
+  ran in this source lane and no feature, acceptance or stable gate closes.
+  Actual preview/update adapters exist but their admitted explicit quote/consent,
+  canonical target binding, balance/credit-note isolation, fixed tax/fee draft
+  construction, finalize/pay, positive financial-stop/feedback integration and
+  authentic late/partial recovery still REQUIRE implementation and qualification.
+  No requirement is deferred. See
+  `deploy/subscription-controlled-provider80-source-20261113.md`.
+  Controlled target identity/lock source correction (2026-11-13, C9.33/C12.38):
+  the accepted commercial digest now binds stable subscription/source/invoice/
+  original policy and issued-credit economic identity, separately from current
+  contact aliases and mutable status/timestamps. Current invoice/parent buyer
+  and merchant policy identities must still agree, and full physical row SHA
+  remains in current financial revisions. The target planner locks the actual
+  parent immediately after resource, before payments/invoice/notes, preserving
+  resource→parent→sorted payment→invoice→note→cash. This is source only;
+  qualification and the full positive lifecycle remain required.
+  Ordinary controlled collection pre-admission source checkpoint 2026-11-13
+  (C12.38/C9.38): exact accepted invoice→quote→resource→subscription discovery
+  now precedes ordinary canonical money locks in shared new-payment, dispatch,
+  hosted/customer/POS and stored-method entry points. Incomplete foreign source
+  ancestry refuses instead of becoming legacy. New collection requires a real
+  terminal/alternative-disposition authority; that producer/reader is absent,
+  so the handoff mechanically refuses, without borrowing controlled pay authority.
+  Actual signed original receipt application and read-only due calculations stay
+  separate. Eight real SQL-adapter controls are PREPARED/UNRUN. Durable unapplied
+  manual/in-person receipt retention, genuine alternative disposition/physical
+  request binding and full native/provider acceptance remain REQUIRED; see
+  deploy/controlled-ordinary-admission82-source-20261113.md. No SQL/CPU/PG or
+  stable qualification is claimed.
+  Controlled15 parent consumer source checkpoint 2026-11-13 (C9.33/C9.38/
+  C12.38/C1.08): exact actual invoice/payment/receipt/frozen-profile FKs now
+  discover the six target families, including unaccepted cashless normal periods,
+  alongside the original9 under one5000/table+UUID+full-row-SHA budget. Buyer and
+  merchant projections remain explicit and separate. Extended readiness proves
+  coverage with debt retained; a separate private exact current target authority
+  checks actual principal, source credit/fee, consent, trial/calendar and genuine
+  original caller/read inventory. Observation-only GET does not authorize money.
+  Twenty-one new pure/adapter cases, existing14 adapter oracles and existing15
+  member identity controls plus two exact foreign/ambiguous-target cases are
+  PREPARED/UNRUN. No SQL/model/journal, CPU/PG or provider qualification occurred.
+  Ordinary collection prelocking, positive raw intent/invoice debt classification,
+  canonical public producer/effect and full positive closure/recovery remain
+  required with no deferral; see deploy/controlled-target-financial82-source-20261113.md.
+  Controlled canonical collection contract/runtime checkpoint (2026-11-13,
+  C9.33/C9.38/C12.38/C1.08): a new six-family source boundary distinguishes
+  actual ordinary periods from explicit prorations and preserves original
+  physical creators separately from observing calls/facts. Concrete adapters
+  create/reuse a nonautomatic target draft, attach exact NET, fixed dated
+  merchant-declared tax and locked canonical negative amount items, verify
+  complete manifests/customer balances, set exact fees, finalize without
+  automatic collection and explicitly pay the original saved method. Positive
+  PI facts are retained before later price/manifest/application failures. Bank
+  ACKs/paid flags/zero due never manufacture canonical cash or access.
+  Historical quotedParentRevision remains evidence; acceptance must separately
+  record acceptedCurrentParentRevision after complete fresh current safety and
+  exactly unchanged economics/source IDs/epochs/profile/dated tax/currency/fee/
+  calendar/trial/method/namespace/API/disposition checks. Own unaccepted quotes
+  remain in full physical witnesses and reserve no principal; admitted readers
+  are never excluded. Relevant changed economics require fresh explicit consent.
+  A separate required target money-authority query and expanded protocol remain
+  mechanically unavailable until their genuine parent consumers are integrated
+  and qualified. Coverage readiness alone never declares money quiesced.
+  Seven actual mocked-HTTP controls are PREPARED/UNRUN; the owned additive SQL
+  tail is UNAPPLIED and source-only. Public canonical period/proration quote and
+  acceptance factories, original binding/item/proof retention commands, final
+  canonical receipt/payment/effect, six-family parent/privacy consumers, genuine
+  positive-target closure/late-partial recovery and provider acceptance remain
+  REQUIRED implementation and qualification, with no deferral or feature/stable
+  closure. See deploy/subscription-controlled-collection82-source-20261113.md.
+  Controlled original draft retention source checkpoint (2026-11-13,
+  C9.33/C9.38/C12.38/C1.08): three private shared services retain genuine
+  original invoice bindings, separate creator/observer item receipts and
+  complete returned manifest proofs. Ordinary reader/writer ownership checks
+  preserve original bootstrap, merchant route, actual price/period/interval
+  and immutable target identity. Renewal origins bind their original price
+  epoch separately from the new canonical period. Observation inventories
+  actual positive money before later calendar/manifest refusal; it never
+  releases an unfinished caller or grants settlement/access. Normal-period
+  finalize/pay stay behind accepted service/trial dates at final SQL admission.
+  Six pure and three additional mocked-HTTP controls are PREPARED/UNRUN; the
+  additive owned suffix is UNAPPLIED. Public canonical factories, real first
+  periods, paid effect, generated-draft disposition, genuine positive/partial/
+  late/terminal alternative recovery and durable unapplied manual receipts
+  remain REQUIRED implementation and qualification. No gate closes or
+  requirement is deferred. See
+  deploy/subscription-controlled-retention82-source-20261113.md.
+  Original phase dispatch source checkpoint (2026-11-13, C12.38): four private
+  shared phases now freeze the complete reviewed horizon and exact physical
+  request, retain actual schedule ACKs before price reads, and finish only the
+  original caller with an unchanged resource/journal read revision. Actual
+  not-started inventory may have no linked subscription. Shared original cash
+  disposition and payment debt are required before more billing. This source
+  is unqualified, enables no admission and changes no assembled SQL. Native
+  fault/recovery, schedule-only cancellation, complete invoice/fee quiescence
+  and explicit amendments remain required; see
+  `deploy/subscription-phase-dispatch80-source-20261113.md`.
+  Original phase quiescence source checkpoint (2026-11-13, C12.38/C1.08):
+  four private phases now bind primary cancellation to the original pending
+  cohort/receipt and actual returned caller, then preserve every known linked
+  subscription. Nonempty invoice-payment/PI enumeration retains positive cash
+  before later failure and uses shared applied-or-returned cash and payment
+  debt proof. A null linked subscription requires explicit provider pre-start
+  cancellation evidence. An owned additive80 tail follows full3a; assembled
+  SQL and goldens remain unchanged. This source and19 prepared controls are
+  unqualified; fresh schema/native, uncertain-response recovery, PI/invoice
+  closure callers, amendments and future invoice lineage remain required.
+  See `deploy/subscription-phase-stop80-source-20261113.md`; no item closes.
+  Original schedule read/unpaid-stop source checkpoint (2026-11-13,
+  C12.38/C1.08): four private phases bind actual phase, primary/linked cancel
+  and invoice-action GETs to their own retained nonce and returned wrapper;
+  the earlier mutation caller's real finish remains separately required.
+  Three original unpaid PI-cancel/invoice-void phases reuse current cohort,
+  receipt and hold authority and the shared cash retainer. Complete fresh
+  inventory and current shared financial closure still govern erasure.
+  The separate SQL suffix follows the frozen stop tail and is unapplied;
+  twenty-four new controls are prepared but unrun. Compose the separate
+  actual-producer version repair before qualification. Unsupported subscription
+  draft deletion remains pending supported resolution, alongside amendments,
+  future-invoice lineage and complete actual acceptance; none is deferred.
+  See `deploy/subscription-phase-recovery80-source-20261113.md`; no item closes.
+  Supported subscription-draft source checkpoint (2026-11-13,
+  C12.38/C1.08): a separately admitted original finalize operation freezes
+  `auto_advance=false` and verifies the actual draft against its admitted
+  phase/price before mutation. Complete actual PI enumeration and durable
+  cash callbacks precede later checks; the flag supplies no no-charge proof.
+  Each later PI cancellation, invoice void and GET remains a distinct original
+  lifecycle. Four additional HTTP controls are prepared and unrun, with no SQL
+  change or activation. Amendments/generations and future invoice lineage
+  remain source work. See
+  `deploy/subscription-draft-finalization80-source-20261113.md`; no item closes.
+  Provider lifecycle protocol work uses Stripe's actual flexible-subscription
+  pause endpoint, with2026-10-28.endive frozen only on new scope/charge
+  receipts. Legacy operations keep their original version. Sixteen bounded
+  HTTP controls prove actual pause handling and complete prior-invoice
+  inventory, including preservation of a positive pause before later proof
+  disagreement. A pause acknowledgment alone is not full quiescence: existing
+  invoices/PaymentIntents still need durable reconciliation. Physical intent
+  journaling, tax/erasure jobs, accepted amendments and safe resumption remain
+  under implementation. Sources: Stripe's [pause API](https://docs.stripe.com/api/subscriptions/pause),
+  [pause lifecycle](https://docs.stripe.com/billing/subscriptions/pause) and
+  [payment-collection pause](https://docs.stripe.com/billing/subscriptions/pause-payment).
+  Current unapplied lifecycle source defines original resource/physical-operation
+  and erasure-cohort journals plus append-only authenticated cash observations.
+  A later currency, route or agreement-policy disagreement is kept separately
+  from the first observed money rather than rolling that fact back. Three actual
+  adapter-factory HTTP controls, sixteen protocol controls and seven receipt
+  coverage controls pass; full TypeScript and focused lint pass. Receipt coverage
+  refuses unknown work, changed revisions, missing operation history and an
+  uncovered alternate late-positive provider resource. These are local synthetic
+  controls, not a complete lifecycle or actual provider acceptance. NEW merchant
+  provider admission is closed while accepted immutable recurring terms, period
+  quotations, original payment dispatch, quiescence jobs, amendments and safe
+  resumption are implemented. Historical schedules retain their existing path;
+  all remaining work is required, with no new model activated or deferred.
+  Authenticated recurring webhook source now resolves the stored original scope
+  after raw signature verification and retains each positive PaymentIntent
+  through its own capture phase before reading another payment or page. A
+  missing auxiliary charge reference remains explicitly unknown and can later
+  be completed without replacing the first money; actual currency or recipient
+  disagreements remain separate observations. First-paid-before-create-ACK
+  lineage uses the admitted server-owned operation rather than a current account
+  guess. Partial invoice-line pages retain cash without inventing complete
+  period dates. Original cancellation targets the retained namespace/resource
+  without final invoicing or proration; earlier invoice/intent obligations still
+  require resolution. Quiescence coverage requires a separate bound caller
+  finish/stop witness, never just a positive provider acknowledgment. Full
+  TypeScript, focused lint and 73 bounded controls across eight source files pass.
+  These use intercepted HTTP/in-memory callbacks, not a native durability or
+  provider-account claim. Actual caller claim/finish orchestration, active stop
+  jobs, native first-paid/reopening proof, accepted terms and safe amendment/
+  resumption remain required before new provider admission opens.
   Original-order ownership repair 2026-11-11: checkout freezes each purchased
   line's seller and shipping requirement before invoice issue, and seller
   settlement reads that receipt instead of a later catalog edit. The actual
@@ -13770,6 +18897,68 @@ whatever is best for the people using the site.
   version0 historical policies and no invented allocations. Evidence remains
   `deploy/merchant-invoice-portions-2026-11-11.md`; full80 routing/tax/human
   integration and actual acceptance remain required before this item closes.
+  The tax increment binds deliberate site/seller liability and a versioned
+  original merchant profile to each party's quote before issue. Site-only
+  registrations and exemptions must never become a seller's configuration.
+  Mixed-party freight and shipping tax use exact original per-party receipts;
+  missing or ambiguous ownership refuses new collection. Profile ownership,
+  merge/undo, privacy/holds and all human/API surfaces remain required. This
+  source work is under implementation and supplies no tax or live acceptance.
+  The current tax source checkpoint adds one authorized cart preview, separate
+  tax/business consent digests and pre-draft original member-order terms.
+  Epoch0 orders are not relabelled from current settings. Private invoice
+  preparation proves original amounts and per-business tax authority, with
+  shared contact merge/undo and privacy recovery hooks. Thirty focused amount
+  and private-boundary controls pass, and a fresh normal0–77 database accepts
+  the two explicit unpublished80 tax/order fragments. This is not assembled80
+  upgrade or native commercial acceptance. All human flows, complete billing
+  integration, populated upgrade and actual account qualification remain
+  required; see `deploy/merchant-tax-source-2026-11-12.md`.
+  Owner/member tax editor source is now linked at
+  `/admin/invoices/tax/business` and `/portal/payouts/tax`, through the same
+  actor-scoped query/save services as the API. All four locale catalogs,
+  explicit rate ownership, exact currency parsing and retention labels are
+  present; full types/lint and74 source form/i18n/audit/registry controls pass.
+  These screens remain unqualified in the assembled80 native/production
+  journeys. C12.38 and all remaining acceptance requirements stay open.
+  The combined candidate now passes a fresh ordinary0–80 migration (81
+  entries) and six distinct native tax/ownership/invoice/export/merge controls.
+  Initial unheld erasure correctly refused a missing subscription safety
+  service. The fresh assembled80 v4 now includes its real registered checks
+  and original selected-zone provenance. Five current native controls pass:
+  unheld minimization with issued TaxLine preservation, actual hold release
+  after login deletion, legacy site threshold isolation, own-business totals
+  and currency separation. The six earlier controls ran on prior80 candidates;
+  they are not claimed as a repeated full suite on this exact source.
+  Customer-exemption workflows and full provider quiescence remain unfinished.
+  Threshold report/query/editor source is now present for the original
+  business portions, with separate currencies and UTC reporting windows.
+  Types/lint and42 source controls pass; one live-registry check is skipped
+  without a database. Current native after/new-report checks and live SDK8
+  now pass, and the original ordinary-site currency control still passes.
+  Customer exemption request/history and business-only review source now
+  exists through eight shared services and four-locale screens. Requests
+  derive the actual signed-in buyer, authorized cart business and original
+  jurisdiction; approval requires verified evidence and real billing safety.
+  Full types/lint and47 source controls pass, with one live-registry skip.
+  Four distinct actual customer controls now pass across two v6 compositions:
+  buyer/business permissions and named-email oracle refusal, actual public
+  buyer checkout with frozen reverse-charge facts, own withdrawal and trusted
+  expiry. One fixture originally called the staff checkout service as a buyer;
+  the corrected case uses the real public checkout, without relaxing authority.
+  Four original payment-creator/recovery controls also pass in a three-control
+  batch and one focused v6 repeat after a new-trigger and private-scope
+  fixture correction. Fresh normal0–80 v6 migration and actual SDK generation
+  plus eight checks pass; no v4 or v5 qualification is silently transferred.
+  Browser, complete refund/settlement/external scheduling source and actual
+  account/provider/independent review/stable acceptance remain required. The
+  collection model remains disabled.
+  Original order-payment privacy admission now has an actual before/after:
+  verified seller erasure previously minimized its profile while an admitted
+  original provider call remained paused (7.66s). A private original-profile
+  payment-debt query and minimal lifecycle guard retain that profile/contact;
+  the exact unchanged control passes in8.55s on the same v6 SQL. Debt clearance,
+  complete schedule worker/recovery and final acceptance remain open.
   Discounted-order earnings repair in qualification 2026-11-11: a real service
   journey reproduced a $40.00 listing discounted to a $20.00 paid invoice still
   promising $36.00 net to the seller. A shared original-invoice revenue query
@@ -13882,6 +19071,165 @@ whatever is best for the people using the site.
   `payment-provider-customer-erasure.md`; `deploy/privacy-rights.md`.
   Actual provider acceptance and independent review remain open; this source
   increment closes no C-item and does not enable direct seller collection.
+  Original cash inspection source repair (2026-11-13, C12.38/C1.08/C11.10):
+  the current history now counts bare cash-inspection admissions and their real
+  matching finishes before any callback. A new ordinary reader authenticates
+  current complete charge/refund/dispute evidence separately from returned
+  disposition, retaining negative snapshots and every original caller. The
+  existing final-return wrapper keeps its strict return/fee/refund predicates;
+  late holder callbacks cannot rewrite a finished read. Seven pure and three
+  actual shared-service/HTTP native controls are PREPARED/UNRUN; the four
+  existing cash oracles remain unchanged. No schema, future-six import or gate
+  changes. Authentic lost-process stop/review for bare inspections, prospective
+  controlled observation/application and source-money transition fencing remain
+  REQUIRED implementation/qualification. No later read invents an old finish.
+  See deploy/original-cash-inspection-current83-source-20261113.md.
+  Current cash-reader source qualification2026-11-13: full TypeScript passes
+  at4cc200a9. Whole-repository lint stops only at two new issues: schema imports
+  used solely as types and an unbound actual Stripe inspection method in the
+  native helper. The source now uses type-only imports and binds that genuine
+  method to its original adapter. No lint rule, runtime policy or financial
+  oracle is relaxed. Failed v17 logs remain preserved; renewed focused lint,
+  all complete affected contracts and actual reader journeys are still required.
+  Independent original-inspection stop SOURCE checkpoint (2026-11-13,
+  C12.38/C1.08/C11.10): one proposed model143 retains a signed exact-admission
+  stop separately from genuine bank-wrapper completion. Fresh human review
+  requires the actual original boot/PID/start-tick process to be mechanically
+  absent; cross-host/unobservable text alone refuses. Old rows and NULL finishes
+  remain immutable; late callbacks/finishes refuse, raw ingress stays retained,
+  and only a NEW genuine finished GET supplies bank evidence. Eight pure and
+  one real-child/shared-service/HTTP controls are PREPARED/UNRUN. Owned SQL is
+  UNAPPLIED; parent financial/privacy/export composition, normal migration and
+  qualification remain required, as do external stopped-runtime proof, shared
+  recovery UI and genuine controlled prospective observation/application.
+  No current or future financial capability is declared qualified or deferred;
+  C12.38/C1.08/stable stay open. See
+  deploy/original-cash-inspection-stop83-source-20261113.md.
+  Actual original-inspection stop qualification 2026-11-13 (C12.38/C11.08):
+  source gates pass382 actual controls across65 complete files; fresh normal
+  migration and strict comparison pass84 migrations,143 models,287 guards and
+  229 function bodies. The first genuine-child journey stops before admission:
+  the imported media-transfer CLI has top-level await that the actual CommonJS
+  child loader cannot transform. Its failed database, journal, whole-table SHA
+  evidence and drained-client proof are preserved. The guarded CLI entry now
+  calls the same async main/error handler without top-level await. No service,
+  test oracle, provider authority, schema or migration identity changes; renewed
+  execution remains required and no native stop proof is claimed.
+  Renewed actual component qualification 2026-11-13 (C12.38/C1.08/C11.08):
+  the same unchanged original stop oracle now passes at1bf950f7 after the narrow
+  CLI import repair. A real live child commits admission before its blocked
+  bank GET; live/key/stale review refuses, SIGKILL and actual exit precede
+  independent stop, old admission/NULL finish remain unchanged, and only a NEW
+  completed GET supplies bank evidence. Actual parent merge fingerprints change
+  on the authentic stop, refund dependency hashes match and subject export
+  includes only the safe stop projection. SQL late-finish/deletion refuse.
+  The held callback, three current readers and all four original cash-return
+  journeys also pass independently on fresh V12 with all84 journal hashes and
+  drained clients. SDK generation/verification pass8+8 from the live registry.
+  Source qualification is411 deduplicated actual controls/70 whole files with
+  103 explicit native skips. These synthetic provider-edge component proofs
+  are distinct from real provider/platform acceptance and independent review.
+  Shared owner recovery UI and full controlled application remain required.
+  Owner recovery UI SOURCE increment 2026-11-13 (C12.38/C11.08):
+  the cash-recovery page discovers the complete bounded unfinished inspection
+  list through a private person-only shared query, authenticating every retained
+  stop rather than hiding unauthenticated rows. It selects one current plan
+  and submits the existing fresh-human/step-up review service. Live and unknown
+  process states have guidance without an approval form. English, Spanish,
+  French and Arabic strings use the existing semantic theme components. The
+  original real-child oracle retains all assertions and adds bounded private
+  list projection, API-key/system refusal and genuine-stop/finish convergence.
+  No SQL/model, authority, SDK public method or provider action changes. Source
+  gates, renewed native list proof and actual browser/accessibility acceptance
+  remain pending; no C-item closes.
+  Owner recovery qualification checkpoint 2026-11-13 (C12.38/C11.08):
+  source8d5cc948 passes429 actual controls/70 complete files,103 explicit
+  native skips, full types/affected lint and metadata. The real-child stop
+  journey with private owner-list assertions passes12.532s, with independent
+  all84-journal, real stop/finish, financial/table SHA and drained clients.
+  A separate four-file locale gate passes107 controls but flags the existing
+  credit comparator parameter names as CSS directions; it stays a preserved
+  failed gate. Renaming only the comparator arguments/locals to first/second
+  preserves its exact ordering and leaves the unchanged RTL oracle intact.
+  Locale/fee renewal and actual owner browser/a11y remain pending.
+  Actual owner browser component acceptance 2026-11-14 UTC (C12.38/C11.08):
+  current4349a5a9 production build passes97.387s and standalone scrub verifies
+  24142 files/369684959 bytes without source/environment leakage. Each of
+  four en/es/fr/ar journeys creates genuine original cash through shared
+  services, observes a real child GET admission, kills and awaits that process,
+  then uses the production owner page and keyboard to submit the shared review.
+  Both themes at320px pass Axe, control/page bounds and Arabic RTL. Independent
+  readback proves one exact authenticated stop and human audit/payment subject,
+  no raw hosting evidence in audit, all27 financial/admission/finish table SHA
+  unchanged, all84 journal hashes and no clients left open. The sign-in is an
+  explicitly fictional fresh-factor fixture, not first-boot/OTP/passkey proof.
+  Failed alias-loader V13 is preserved; the alias-only driver repair changes
+  no product bytes and succeeds on fresh V14. Local OS death and synthetic
+  provider edges do not supply cross-host/provider acceptance or C11 sign-off.
+  Positive controlled application and full C12.38 remain open.
+  Controlled cash-read order source checkpoint 2026-11-13 (C12.38/C1.08/C9.33):
+  one proposed immutable child records actual namespace-locked PostgreSQL
+  admission sequence, signed original caller/admission and exact predecessor/
+  closed namespace history. No timestamp/transaction-age order, backfill,
+  invented returned finish or payment authority is supplied. Old admissions,
+  strict legacy reader semantics and independent stop UI remain unchanged.
+  Twelve controls plus one unchanged real legacy GET regression are prepared,
+  UNRUN; owned forward SQL is UNAPPLIED. Central full-row financial/privacy/
+  export/retention composition and future real controlled producer/batch
+  integration plus positive native qualification remain required; C12.38,
+  C1.08 and stable stay open. See
+  `deploy/controlled-cash-inspection-lineage84-source-20261113.md`.
+  Lineage parent integration SOURCE checkpoint 2026-11-14 UTC (C12.38/C1.08):
+  normal forward84 copies the13264-byte owned lineage SQL exactly (SHA814c7a22)
+  and preserves every prior84 migration identity. It adds one model144, one
+  sequence, four functions and two guards. A collector-free parent wrapper
+  authenticates exact inspection/receipt/resource UUID ownership and PG row
+  hashes; shared admissions count once with distinct stop/lineage children under
+  one5000 bound. Invoice merge covers genuine receipt-only controlled resources
+  and their full current refund/callback graph before any payment-route exit,
+  independently of immutable read order; seller-filtered inputs remain scoped.
+  Original merchant/buyer exports add only nonempty safe lineage projections
+  and subscription retention declares the new child. No raw nonce/process/HMAC
+  or global sequence is exported. All source, fresh85-journal/144-model and
+  actual native qualification remain pending; no database is migrated in place
+  and no positive collection or stable authority is supplied.
+  Actual current144 component qualification 2026-11-14 UTC (C12.38/C1.08):
+  source11fe3a5f passes549 actual controls/76 complete files,113 explicit native
+  skips, full types/affected lint and metadata. Fresh V15 passes all85 ordinary
+  migrations; strict v23 proves144 models,289 guards,233 exact function bodies,
+  sequence parameters/ownership/unconsumed state and negative history/latest
+  behavior with3426 read-only queries. Every old143 target and all old84
+  migration identities are preserved. Ten actual stop/capture/current-reader/
+  partial-return/legacy GET journeys pass independently; each retains all85
+  journal hashes, original financial/closure assertions and drained clients,
+  with zero fabricated controlled children for ordinary legacy cash. Genuine
+  delayed transaction admission/positive latest selection is separately
+  PREPARED/UNRUN and must propagate any strict raw-debt refusal. It cannot be
+  supplied by model comparisons or a later success. Provider/batch application,
+  current build/browser and C11/final stable gates remain open.
+  Genuine ordering first-run classification 2026-11-14 UTC (C12.38/C1.08):
+  current7a0f6288 live SDK verification passes8 without output changes and its
+  new test types/lint/metadata pass. The actual ordering run times out before
+  any inspection: the harness typed raw SQL timestamp as Date, but the actual
+  Drizzle/Postgres parser returns a string. A read-only driver probe confirms
+  this. Failed V15 keeps its one genuine positive receipt/origin, zero local
+  invoices/payments/inspections/lineages, unconsumed sequence, all85 hashes and
+  drained clients. The setup now validates the actual text timestamp and
+  propagates startup rejection instead of leaving the barrier pending. Every
+  admission/order/bank/financial assertion stays unchanged. Fresh retry and
+  genuine positive ordering remain required; no raw-debt guard was bypassed.
+  Genuine ordering retry 2026-11-14 UTC (C12.38/C1.08): validated timestamp
+  setup/type/lint/metadata passes at6a9b197a; fresh V16 reapplies identical85
+  source identities. The actual current9 unexpected-cash attempt now reaches
+  the strict final-return precondition and refuses incomplete/nonquiesced
+  original money/callers BEFORE any GET/admission. Failed V16 preserves one
+  genuine receipt/origin, zero local invoices/payments/inspections/lineages,
+  unconsumed sequence, all85 hashes and drained clients. This refusal is not
+  reinterpreted as a positive order proof or bypassed. The next positive
+  ordering journey requires the intended genuine controlled observational
+  producer and accepted target/collection with exact original receipt ancestry.
+  That source is in progress; no old zero-calendar money may be amount-adopted
+  into a new collection. Full controlled application and stable remain open.
   Trial-setup source increment 2026-11-11 (C9.38/C12.38/C1.08): migration70
   freezes each original Customer/Checkout request and records every physical
   dispatch before I/O. Exact current-attempt proof replaces card-age inference;
@@ -13979,7 +19327,8 @@ whatever is best for the people using the site.
   land in all four catalogues, and `packages/sdk/src/generated.ts` is
   regenerated, so the five services reach the SDK, OpenAPI and MCP surfaces as
   a committed artifact rather than a claim. Landing with
-  `db/migrations/0080_renewal_alerts.sql`,
+  `db/migrations/0111_renewal_alerts.sql` (renumbered from 0080 on this
+  integration branch, which already held a different 0080),
   `tests/modules/renewal-alerts.test.ts` (28),
   `tests/core/merge-completeness.test.ts`, `registry-completeness`,
   `i18n-gate` and `locale-quality` passing, typecheck clean across the
@@ -14042,6 +19391,62 @@ whatever is best for the people using the site.
   no real provider request or legal report was sent by these tests.
 
 ---
+
+Safe-response migration boundary SOURCE checkpoint (2026-11-14,
+C11.10/C11.08/C1.08): boot, test setup, the manual Node CLI and both actual
+playground migration calls now share one env-free dedicated-session runner.
+The existing Free/hold session lock spans official Drizzle prefix, exact86 and
+later batches, each a real engine transaction; actual committed journal member
+hashes are checked between batches. Boundary86's exact tag/time and whole
+2038-byte first guard are pinned. Final85/whole86/prefix identities remain NULL,
+so installing86 refuses until real final assembly supplies reviewed hashes.
+No normal0..85 SQL/journal bytes change. Six real PostgreSQL boundary proof
+groups, fake-env/default/preference child controls and actual packaged-runtime
+import checks are PREPARED/UNRUN. A temporary exact-guard86 probe proves only
+transaction boundaries, never full S0 schema, provider or feature acceptance.
+Actual prepared-transaction capability, artifact dependency resolution and
+external closed-set OS/runtime/backend/prepared drain remain mandatory; the
+SQL inventories do not close a new-backend race. No raw transaction-control
+injection, fabricated journal, migration guard exemption or new business
+service is introduced. C11.10/C11.08/C1.08 and stable acceptance stay open.
+See deploy/controlled-safe-migration-boundary-20261114.md.
+
+Migration boundary finite SOURCE correction (2026-11-14, C11.10/C11.08):
+the shared official-engine runner now always verifies the complete actual
+committed journal after its optional later-migration batch, including an empty
+later batch. Frozen68b source and its entire manifest are unchanged. Two new
+actual PostgreSQL contexts are PREPARED/UNRUN: genuine later87 SELECT succeeds
+only with all88 actual source hashes; a clearly labelled adversarial later87
+corrupts an ALREADY genuinely engine-applied real journal hash and must refuse
+FH_MIGRATION_PREFIX_MISMATCH at the final check. The corrupted scratch DB is
+preserved as negative evidence, never fabricated successful prefix/schema
+acceptance. No new normal SQL/journal/DDL, service, model or waiver. Final
+source pins, real execution, packaging and external closed-set drain stay open.
+See deploy/controlled-safe-migration-boundary-final-20261114.md.
+
+Migration boundary guard correction (2026-11-18, C11.10/C11.08/C1.08): the
+exact first guard of boundary86 no longer censuses pg_stat_activity, and the
+whole first guard is now **2599 bytes** (be98ff6d...), not the 2038 bytes
+pinned above. The census refused the rollout whenever any other client backend
+was connected to the target database. It could not deliver that property -- a
+backend may arrive the moment after it passes, which the guard's own header
+conceded while requiring it -- and it made every packaged deploy unbootable:
+Freeholder applies migrations in-process at boot while the web server is
+already answering readiness probes, so the migrating instance's own pool was
+always "another client". The failure was not a refused write but an instance
+that never became ready, reported as `migration unavailable (Error)` with
+nothing named, because the driver wraps the server error and the readiness
+discriminator read only the outermost code. Both failure reporters now read a
+bounded code from the cause chain, never a message. What remains is the control
+that holds: LOCK TABLE ... IN ACCESS EXCLUSIVE MODE NOWAIT over the nine
+subscription_controlled_* tables, which conflicts with every lock mode and so
+refuses the instant another session holds any lock on them, plus the
+prepared-transaction check for its named error. Two PostgreSQL proofs replace
+the single census proof: an idle target-database client no longer blocks the
+rollout, and a client genuinely holding a lock on those tables is refused with
+55P03. External closed-set OS/runtime drain remains the operator's practice for
+a multi-replica estate; it is no longer asserted by counting connections.
+C11.10/C11.08/C1.08 and stable acceptance stay open.
 
 ## 44. Members, Social, Messaging, Calls, and Marketplace
 
@@ -14166,3 +19571,354 @@ member key can never exceed that member's permissions.
 
 Opt-in ActivityPub federation lets members follow and be followed across the
 fediverse and take their audience elsewhere.
+
+Source continuation 2026-11-13 (C12.38/C9.33/C9.38/C1.08): isolated parent
+controlled-provider financial integration registers the private authenticated
+readiness query and connects the frozen nine caller/raw/origin/closure families
+to existing original refund/principal/debt, exact invoice/profile/seller-policy
+history and bounded safe exports. All five cash and24 proration families and
+NULL-payment canonical identities remain. Prepared adapter/native controls are
+UNRUN; no CPU, database, provider or schema operation ran. Full evidence and
+remaining protocol/qualification limits are in
+`deploy/controlled-parent-financial82-source-20261113.md`; all live gates stay open.
+
+Source correction 2026-11-13 (C12.38/C1.08): the original merchant identity
+synthetic read driver now checks the exact frozen subscription/terms controlled
+resource selector and bounded real-parent alias query, while preserving all14
+prior identity/foreign-owner/UUID/fingerprint/bound assertions. It explicitly
+requires an empty fifth dependency array and adds one strict nine-empty-family/
+unknown-parent control. Root's v6 first failure is preserved; the corrected15
+controls are UNRUN. No product behavior or database changed. See
+`deploy/member-controlled-financial-driver82-source-20261113.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): the isolated ordinary retirement
+slice now consumes the exact guarded affirmative original PUT review, retained
+nonce/full-byte/two-pass positive inventory and actual finishes or independent
+executor stop. It preserves missing actual return/writer-finish values and still
+requires fresh pinned original revision reads, conditional DELETE and complete
+physical absence inventories before retirement/minimization. Nine pure and three
+native controls are PREPARED/UNRUN; real stopped-runtime acceptance remains open.
+The provider COMPLETE/in-flight multipart authority guarantee is explicitly
+unproven, and both full request and dedicated part capabilities remain
+unpublished. No execution/account/host actions or C-item closure occurred. See
+`deploy/media-applied-put-retirement-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): the isolated additional transfer
+executor-drain slice records an immutable exact current-plan/digest-only mutation
+cohort before actual operator stop. Only unchanged complete actual logical and
+physical finishes plus real stop verification permit its separate release;
+sourceDrainId and all active-drain mutation fences remain unchanged. Captured
+→ released shortcuts and terminal drain births now refuse. Ten pure and four
+native negative controls are PREPARED/UNRUN, with no synthetic verified stop or
+capability publication. Truly unfinished/stopped-applied target callers still
+require exact original nonce/full-byte/complete-inventory review and physical
+settlement; actual operator/provider/platform acceptance remains open. No
+execution/host/account actions or C-item closure occurred. See
+`deploy/media-transfer-crash-drain-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): the isolated transfer read slice
+retains actual provider nonce/token proof in the existing first logical read
+return and independently checks exact original create-only lineage through
+shared TS/SQL before copy verification, adoption and source retirement. Adoption
+now obtains new full-byte source/target reads outside transactions before its
+atomic exact membership apply; known revision reads/absence stay pinned. Old
+first returns/captures are preserved, not augmented from current metadata.
+Seven pure and four native controls are PREPARED/UNRUN. Full request/part flags,
+stopped-target review, remaining recovery/cutover and actual operator/provider/
+platform acceptance remain open. No execution/account/host actions or C-item
+closure occurred. See `deploy/media-transfer-read-provenance-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): the isolated original target PUT
+review producer now reuses the exact receipt-parent nonce/full-byte/two-pass
+inventory ledger with genuine target-plan ancestry and actual finish or verified
+stop. A separate immutable positive review closes physical debt without filling
+NULL first return/result/writer fields or replaying PUT. Shared reads, cleanup,
+retirement/minimization and the SAME captured plan/drain consume that review;
+active drains still refuse mutation. Four scoped pure and six portable native
+controls are PREPARED/UNRUN; actual stopped-runtime/operator acceptance remains
+required. Full request/part flags, tracked stopped-source chained eligibility,
+unknown DELETE, multipart, quota/cutover and actual provider/platform gates stay
+open. No execution/account/host actions or C-item closure occurred. See
+`deploy/media-target-put-review-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): NEW stopped-source claims retain
+an exact affirmative review/actual executor-stop projection in their immutable
+first receipt capture; NULL actual FINs and old captures are never filled.
+Chained physical inventory, reads and adoption follow bounded exact prior
+receipt-to-captured-membership edges; only exact full conditional source
+retirement proof excludes physically retired ancestors, while original privacy
+lineage remains live. Five pure and three native TCP controls are PREPARED/UNRUN.
+No execution/provider/host actions occurred. Request/part capabilities, unknown
+DELETE monotonic-removal fences, multipart/quota/cutover and actual acceptance
+remain open. See `deploy/media-stopped-source-chain-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): the isolated monotonic-removal
+prerequisite leaf adds permanent namespace/key-digest creator fences and a
+separate exact local-finish/independent-stop conditional DELETE review. Fresh
+pinned absence plus complete inventories never invent remote ACKs, NULL FINs,
+first results or replay. All other creators/session/capture/transfer ancestry
+remain explicit debt. The existing fresh-human shared recovery/UI/audit path
+now selects the exact DELETE for verification; ordinary drain release requires
+whole-cohort closure. Ten pure and six native controls are PREPARED/UNRUN.
+Source inspection found genuine raw sealed-blob, gallery archive and doctor
+producers still requiring authentic original admissions and a final adapter
+boundary fence; full request capability cannot be published before they and
+multipart/capture/quota/cutover are completed and qualified. No execution,
+provider/host actions, production incident claim or C-item closure occurred.
+See `deploy/media-monotonic-delete-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C12.36/C8.07): the isolated managed
+producer leaf migrates encrypted attachments, gallery archives and diagnostic
+roundtrips to real shared original reservation/caller/nonce/FIN admission and
+verified retirement. A nullable/no-default sealed-file birth column, unique index
+and SQL guard prevent historical backfill/ready-without-proof/early forget;
+legacy NULL-birth personal files refuse completed erasure rather than vanish.
+Business gallery work retains its existing ownership policy. The application
+adapter adds a final missing-context mutation/signing refusal. Doctor GET/SSR
+and old health scopes stay passive; NEW platform.probeDoctor is an explicitly
+authorized/audited mutation outside service TX, with POST/CSRF, CLI/admin submit
+and four-locale guidance. Four pures and six native TCP/MLS controls are
+PREPARED/UNRUN. Root final SDK regeneration, schema/model/function/guard parity,
+all source/native gates and actual provider/operator/platform acceptance remain
+required. Full request/part flags and multipart/capture/quota/cutover/legacy
+recovery completion remain open. No execution/provider/host actions, production
+incident claim or C-item closure occurred. See
+`deploy/media-managed-producers-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): managed multipart requests now
+retain full bounded XML response digest/size and share strict whole-document
+parsing with provider inventory. Duplicate identities, wrappers/nested200 errors,
+invalid entities/UTF8 and redirects refuse before acceptance; NoSuchUpload is
+an absence observation, never a fabricated ABORT ACK/byte retirement. Twelve
+protocol cases are PREPARED/UNRUN and original positive oracle bodies remain
+unchanged. Public primary AWS completion/abort/part contracts were reviewed;
+no actual provider/host operations ran. Original CREATE/session first baseline,
+part capability/body receipts and selected-provider consumption proof, capture,
+quota/cutover and all qualification/acceptance remain open. No full request/part
+capability or C-item closure advances. See
+`deploy/media-multipart-wire-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): NEW multipart CREATE operations
+bind a nullable/no-default first-baseline header to their actual same-TX caller.
+Both complete pre-dispatch policy/object/version/session passes and SQL-verified
+physical result/cursor digests precede the single CREATE. Old NULLs never gain a
+current baseline; complete headers cannot refill/rebind. Only digests/counts are
+retained there, including private cursor digests. Logical404 with retained
+versions/sessions refuses creation. A lost or paused CREATE never gains a session
+or caller FIN from its negative baseline or equal current key. Twelve pure and
+five real shared-service/fictional TCP controls are PREPARED/UNRUN; original
+oracles remain intact. No execution/provider/host action or request/part
+capability publication occurred. Part authority/consumption, legacy creator
+closure, capture/quota/cutover and all qualification/external acceptance remain
+open. See `deploy/media-multipart-create-baseline-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): multipart completion now retains
+its actual ACK/revision before a complete bounded-memory pinned-body SHA/nonce
+read through the same genuine caller. Object adoption must match the exact
+original CREATE/session and actual finished full-byte result and stores that
+provider revision/digest. A later current-key validation cannot replace its
+SHA/bytes. Complete object identity does not set session retired_at or invent
+consumption of issued/in-flight part authority; legacy/unknown callers and all
+retirement debt stay preserved. Fourteen pure/protocol controls are PREPARED/
+UNRUN; original positive/native oracle bodies remain unchanged. No execution,
+provider/host action, new model/journal, capability publication or C-item closure.
+Part issuance/consumption, unknown recovery, capture/quota/cutover and all
+qualification/acceptance remain open. See
+`deploy/media-multipart-completed-object-source-2026-11-13.md`.
+Source contract checkpoint 2026-11-13 (C12.38/C1.08): the ordinary controlled
+cash observational source reader binds an actual accepted target/receipt and
+original creator/caller/fact plus every retained observation/raw occurrence.
+Source identity supplies no observation/application/principal/access authority.
+Seven controls are PREPARED/UNRUN. Genuine parent coverage/caller/privacy
+observation authority, actual GET producer and explicit own-read causal history
+comparison remain REQUIRED implementation, followed by genuine finished bank
+proof and canonical batch application/effects. No private service is registered,
+financial default relaxed, SQL assembled or C-item/stable closure claimed. See
+deploy/controlled-cash-observation-source82-20261113.md.
+
+Source callback checkpoint 2026-11-13 (C12.38/C1.08/C11.10): new optional
+private original-holder validation authenticates each actual inspection refund
+capture with its original admission/caller and occurrence UUID/time. Late or
+foreign callbacks retain raw money independently and cannot be adopted as that
+read by a semantic FK. Legacy defaults remain intact. Six pure and one actual
+shared-service/HTTP controls are PREPARED/UNRUN; no schema/SQL or financial
+permission changes. This grants no recovery/money authority. Genuine positive
+observational context, causal comparison, bank proof and full acceptance remain
+REQUIRED; no C/stable closure. See
+deploy/original-cash-inspection-capture83-source-20261113.md.
+
+Source ancestry checkpoint 2026-11-13 (C12.38/C1.08/C11.10): a new ordinary
+reader proves only an exact receipt-owned genuinely returned inspection and its
+authenticated original callback entries. Its historical causal selector never
+contains stop receipts or unrelated repeated captures; full current financial
+coverage retains every own row/caller/fact. Six strict controls are PREPARED/
+UNRUN; no registered authority, new model, SQL or activation. The genuine
+observational parent query/producer/context and all prospective application,
+canonical effects and acceptance remain REQUIRED. See
+deploy/controlled-cash-inspection-ancestry82-20261113.md.
+
+Source producer checkpoint 2026-11-13 (C12.38/C1.08/C11.10): a shared audited
+controlled-receipt orchestrator now commits its actual original inspection
+before GET, retains nonce-authenticated callbacks and genuine wrapper finish,
+and reports actual bank state without money authority. A distinct current-bank
+reader uses genuine parent observational coverage/causal history and shared
+neutral facts; legacy financial defaults and revision remain strict/unchanged.
+Missing parent query refuses before SDK work. Five controls plus one actual
+SQL lock-identity/lifetime control are PREPARED/UNRUN, not positive payment
+acceptance. Real query/consumer integration, complete positive provider/partial
+batch/calendar/disposition/recovery/UI/privacy and actual account/security
+acceptance remain REQUIRED, with no new deferral or C/stable closure. See
+deploy/controlled-cash-inspection-producer82-20261113.md.
+
+Parent qualification repair2026-11-13: full TypeScript passed56.115s at007315b9.
+Focused lint stopped on a native-test callback declaration whose generic call
+parameter was unknown. The control now derives its callback input from the real
+service Zod schema. No handler/oracle/lint policy changes; failed v22 remains
+preserved and renewed143/source/native acceptance remains pending.
+
+Parent helper validation2026-11-13: the precise callback input exposes the
+adapter-level optional platform account. The control now parses the actual
+callback through the real shared input schema instead of asserting or inventing
+an account. Failed v23 type evidence is preserved; renewed qualification remains
+pending. This carries the exact parent0180165c repair, not a new local test run.
+
+Source continuation 2026-11-13 (C12.38/C1.08): the future controlled observation
+producer uses the actual same-transaction immutable lineage birth hook before
+any bank GET. Exact returned-own ancestry authenticates only its own optional
+lineage child as a seventh historical causal family; full CURRENT coverage
+retains it and every other caller/raw/money row. No legacy backfill, blanket
+own-read exclusion, bank/application/access authority or qualification is
+claimed. See `deploy/controlled-cash-inspection-lineage-producer84-source-20261113.md`.
+
+Source contract checkpoint 2026-11-13 (C12.38/C9.33/C1.08): explicit exact receipt
+batch evidence separates immutable returned-bank facts/current namespace revisions
+from full CURRENT parent application authority. Partial paid cash retains its
+unpaid remainder and actual canonical projections; every raw occurrence and
+unfinished caller remains explicit. All authority flags are false. Ten contract
+controls are prepared/UNRUN; genuine producer, parent context, SQL/routing and
+native qualification remain required. See
+`deploy/controlled-collection-cash-contract84-source-20261113.md`.
+
+Source implementation checkpoint 2026-11-13 (C12.38/C9.33/C1.08): the ordinary
+real-context receipt-batch bank reader now consumes genuine latest admission
+lineage, actual returned complete charge/refund/dispute facts and SQL bank policy,
+complete actual manifest/PI/payment inventory, canonical issued-credit/dated-tax/
+fee ownership and all raw occurrence/caller evidence. Partial paid bank amounts
+retain their unpaid balance; no canonical paid/access projection or payment
+eligibility is invented. Separate immutable bank/current namespace revisions feed
+Commerce's required full CURRENT parent/batch authority. Ten new controls are
+PREPARED/UNRUN. Mismatched partial/provider fee allocation remains retained review
+and required recovery work; parent staging/routing, positive factories/orchestration,
+paid effects and actual batch/native/provider acceptance remain required. See
+`deploy/controlled-collection-cash-reader84-source-20261113.md`.
+
+Source factory checkpoint 2026-11-13 (C9.33/C9.38/C12.38/C1.08): shared owner and
+customer provider preview/consent paths now retain authentic actual calendar/
+customer/native/no-proration evidence and create the real canonical gross invoice,
+exclusive old paid credit and fee/job/terms lineage through the same existing
+writer. Historical quoted/full current accepted revisions remain distinct; no
+unaccepted quote reserves money or disappears from coverage. Actual trial end and
+zero trial principal stay intact. Eight pure and three genuine-service native
+controls are PREPARED/UNRUN; new owned SQL tail is UNAPPLIED. Provider paid effects
+still mechanically refuse pending genuine authority; first/normal-period factories,
+full collection/application/recovery/UI/native/live acceptance remain required.
+See `deploy/controlled-proration-canonical-factory82-source-20261113.md`.
+
+Source original-period factory checkpoint 2026-11-13 (C9.33/C9.38/C12.38/C1.08):
+owner/customer actual native/calendar/customer previews and unchanged original
+mandate now materialize the next canonical posttrial/renewal invoice through the
+byte-identical shared period writer. Original consent and dated-period quote remain
+distinct; setup once, dated merchant tax, old paid access and trial end are preserved.
+No initial-sale/signupPending bypass, new acceptance actor or fake phase is inferred.
+Six pure plus three actual-service controls are PREPARED/UNRUN; new owned SQL tail
+is UNAPPLIED. Complete positive collection/disposition, prospective staging/routing,
+separate paid effects and all source/native/live/security acceptance remain REQUIRED.
+See `deploy/controlled-original-period-factory84-source-20261113.md`.
+
+Source actual-collection checkpoint 2026-11-13 (C9.33/C9.38/C12.38/C1.08): actual
+owner/customer orchestration now executes complete causally ordered invoice/PI/
+line inventory, paused update, exact original draft/item binding, fixed tax/fee,
+manifest/finalize/pay through genuine admitted SDK calls. Actual raw positive cash
+commits before application; lost actual POSTs are not replayed. Nine pure controls
+are PREPARED/UNRUN; owned SQL remains UNAPPLIED. Results never claim application or
+access. Genuine proper-target native/ordering, generated draft disposition, staged
+application/routing, partial remainder recovery, separate paid effects and full
+UI/privacy/live/security acceptance remain REQUIRED.
+See `deploy/controlled-collection-orchestration84-source-20261113.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): the shared audited upload
+service/HTTP route now declares the whole selected file's exact ordered part
+sizes and SHA256 values against its genuine original CREATE/session/baseline.
+The browser declares every bounded part before remote resume progress or any
+signing request; a same-size different file cannot replace its first header.
+The existing operation model gains nullable/no-default part_bodies JSONB, with
+no legacy birth/backfill or raw key/URL/token/owner copied into the header.
+App/SQL retain namespace/tombstone/drain/privacy/hold constraints. Eight pure and
+five actual-service/fictional TCP controls are PREPARED/UNRUN; originals remain
+unchanged. Declarations do not prove received bytes, FIN or consumption, and no
+signer/request/part capability is enabled. Actual issuer/part/consumption,
+unknown recovery, capture/quota/cutover and all qualification/acceptance remain
+open. No execution/provider/host actions or C-item closure. See
+`deploy/media-multipart-part-bodies-source-2026-11-13.md`.
+Prepared positive-bank control checkpoint 2026-11-13 (C9.33/C9.38/C12.38/C1.08):
+four actual-service desired native journeys now use a real accepted normal-period
+canonical target, real HTTP adapter and fictional bank, covering original bank
+collection/raw-first failure/lost replies and genuine controlled inspection
+admission order. No fake money/admission rows or relaxed legacy generic guard.
+All four are UNRUN; no source/native/live acceptance is claimed. Actual integration,
+staged money application, separate paid effects and full lifecycle/privacy/provider/
+security work remain REQUIRED. See
+`deploy/controlled-positive-bank-native84-prepared-20261113.md`.
+
+Ordering oracle source migration 2026-11-13 (C9.33/C9.38/C12.38/C1.08): the
+ORIGINAL desired positive admission-order case now uses the genuine accepted target
+and controlled observation producer, preserving ordering/no-new-money/bank/old-read
+assertions. Its old actual current9 generic guard refusal is a separate exact
+negative; duplicate newly prepared positive is consolidated into the original
+file. Five total next-suite actual-service native cases remain UNRUN. No guard or
+acceptance is weakened. See `deploy/controlled-order-oracle84-migration-20261113.md`.
+
+Source original-period guard successor 2026-11-13 (C9.33/C9.38/C12.38): a new owned
+UNAPPLIED tail makes unknown nested original-provider evidence explicitly false
+and refuses target birth unless the real source predicate is true. Full original
+source/mandate/calendar/caller conditions remain; no old SQL identity changed or
+acceptance claimed. Root source/SQL/native qualification remains REQUIRED. See
+`deploy/controlled-period-source-null84-source-20261113.md`.
+
+Prepared external-partial control 2026-11-13 (C9.33/C9.38/C12.38/C1.08): a real
+owned canonical target is prepared through actual SDK phases to OPEN without a
+pay POST. Fictional external PI1/fee0/transfer1 is then retained and genuinely
+inspected, preserving total4200/remaining4199 and the uncollected fee obligation,
+with no local payment/access invented. This desired native is UNRUN; actual
+partial/batch application, residual recovery and full lifecycle acceptance remain
+REQUIRED. See `deploy/controlled-external-partial-bank84-prepared-20261113.md`.
+
+Source continuation 2026-11-14 (C1.12/C11.08/C3.22): the real original physical
+observer now appends structurally valid conflicting multipart accepted/session
+facts before identity projection. It preserves first canonical UploadId/parent
+ACK/FIN/results and reopens the same original resource/caller/request debt,
+without adopting or deleting the conflicting session. Pointer restoration is
+a separate post-commit exact-original operation; unavailable/redacted/foreign
+pointers cannot roll back positive evidence, and the original erasure outbox
+still runs. This is a source finding, not an observed provider incident. No
+SQL/model/API/capability changes; all prior oracle bodies and owned82 bytes
+remain intact. Seven pure/four real-original-ledger controls with explicitly
+scripted additional facts are PREPARED/UNRUN and do not claim actual additional
+provider ACK/account acceptance. No child execution/provider/host action or
+C closure. Late-terminal/conflicting recovery, certificates/quota/remote part
+terminal/capture/cutover and all qualification/external/security/stable gates
+remain open. See
+`deploy/media-multipart-conflicting-session-facts-source-2026-11-14.md`.
+
+Source checkpoint 2026-11-14 (C12.38/C9.33/C1.08): a two-file controlled cash
+ancestry continuation now batches actual common-resource occurrence validation
+under one fresh complete journal, retaining all original scalar predicates,
+bootstrap/scope/route/API/digest checks and exact namespace flags/revision on
+unchanged state. Full prior/batch journal and canonical+PG resource equality
+refuse late changes; every distinct cash fact stays represented under one5000.
+No cache/business verdict, caller waiver, schema/service/permission change or
+provider I/O. Four literal source controls/five real desired natives are
+PREPARED/UNRUN; no child execution or measured performance acceptance. Root
+current type-only journal fixes and all original financial/native timeouts
+remain; source/runtime/schema/performance qualification is REQUIRED. See
+`deploy/controlled-cash-origin-batch84-source-20261114.md`.

@@ -1,0 +1,32 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_multipart_part_verification_wire.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Checksum-bound multipart part verification wire controls pass; no real service account or terminal acceptance is claimed",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "aca34703c8be06da8a88ff858af8aabcd9f5a99757239e79f75625aa82e2a3f0" },
+    { "path": "tests/core/media-multipart-part-verification-wire.test.ts", "sha256": "6f3dd05613a16eb8bc8eb44602b8ac3e257b995986cbd18534a09e734103bc22" }
+  ],
+  "controls": {
+    "final": { "passed": 12, "failed": 0, "durationSeconds": 0.41 },
+    "coverage": ["complete actual page identities require exact checksum/size/ETag/browser receipt matches", "changed checksum, size or ETag refused", "incomplete or extra parts and missing/noncanonical SHA256 refused", "later provider error prevents certification of first page", "NoSuchUpload remains absence without authority consumption", "CREATE checksum configuration and COMPLETE canonical manifest/create-only condition retained", "status listing without COMPLETE intent is not certified"],
+    "runtimeChanges": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "aca34703c8be06da8a88ff858af8aabcd9f5a99757239e79f75625aa82e2a3f0",
+      "beforeSha256": "8b1e268524c925cc16ede47c630579d38084d695fc88fa86c3a865cb2868118b",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  `deploy/media-multipart-part-capability-wire.source.json`. No app authorization\n  or provider acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  `deploy/media-multipart-part-capability-wire.source.json`. No app authorization\n  or provider acceptance follows.\n  Part-verification wire qualification2026-11-16: all12 checksum-bound controls\n  pass. Complete page identities require exact checksums, sizes, ETags and browser\n  receipts; later errors, missing/extra parts and NoSuchUpload never invent done\n  or authority consumption. CREATE/COMPLETE retain their checksum configuration,\n  canonical manifest and create-only condition. Focused lint passes. See\n  `deploy/media-multipart-part-verification-wire.source.json`. No service account\n  or terminal acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

@@ -7,11 +7,14 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createLocalStorage } from "@/adapters/storage/local";
+import { createLocalRequestStore, createLocalStorage } from "@/adapters/storage/local";
 import { resetEnvForTests } from "@/core/env";
 import { createS3Storage } from "@/adapters/storage/s3";
+import { createSpacesStorage, spacesEndpoint } from "@/adapters/storage/spaces";
+import { resetStorageForTests, storage as selectedStorage } from "@/adapters/storage";
 import { storageKey } from "@/adapters/storage/types";
 import type { StorageAdapter } from "@/adapters/storage/types";
+import type { TransferRequestObservation, TransferRequestObserver } from "../../scripts/media-transfer.mjs";
 
 const bytes = (text: string) => new TextEncoder().encode(text);
 const text = (data: Uint8Array | undefined) =>
@@ -19,7 +22,7 @@ const text = (data: Uint8Array | undefined) =>
 
 let root: string;
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); resetEnvForTests(); resetStorageForTests(); });
 
 async function localAdapter(): Promise<StorageAdapter> {
   root = await mkdtemp(join(tmpdir(), "freeholder-storage-"));
@@ -114,6 +117,37 @@ describe("the local adapter", () => {
     expect(await storage.get("2026/07/gone.txt")).toBeUndefined();
   });
 
+  it("retains accountable local writes, reads, conditional deletes and inventories", async () => {
+    const facts: TransferRequestObservation[] = [], descriptors: string[] = [];
+    let sequence = 0, putRequestId = "";
+    const observer: TransferRequestObserver = async (descriptor, operation) => {
+      const id = `00000000-0000-4000-8000-${String(++sequence).padStart(12, "0")}`;
+      descriptors.push(descriptor.kind);
+      if (descriptor.kind === "object.put") putRequestId = id;
+      return operation(async fact => { facts.push(fact); }, { id, token: `synthetic-local-request-${id}` });
+    };
+    const requests = createLocalRequestStore({ root, publicPath: "/media" }, observer), key = "2026/07/accounted.txt", content = bytes("accounted original");
+    await requests.put(key, content, "text/plain");
+    const revision = facts.find(fact => fact.stage === "metadata" && fact.revision)?.revision;
+    if (!revision) throw new Error("missing local revision");
+    const read = await requests.readVersioned(key, revision, content.byteLength);
+    expect(text(read?.body)).toBe("accounted original");
+    expect(read?.requestProof?.id).toBe(putRequestId);
+    await expect(requests.put(key, content, "text/plain")).rejects.toThrow();
+    await expect(requests.deleteVersioned(key, { ...revision, value: "0".repeat(64) })).rejects.toThrow();
+    expect(text(await requests.get(key))).toBe("accounted original");
+    expect((await requests.inventoryPage("objects")).entries).toMatchObject([{ key, bytes: content.byteLength, revision, current: true }]);
+    expect((await requests.inventoryPage("versions")).entries).toEqual([]);
+    expect((await requests.inventoryPage("retained")).entries).toEqual([]);
+    expect(await requests.inventoryConfiguration()).toEqual({ versioning: "disabled", softDeleteSeconds: 0, retentionSeconds: 0 });
+    await requests.deleteVersioned(key, revision);
+    expect(await requests.readVersioned(key, revision)).toBeUndefined();
+    expect(descriptors).toEqual(expect.arrayContaining(["object.put", "object.read", "object.delete", "inventory.objects", "inventory.versions", "inventory.retained", "bucket.metadata"]));
+    expect(facts.some(fact => fact.stage === "accepted")).toBe(true);
+    expect(facts.some(fact => fact.stage === "body" && fact.bytes === content.byteLength)).toBe(true);
+    expect(facts.some(fact => fact.stage === "inventory")).toBe(true);
+  });
+
   it("refuses a key that would escape the storage root", async () => {
     // Defence in depth: storageKey() already prevents this, but the adapter
     // must not depend on its caller having been careful.
@@ -133,6 +167,31 @@ describe("the local adapter", () => {
 
   it("does not claim direct multipart support", () => {
     expect(storage.directMultipart).toBeUndefined();
+  });
+});
+
+describe("the DigitalOcean Spaces adapter", () => {
+  const config = { region: "sfo3", bucket: "owner-media", accessKeyId: "synthetic-key", secretAccessKey: "synthetic-secret" };
+
+  it("derives the regional endpoint and signs private reads through the S3 protocol", async () => {
+    expect(spacesEndpoint("sfo3")).toBe("https://sfo3.digitaloceanspaces.com");
+    const storage = createSpacesStorage(config), url = new URL(await storage.url("2026/07/private.jpg", { expiresIn: 60 }));
+    expect(storage.isPublic).toBe(false);
+    expect(url.origin).toBe("https://sfo3.digitaloceanspaces.com");
+    expect(url.pathname).toBe("/owner-media/2026/07/private.jpg");
+    expect(url.searchParams.get("X-Amz-Signature")).toBeTruthy();
+    expect(url.toString()).not.toContain(config.secretAccessKey);
+  });
+
+  it("refuses invalid region names instead of constructing an arbitrary endpoint", () => {
+    for (const region of ["", "SFO3", "sfo3.example.com", "sfo3/path"]) expect(() => spacesEndpoint(region)).toThrow(/region/);
+  });
+
+  it("selects Spaces through the real environment-driven storage factory", async () => {
+    vi.stubEnv("NODE_ENV", "test"); vi.stubEnv("FREEHOLDER_STORAGE", "spaces"); vi.stubEnv("S3_REGION", "sfo3"); vi.stubEnv("S3_BUCKET", "owner-media");
+    vi.stubEnv("S3_ACCESS_KEY_ID", "synthetic-key"); vi.stubEnv("S3_SECRET_ACCESS_KEY", "synthetic-secret");
+    resetEnvForTests(); resetStorageForTests();
+    expect(await selectedStorage().binding!()).toMatchObject({ kind: "s3", location: { endpoint: "https://sfo3.digitaloceanspaces.com", bucket: "owner-media" } });
   });
 });
 

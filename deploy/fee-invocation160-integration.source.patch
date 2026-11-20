@@ -1,0 +1,323 @@
+diff --git a/src/modules/invoicing/controlled-provider-financial-witness.ts b/src/modules/invoicing/controlled-provider-financial-witness.ts
+index 195ac32e..cca45bff 100644
+--- a/src/modules/invoicing/controlled-provider-financial-witness.ts
++++ b/src/modules/invoicing/controlled-provider-financial-witness.ts
+@@ -23,7 +23,7 @@ export const controlledTransportTables = {
+ } as const;
+ export type ControlledFinancialHistory = Awaited<ReturnType<typeof controlledProviderWitnesses>>;
+ export type ControlledFinancialEntry = { table: string; id: string; fingerprint: string };
+-export const controlledFinancialTables = { ...controlledTransportTables, ...controlledTargetTables, ...controlledCashApplicationTables, paidPeriods: "subscription_controlled_paid_period_receipts" };
++export const controlledFinancialTables = { ...controlledTransportTables, ...controlledTargetTables, ...controlledCashApplicationTables, paidPeriods: "subscription_controlled_paid_period_receipts", feeInvocations: "merchant_fee_refund_invocations" };
+ const families = Object.keys(controlledTransportTables) as Array<keyof typeof controlledTransportTables>;
+ export function controlledFinancialEntries(history: ControlledFinancialHistory): ControlledFinancialEntry[] {
+  return families.flatMap(family => history[family].map(row => ({ table: controlledTransportTables[family], id: row.id, fingerprint: row.fingerprint })))
+diff --git a/src/modules/invoicing/merchant-payment-dependencies.ts b/src/modules/invoicing/merchant-payment-dependencies.ts
+index 7994dd08..d829995a 100644
+--- a/src/modules/invoicing/merchant-payment-dependencies.ts
++++ b/src/modules/invoicing/merchant-payment-dependencies.ts
+@@ -17,6 +17,7 @@ import { invoices, paymentDisputes, payments, refunds } from "./schema";
+ import { controlledFinancialTables, controlledFinancialWitness, type ControlledFinancialEntry } from "./controlled-provider-financial-witness";
+ import { prorationFinancialWitness } from "./proration-financial-witness";
+ import { cashInspectionFinancialWitness, exportCashInspectionStops, exportControlledCashInspectionLineages } from "./merchant-cash-inspection-financial";
++import { merchantFeeInvocationFinancialWitness, exportMerchantFeeInvocationHistory } from "./merchant-fee-invocation-witnesses";
+ 
+ /** NULL makes the existing parent merge explicitly non-undoable.
+  * The default is the buyer's complete invoice. A seller caller must derive
+@@ -52,6 +53,12 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds:
+   let additionalCount = additionalWitnessCount + prorationFinancial.entries.length + controlledFinancial.entries.filter(row => !externalControlled.has(`${row.table}:${row.id}`)).length;
+   let prorationInvoiceIds: string[] = [];
+   const originalCash = await originalCashInvoiceHistory(tx, invoiceIds, originalPaymentIds);
++  const feeInvocations = await merchantFeeInvocationFinancialWitness(tx, originalPaymentIds === undefined ? { invoiceIds } : { paymentIds: originalPaymentIds });
++  if (feeInvocations.entries.some(row => !invoiceIds.includes(row.parents.invoiceId)
++    || externalControlled.has(`${row.table}:${row.id}`) && externalControlled.get(`${row.table}:${row.id}`) !== row.fingerprint)) return null;
++  const feeEntries = feeInvocations.entries.map(({table,id,fingerprint}) => ({table,id,fingerprint}));
++  const feeKeys = new Set(feeEntries.map(row => `${row.table}:${row.id}`));
++  additionalCount += feeEntries.filter(row => !externalControlled.has(`${row.table}:${row.id}`)).length;
+   const inspectionStops = await cashInspectionFinancialWitness(tx, {
+     paymentIds: originalCash.references.map(row => row.id),
+     receiptIds: originalCash.receiptReferences.map(row => row.receiptId).filter((id): id is string => id !== null),
+@@ -81,7 +88,7 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds:
+     ...originalCash.witness.feedback.map(row => `original_cash_feedback:${merchantTaxDigest(row.namespace)}:${row.feedback.id}`),
+   ]);
+   const existingControlledKeys = new Set([...externalControlled.keys(), ...controlledFinancial.entries.map(row => `${row.table}:${row.id}`),
+-    ...inspectionHistoryKeys, ...cashKeys]);
++    ...inspectionHistoryKeys, ...cashKeys, ...feeKeys]);
+   additionalCount += controlledCashChildren.entries.filter(row => !existingControlledKeys.has(`${row.table}:${row.id}`)).length;
+   if (cashCount + additionalCount > 5000) return null;
+   // Authentic feedback creates financial debt before the first GET. Select
+@@ -130,6 +137,12 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds:
+         ...(lineageEntries.length ? { originalCashInspectionLineages: lineageEntries } : {}) }));
+     }
+   }
++  // Include source GETs even before an old fee operation or route shortcut.
++  for (const invoiceId of [...new Set(feeInvocations.entries.map(row => row.parents.invoiceId))]) {
++    const original = legacyFinancial.get(invoiceId);
++    const entries = feeInvocations.entries.filter(row => row.parents.invoiceId === invoiceId).map(({table,id,fingerprint}) => ({table,id,fingerprint}));
++    legacyFinancial.set(invoiceId, merchantTaxDigest({ ...(original ? { original } : {}), originalFeeInvocations: entries }));
++  }
+   if (prorationFinancial.entries.length || controlledFinancial.entries.length) {
+     // These actual invoices form one merge cohort, including linked original
+     // credit ancestry. Fold its complete table-bound rows before the no-route
+@@ -182,7 +195,7 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds:
+   const refundChildren = await merchantRefundDependencyFingerprints(tx, { paymentIds,
+     subscriptionChargeReceiptIds: scoped.map(row => row.agreementRoute?.originalChargeReceiptId).filter((id): id is string => Boolean(id)) });
+   const controlledKeys = new Set([...externalControlled.keys(), ...controlledFinancial.entries.map(row => `${row.table}:${row.id}`), ...inspectionHistoryKeys,
+-    ...controlledCashChildren.entries.map(row => `${row.table}:${row.id}`)]);
++    ...controlledCashChildren.entries.map(row => `${row.table}:${row.id}`), ...feeKeys]);
+   if (refundChildren.entries.some(row => externalControlled.has(`${row.table}:${row.id}`) && externalControlled.get(`${row.table}:${row.id}`) !== row.fingerprint)) return null;
+   const distinctRefundChildren = refundChildren.entries.filter(row => !controlledKeys.has(`${row.table}:${row.id}`));
+   if (refundChildren.incomplete || count + cashCount + legacyCount + additionalCount + distinctRefundChildren.length > 5000) return null;
+@@ -231,10 +244,13 @@ export async function exportMerchantRecoveryHistory(tx: Tx, invoiceIds: readonly
+     feeOperations: await tx.select().from(merchantFeeRefunds).where(inArray(merchantFeeRefunds.paymentId, ownedPayments)).orderBy(asc(merchantFeeRefunds.id)).limit(5001),
+     feeAcknowledgements: await tx.select().from(merchantFeeObservations).where(inArray(merchantFeeObservations.operationId, ownedFees)).orderBy(asc(merchantFeeObservations.id)).limit(5001),
+   };
+-  if (Object.values(history).reduce((sum, rows) => sum + rows.length, 0) + Object.values(originalCash.witness).reduce((sum, rows) => sum + rows.length, 0)
+-    + inspectionStops.admissions.length + inspectionStops.stops.length + inspectionStops.lineages.length > 5000)
++  const existingRows = Object.values(history).reduce((sum, rows) => sum + rows.length, 0) + Object.values(originalCash.witness).reduce((sum, rows) => sum + rows.length, 0)
++    + inspectionStops.admissions.length + inspectionStops.stops.length + inspectionStops.lineages.length;
++  if (existingRows > 5000)
+     throw new ServiceError("conflict", "Restore the complete bounded original financial export before issuing the subject archive.");
++  const feeInvocations = await exportMerchantFeeInvocationHistory(tx, { invoiceIds }, { existingRows });
+   return { ...history, originalCash: exportOriginalCashHistory(originalCash.witness),
++    ...(feeInvocations.exported.length ? { originalFeeInvocations: feeInvocations.exported } : {}),
+     ...(inspectionStops.stops.length ? { originalCashInspectionStops: exportCashInspectionStops(inspectionStops.stops) } : {}),
+     ...(inspectionStops.lineages.length ? { originalCashInspectionLineages: exportControlledCashInspectionLineages(inspectionStops.lineages) } : {}) };
+ }
+diff --git a/src/modules/invoicing/merchant-refund-dependencies.ts b/src/modules/invoicing/merchant-refund-dependencies.ts
+index 66dfb684..3472315c 100644
+--- a/src/modules/invoicing/merchant-refund-dependencies.ts
++++ b/src/modules/invoicing/merchant-refund-dependencies.ts
+@@ -16,6 +16,7 @@ import { legacyBankFeedbackFinancialWitness } from "./legacy-bank-feedback-store
+ import { originalCashRecoveryFinancialWitness } from "./original-cash-recovery-store";
+ import { controlledFinancialWitness } from "./controlled-provider-financial-witness";
+ import { cashInspectionFinancialWitness } from "./merchant-cash-inspection-financial";
++import { merchantFeeInvocationFinancialWitness } from "./merchant-fee-invocation-witnesses";
+ export interface MerchantRefundDependencyReceipt { version: 1; entries: Array<{ table: string; id: string; fingerprint: string }>; incomplete: boolean }
+ const MAX = 5000;
+ const ids = (column: string, values: readonly string[]): SQL => values.length
+@@ -39,6 +40,9 @@ export async function merchantRefundDependencyFingerprints(tx: Tx, input: { paym
+     paymentIds = [...new Set([...paymentIds, ...aliases.map(row => row.id)])];
+   }
+   if (paymentIds.length > MAX || receiptIds.length > MAX) return incomplete();
++  // NULL-operation source/preflight GETs still belong to their real payment/receipt.
++  const feeInvocations = await merchantFeeInvocationFinancialWitness(tx, { paymentIds, receiptIds });
++  const feeCount = feeInvocations.entries.length;
+   const collected: Array<{ table: string; rows: Record<string, unknown>[] }> = [];
+   // Include original owners even before their first GET, and signed feedback
+   // even before an owner exists. Keep every authorization/closure occurrence.
+@@ -105,16 +109,17 @@ export async function merchantRefundDependencyFingerprints(tx: Tx, input: { paym
+   await read("merchant_cash_return_primary_observations", tables.merchantCashReturnPrimaryObservations, ids("inspection_id", inspectionIds));
+   await read("merchant_cash_return_observations", tables.merchantCashReturnObservations, ids("inspection_id", inspectionIds));
+   await read("merchant_unapplied_charge_resolution_refunds", tables.merchantUnappliedChargeResolutionRefunds, ids("resolution_id", resolutionIds));
+-  if (overflow || collected.reduce((sum, group) => sum + group.rows.length, 0) > MAX) return incomplete();
++  if (overflow || feeCount + collected.reduce((sum, group) => sum + group.rows.length, 0) > MAX) return incomplete();
+   // Includes paid-effect receipts only through validated target invoice FKs;
+   // retain them before any cash-route shortcut and within this shared MAX.
+   const controlled = await controlledFinancialWitness(tx, { paymentIds, receiptIds });
+-  if (controlled.incomplete || collected.reduce((sum, group) => sum + group.rows.length, 0) + controlled.entries.length > MAX) return incomplete();
++  if (controlled.incomplete || feeCount + collected.reduce((sum, group) => sum + group.rows.length, 0) + controlled.entries.length > MAX) return incomplete();
+   const inspectionStops = await cashInspectionFinancialWitness(tx, { paymentIds, receiptIds });
+   const selectedInspections = new Set(inspectionIds);
+   if (inspectionStops.admissions.length !== selectedInspections.size || inspectionStops.admissions.some(row => !selectedInspections.has(row.id))
+-    || collected.reduce((sum, group) => sum + group.rows.length, 0) + controlled.entries.length + inspectionStops.entries.length + inspectionStops.lineageEntries.length > MAX) return incomplete();
++    || feeCount + collected.reduce((sum, group) => sum + group.rows.length, 0) + controlled.entries.length + inspectionStops.entries.length + inspectionStops.lineageEntries.length > MAX) return incomplete();
+   const entries: MerchantRefundDependencyReceipt["entries"] = [...controlled.entries,
++    ...feeInvocations.entries.map(({ table, id, fingerprint }) => ({ table, id, fingerprint })),
+     ...inspectionStops.entries.map(({ table, id, fingerprint }) => ({ table, id, fingerprint })),
+     ...inspectionStops.lineageEntries.map(({ table, id, fingerprint }) => ({ table, id, fingerprint }))];
+   for (const group of collected) for (const row of group.rows) {
+diff --git a/src/modules/invoicing/merchant-tax-privacy.ts b/src/modules/invoicing/merchant-tax-privacy.ts
+index d1355e67..086fa9c7 100644
+--- a/src/modules/invoicing/merchant-tax-privacy.ts
++++ b/src/modules/invoicing/merchant-tax-privacy.ts
+@@ -30,6 +30,7 @@ import {prorationFinancialWitness} from "./proration-financial-witness";
+ import {exportProrationMerchantHistory} from "./proration-merchant-export";
+ 
+ import { controlledFinancialWitness, exportControlledFinancialHistory } from "./controlled-provider-financial-witness";
++import { merchantFeeInvocationFinancialWitness, exportMerchantFeeInvocationHistory, type MerchantFeeInvocationEntry, type MerchantFeeInvocationScope } from "./merchant-fee-invocation-witnesses";
+ const scope="commerce.merchantTax";
+ export const MERCHANT_TAX_ERASURE_JOB="subscriptions.quiesceMerchantSchedules";
+ const witness=z.object({id:z.uuid(),contactId:z.uuid().nullable(),fingerprint:z.string().regex(/^[a-f0-9]{64}$/)});
+@@ -56,6 +57,22 @@ async function merchantProfileCashOwners(tx:Tx,profileIds:string[]){
+  if(paymentIds.length+subscriptionChargeReceiptIds.length>5000)return null;
+  return{paymentIds,subscriptionChargeReceiptIds};
+ }
++/** Target quote profile AND exact collection restrict fee callers. A shared
++ * platform profile or a sibling payment on one invoice never selects them. */
++async function merchantProfileFeeInvocations(tx:Tx,profileIds:string[],owners:{paymentIds:string[];subscriptionChargeReceiptIds:string[]},controlled:Awaited<ReturnType<typeof controlledFinancialWitness>>){
++ const scopes:MerchantFeeInvocationScope[]=[],entries=new Map<string,MerchantFeeInvocationEntry>();
++ for(const profileId of [...new Set(profileIds)]){
++  const quotes=new Set(controlled.targets?.quotes.filter(row=>row.profileId===profileId).map(row=>row.id)??[]);
++  const collections=controlled.targets?.collections.filter(row=>quotes.has(row.quoteId))??[];
++  const invoiceIds=[...new Set(collections.flatMap(row=>row.invoiceId?[row.invoiceId]:[]))];
++  if(!owners.paymentIds.length&&!owners.subscriptionChargeReceiptIds.length&&!invoiceIds.length)continue;
++  const scope={paymentIds:owners.paymentIds,receiptIds:owners.subscriptionChargeReceiptIds,invoiceIds,profileId,collectionIds:collections.map(row=>row.id)};
++  const selected=await merchantFeeInvocationFinancialWitness(tx,scope);scopes.push(scope);
++  for(const entry of selected.entries){const prior=entries.get(entry.id);if(prior&&prior.fingerprint!==entry.fingerprint)throw new ServiceError("conflict","Restore the exact original merchant fee caller before privacy export.");entries.set(entry.id,entry);}
++ }
++ if(entries.size>5000)throw new ServiceError("conflict","Restore the complete bounded original merchant fee history.");
++ return{scopes,entries:[...entries.values()].sort((a,b)=>a.id.localeCompare(b.id))};
++}
+ async function snapshot(tx:Tx,ids:string[]){
+  // Preserve the outer identity inside child subqueries: the ORM renders bare
+  // Column chunks unqualified in a single-table SELECT. Inner child.id is not
+@@ -128,14 +145,20 @@ async function snapshot(tx:Tx,ids:string[]){
+  const cashOwners=await merchantProfileCashOwners(tx,profileIds);
+  if(!cashOwners)return null;
+  const{paymentIds,subscriptionChargeReceiptIds}=cashOwners;
+- const children=await merchantRefundDependencyFingerprints(tx,{paymentIds,subscriptionChargeReceiptIds});
+- const controlledKeys=new Set(controlledFinancial.entries.map(row=>`${row.table}:${row.id}`));
+- if(children.entries.some(row=>controlledKeys.has(`${row.table}:${row.id}`)&&controlledFinancial.entries.find(original=>original.table===row.table&&original.id===row.id)?.fingerprint!==row.fingerprint))return null;
++ const feeInvocations=await merchantProfileFeeInvocations(tx,profileIds,cashOwners,controlledFinancial);
++ const feeEntries=feeInvocations.entries.map(({table,id,fingerprint})=>({table,id,fingerprint})),feeIds=new Set(feeEntries.map(row=>row.id));
++ const allChildren=await merchantRefundDependencyFingerprints(tx,{paymentIds,subscriptionChargeReceiptIds});
++ // This new physical family belongs to its accepted target profile, independently
++ // of an ancestor subscription's earlier profile or another mixed-invoice seller.
++ const children={...allChildren,entries:allChildren.entries.filter(row=>row.table!=="merchant_fee_refund_invocations"||feeIds.has(row.id))};
++ const ownedFinancialEntries=[...controlledFinancial.entries,...feeEntries];
++ const controlledKeys=new Set(ownedFinancialEntries.map(row=>`${row.table}:${row.id}`));
++ if(children.entries.some(row=>controlledKeys.has(`${row.table}:${row.id}`)&&ownedFinancialEntries.find(original=>original.table===row.table&&original.id===row.id)?.fingerprint!==row.fingerprint))return null;
+  const distinctChildren=children.entries.filter(row=>!controlledKeys.has(`${row.table}:${row.id}`));
+- if(children.incomplete||originalHistoryCount+readerCount+distinctChildren.length+controlledFinancial.entries.length>5000)return null;
++ if(children.incomplete||originalHistoryCount+readerCount+distinctChildren.length+controlledFinancial.entries.length+feeEntries.length>5000)return null;
+  // The immutable child set belongs to this entire merge pair. Folding it
+  // inside the existing fingerprint keeps its retained JSON shape unchanged.
+- return rows.map(({id,contactId,material})=>({id,contactId,fingerprint:merchantTaxDigest({material,acceptedTerms,providerScopes,providerOperations,providerResources,amendments,resumptions,generations,periodInvoices,periodLines,...(readerCount?{originalReaders}:{}),...(prorationFinancial.entries.length?{prorationFinancial}:{}),...(controlledFinancial.entries.length?{controlledFinancial}:{}),cashOwners:{paymentIds,subscriptionChargeReceiptIds},children})}));
++ return rows.map(({id,contactId,material})=>({id,contactId,fingerprint:merchantTaxDigest({material,acceptedTerms,providerScopes,providerOperations,providerResources,amendments,resumptions,generations,periodInvoices,periodLines,...(readerCount?{originalReaders}:{}),...(prorationFinancial.entries.length?{prorationFinancial}:{}),...(controlledFinancial.entries.length?{controlledFinancial}:{}),...(feeEntries.length?{originalFeeInvocations:feeEntries}:{}),cashOwners:{paymentIds,subscriptionChargeReceiptIds},children})}));
+ }
+ registerContactReference({
+  table:"merchant_tax_profiles",
+@@ -215,8 +238,18 @@ registerContactPrivacySource({
+   const originalCommercialHistory=await exportProrationMerchantHistory(tx,ids,{existingRows});
+   if(existingRows+originalCommercialHistory.entries.length>5000)throw new ServiceError("conflict","Restore the complete bounded original merchant financial export.");
+   const controlled=await exportControlledFinancialHistory(tx,{profileIds:ids,receiptIds:owners.subscriptionChargeReceiptIds});
+-  if(existingRows+originalCommercialHistory.entries.length+controlled.selected.entries.length+controlled.exported.originalCashReceipts.length>5000)throw new ServiceError("conflict","Restore the complete bounded original merchant controlled history.");
+-  return{profiles,versions,registrations,originalCash:exportOriginalCashHistory(cash),...(inspectionStops.stops.length?{originalCashInspectionStops:exportCashInspectionStops(inspectionStops.stops)}:{}),...(inspectionStops.lineages.length?{originalCashInspectionLineages:exportControlledCashInspectionLineages(inspectionStops.lineages)}:{}),...(originalCommercialHistory.entries.length?{originalCommercialHistory}:{}),...(controlled.selected.entries.length?{originalControlledProvider:controlled.exported}:{})};
++  const retainedRows=existingRows+originalCommercialHistory.entries.length+controlled.selected.entries.length+controlled.exported.originalCashReceipts.length;
++  if(retainedRows>5000)throw new ServiceError("conflict","Restore the complete bounded original merchant controlled history.");
++  const feeInvocations=await merchantProfileFeeInvocations(tx,ids,owners,controlled.selected);
++  const feeInvocationExport:Awaited<ReturnType<typeof exportMerchantFeeInvocationHistory>>["exported"]=[];
++  const exportedIds=new Set<string>();
++  for(const feeScope of feeInvocations.scopes){
++   const projection=await exportMerchantFeeInvocationHistory(tx,feeScope,{existingRows:retainedRows+exportedIds.size});
++   if(projection.selected.entries.some(row=>feeInvocations.entries.find(original=>original.id===row.id)?.fingerprint!==row.fingerprint))throw new ServiceError("conflict","Original merchant fee evidence changed during the subject export.");
++   for(const row of projection.exported)if(!exportedIds.has(row.id)){feeInvocationExport.push(row);exportedIds.add(row.id);}
++  }
++  if(exportedIds.size!==feeInvocations.entries.length)throw new ServiceError("conflict","Restore every original merchant fee caller before exporting this subject.");
++  return{profiles,versions,registrations,...(feeInvocationExport.length?{originalFeeInvocations:feeInvocationExport}:{}),originalCash:exportOriginalCashHistory(cash),...(inspectionStops.stops.length?{originalCashInspectionStops:exportCashInspectionStops(inspectionStops.stops)}:{}),...(inspectionStops.lineages.length?{originalCashInspectionLineages:exportControlledCashInspectionLineages(inspectionStops.lineages)}:{}),...(originalCommercialHistory.entries.length?{originalCommercialHistory}:{}),...(controlled.selected.entries.length?{originalControlledProvider:controlled.exported}:{})};
+  },
+  erase:async(tx,contactId,context)=>{
+   const profiles=await tx.select({id:merchantTaxProfiles.id}).from(merchantTaxProfiles).where(eq(merchantTaxProfiles.contactId,contactId));
+diff --git a/src/modules/subscriptions/merchant-scope.ts b/src/modules/subscriptions/merchant-scope.ts
+index 65b638a3..2d2b704c 100644
+--- a/src/modules/subscriptions/merchant-scope.ts
++++ b/src/modules/subscriptions/merchant-scope.ts
+@@ -14,6 +14,7 @@ import { merchantRefundDependencyFingerprints } from "@/modules/invoicing/mercha
+ import { prorationFinancialWitness } from "@/modules/invoicing/proration-financial-witness";
+ import { subscriptionCommercialResumptions } from "./commercial-resumption-schema";
+ import { controlledFinancialWitness } from "@/modules/invoicing/controlled-provider-financial-witness";
++import { merchantFeeInvocationFinancialWitness } from "@/modules/invoicing/merchant-fee-invocation-witnesses";
+ import { subscriptionProviderReadWitnesses } from "./provider-read-witness";
+ import { subscriptionCommercialAmendments } from "./commercial-amendment-schema";
+ import { subscriptionProviderGenerations } from "./provider-generation-schema";
+@@ -42,47 +43,50 @@ export async function subscriptionOriginalEvidence(tx: Tx, contactIds: string[])
+     .from(subscriptionProviderChargeReceipts).innerJoin(subscriptions, eq(subscriptions.id, subscriptionProviderChargeReceipts.subscriptionId))
+     .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderChargeReceipts.id).limit(5001 - rows.length - prorationCount);
+   if (rows.length + charges.length + prorationCount > 5000) return { evidence: [], overflow: true };
++  const feeInvocations = await merchantFeeInvocationFinancialWitness(tx, { receiptIds: charges.map(row => row.id) });
++  const feeCount = feeInvocations.entries.length;
++  if (rows.length + charges.length + prorationCount + feeCount > 5000) return { evidence: [], overflow: true };
+   const fingerprint = (row: { id: string; material: string }, kind: z.infer<typeof merchantSubscriptionUndo>["originalEvidence"][number]["kind"]) => ({ kind, id: row.id, fingerprint: createHash("sha256").update(row.material).digest("hex") });
+   const evidence = [...rows.map(row => fingerprint(prorationCount ? { ...row, material: JSON.stringify({ scope: row.material, prorationFinancial }) } : row, "scope")), ...charges.map(row => fingerprint(row, "cash"))];
+   const observations = await tx.select({ id: subscriptionProviderChargeObservations.id, material: sql<string>`to_jsonb(${subscriptionProviderChargeObservations})::text` })
+     .from(subscriptionProviderChargeObservations).innerJoin(subscriptions, eq(subscriptions.id, subscriptionProviderChargeObservations.subscriptionId))
+-    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderChargeObservations.id).limit(5001 - evidence.length - prorationCount);
+-  if (observations.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
++    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderChargeObservations.id).limit(5001 - evidence.length - prorationCount - feeCount);
++  if (observations.length + evidence.length + prorationCount + feeCount > 5000) return { evidence: [], overflow: true };
+   evidence.push(...observations.map(row => fingerprint(row, "cash_observation")));
+   const resources = await tx.select({ id: subscriptionProviderScheduleResources.subscriptionId, material: sql<string>`(to_jsonb(${subscriptionProviderScheduleResources})-'updated_at')::text` })
+     .from(subscriptionProviderScheduleResources).innerJoin(subscriptions, eq(subscriptions.id, subscriptionProviderScheduleResources.subscriptionId))
+-    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderScheduleResources.subscriptionId).limit(5001 - evidence.length - prorationCount);
+-  if (resources.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
++    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderScheduleResources.subscriptionId).limit(5001 - evidence.length - prorationCount - feeCount);
++  if (resources.length + evidence.length + prorationCount + feeCount > 5000) return { evidence: [], overflow: true };
+   evidence.push(...resources.map(row => fingerprint(row, "schedule_resource")));
+   const operations = await tx.select({ id: subscriptionProviderScheduleOperations.id, material: sql<string>`to_jsonb(${subscriptionProviderScheduleOperations})::text` })
+     .from(subscriptionProviderScheduleOperations).innerJoin(subscriptions, eq(subscriptions.id, subscriptionProviderScheduleOperations.subscriptionId))
+-    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderScheduleOperations.id).limit(5001 - evidence.length - prorationCount);
+-  if (operations.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
++    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderScheduleOperations.id).limit(5001 - evidence.length - prorationCount - feeCount);
++  if (operations.length + evidence.length + prorationCount + feeCount > 5000) return { evidence: [], overflow: true };
+   evidence.push(...operations.map(row => fingerprint(row, "schedule_operation")));
+   const setupFees = await tx.select({ id: subscriptions.id,
+     material: sql<string>`jsonb_build_object('acceptedSetupFeeMinor',${subscriptions.acceptedSetupFeeMinor},'setupFeeInvoiceId',${subscriptions.setupFeeInvoiceId})::text` })
+     .from(subscriptions).where(and(inArray(subscriptions.contactId, contactIds), isNotNull(subscriptions.acceptedSetupFeeMinor)))
+-    .orderBy(subscriptions.id).limit(5001 - evidence.length - prorationCount);
+-  if (setupFees.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
++    .orderBy(subscriptions.id).limit(5001 - evidence.length - prorationCount - feeCount);
++  if (setupFees.length + evidence.length + prorationCount + feeCount > 5000) return { evidence: [], overflow: true };
+   evidence.push(...setupFees.map(row => fingerprint(row, "setup_fee")));
+   const terms = await tx.select({ id: subscriptionCommercialTerms.id, material: sql<string>`to_jsonb(${subscriptionCommercialTerms})::text` })
+     .from(subscriptionCommercialTerms).innerJoin(subscriptions, eq(subscriptions.id, subscriptionCommercialTerms.subscriptionId))
+-    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionCommercialTerms.id).limit(5001 - evidence.length - prorationCount);
+-  if (terms.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
++    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionCommercialTerms.id).limit(5001 - evidence.length - prorationCount - feeCount);
++  if (terms.length + evidence.length + prorationCount + feeCount > 5000) return { evidence: [], overflow: true };
+   evidence.push(...terms.map(row => fingerprint(row, "commercial_terms")));
+   const commercial_amendment = await tx.select({ id: subscriptionCommercialAmendments.termsId, material: sql<string>`to_jsonb(${subscriptionCommercialAmendments})::text` })
+     .from(subscriptionCommercialAmendments).innerJoin(subscriptions, eq(subscriptions.id, subscriptionCommercialAmendments.subscriptionId))
+-    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionCommercialAmendments.termsId).limit(5001 - evidence.length - prorationCount);
+-  if (commercial_amendment.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
++    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionCommercialAmendments.termsId).limit(5001 - evidence.length - prorationCount - feeCount);
++  if (commercial_amendment.length + evidence.length + prorationCount + feeCount > 5000) return { evidence: [], overflow: true };
+   evidence.push(...commercial_amendment.map(row => fingerprint(row, "commercial_amendment")));
+   const resumptions = await tx.select({ id: subscriptionCommercialResumptions.termsId, material: sql<string>`to_jsonb(${subscriptionCommercialResumptions})::text` })
+     .from(subscriptionCommercialResumptions).innerJoin(subscriptions, eq(subscriptions.id, subscriptionCommercialResumptions.subscriptionId))
+-    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionCommercialResumptions.termsId).limit(5001 - evidence.length - prorationCount);
+-  if (resumptions.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
++    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionCommercialResumptions.termsId).limit(5001 - evidence.length - prorationCount - feeCount);
++  if (resumptions.length + evidence.length + prorationCount + feeCount > 5000) return { evidence: [], overflow: true };
+   evidence.push(...resumptions.map(row => fingerprint(row, "commercial_resumption")));
+   const controlled=await controlledFinancialWitness(tx,{subscriptionIds:readParents.map(row=>row.id)});
+-  if(controlled.incomplete||controlled.entries.length+evidence.length+prorationCount>5000)return{evidence:[],overflow:true};
+-  const controlledEntries=controlled.entries;
++  if(controlled.incomplete||controlled.entries.length+evidence.length+prorationCount+feeCount>5000)return{evidence:[],overflow:true};
++  const controlledEntries=[...controlled.entries,...feeInvocations.entries.map(({table,id,fingerprint})=>({table,id,fingerprint}))];
+   const controlledKeys=new Set(controlledEntries.map(entry=>`${entry.table}:${entry.id}`));
+   for(const row of controlledEntries)evidence.push({kind:"controlled_financial",id:row.id,
+     fingerprint:createHash("sha256").update(JSON.stringify([row.table,row.fingerprint])).digest("hex")});
+diff --git a/tests/core/internal-services.test.ts b/tests/core/internal-services.test.ts
+index 7a0c8d9c..8dfe889c 100644
+--- a/tests/core/internal-services.test.ts
++++ b/tests/core/internal-services.test.ts
+@@ -16,6 +16,14 @@ import {
+ import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
+ 
+ const INTERNAL = [
++  "invoicing.atomicFeeBankSource",
++  "invoicing.recordMerchantFeeInvocationObservation",
++  "invoicing.persistMerchantFeeInvocation",
++  "invoicing.assertMerchantFeePostPreflight",
++  "invoicing.prepareMerchantFeePreflight",
++  "invoicing.assertMerchantFeeInvocation",
++  "invoicing.prepareMerchantFeeDispatchInvocation",
++  "invoicing.prepareMerchantFeeSourceInvocation",
+   "entitlements.advanceSubscriptionPeriod",
+   "subscriptions.completePaidControlledPeriod",
+   "subscriptions.pendingPaidControlledPeriods",
+@@ -458,6 +466,14 @@ const INTERNAL = [
+ ] as const;
+ 
+ const CALLER_AUTHORIZED_PHASES = [
++  "invoicing.atomicFeeBankSource",
++  "invoicing.recordMerchantFeeInvocationObservation",
++  "invoicing.persistMerchantFeeInvocation",
++  "invoicing.assertMerchantFeePostPreflight",
++  "invoicing.prepareMerchantFeePreflight",
++  "invoicing.assertMerchantFeeInvocation",
++  "invoicing.prepareMerchantFeeDispatchInvocation",
++  "invoicing.prepareMerchantFeeSourceInvocation",
+   // C9.33/C12.38: independently guarded original paid/access phases stay private.
+   "entitlements.advanceSubscriptionPeriod",
+   "subscriptions.completePaidControlledPeriod",

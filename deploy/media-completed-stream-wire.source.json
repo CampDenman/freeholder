@@ -1,0 +1,32 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_completed_stream_wire.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Bounded complete original pinned-body wire controls pass; no account, auth or terminal acceptance is claimed",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "023ede81e298225edecee98abd1ea884ae5abb4be3c21605398c612b808bef30" },
+    { "path": "tests/core/media-completed-stream-wire.test.ts", "sha256": "c93a494214a66d5cc59014c53f2b1f3b5f8f41189ddac69b854f48254d899581" }
+  ],
+  "controls": {
+    "final": { "passed": 7, "failed": 0, "durationSeconds": 0.751 },
+    "coverage": ["every actual chunk hashed at exact completed revision without another full body buffer", "actual byte count used instead of declared Content-Length", "oversized stream cancelled without full-body proof", "interrupted body retains metadata but no partial digest", "changed provider revision refused", "missing original CREATE metadata does not invent request proof", "real404 remains absence without body/terminal proof"],
+    "runtimeChanges": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "023ede81e298225edecee98abd1ea884ae5abb4be3c21605398c612b808bef30",
+      "beforeSha256": "66e3d9d0bf8b0189d42b1458443eed389480a9d29d9df273e45b9ddd4d70aeb5",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  No real authorization, original writer FIN or terminal acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  No real authorization, original writer FIN or terminal acceptance follows.\n  Completed-stream wire qualification2026-11-16: all7 controls pass. Every actual\n  chunk is hashed at the exact pinned version without returning another full body\n  buffer; actual bytes, not declared length, determine the count. Oversized and\n  interrupted streams cannot emit proof, changed revisions are refused, missing\n  CREATE metadata stays unknown and404 remains absence. Focused lint passes. See\n  `deploy/media-completed-stream-wire.source.json`. No account/auth or terminal\n  acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

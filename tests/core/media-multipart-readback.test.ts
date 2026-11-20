@@ -1,0 +1,17 @@
+// Copyright (C) 2026 Tony Aly
+// SPDX-License-Identifier: Apache-2.0
+// PREPARED / UNRUN. Bounded actual byte hashing, no provider/caller/terminal claim.
+import {createHash} from "node:crypto";
+import {describe,expect,it} from "vitest";
+import {originalMultipartReadback} from "../../scripts/media-multipart-readback.mjs";
+const first=new Uint8Array(8388608).fill(3),last=new Uint8Array([4,5,6]);
+const manifest=()=>[{partNumber:1,etag:'"original-first"',bytes:first.length,checksumSha256:createHash("sha256").update(first).digest("base64")},{partNumber:2,etag:'"original-final"',bytes:last.length,checksumSha256:createHash("sha256").update(last).digest("base64")}];
+describe("bounded original multipart stored-part readback",()=>{
+ it("verifies original boundaries independently of provider stream chunks and retains only the exact selected manifest digest",()=>{const parts=manifest(),read=originalMultipartReadback(parts,first.length+last.length);read.update(first.subarray(0,7));read.update(first.subarray(7,8388607));read.update(new Uint8Array([3,4,5]));read.update(new Uint8Array([6]));expect(read.finish()).toEqual({bytes:first.length+last.length,partsDigest:createHash("sha256").update(JSON.stringify(parts)).digest("hex")});});
+ it("refuses altered bytes even when the declared total size and original provider ETags match",()=>{const read=originalMultipartReadback(manifest(),first.length+last.length),wrong=new Uint8Array(first);wrong[0]=9;expect(()=>read.update(wrong)).toThrow("original declared multipart file");});
+ it("refuses a wrong final boundary checksum without certifying the earlier matching part",()=>{const read=originalMultipartReadback(manifest(),first.length+last.length);read.update(first);expect(()=>read.update(new Uint8Array([4,5,7]))).toThrow();expect(()=>read.finish()).toThrow();});
+ it("refuses missing bytes and extra bytes rather than using Content-Length or an empty final chunk",()=>{const short=originalMultipartReadback(manifest(),first.length+last.length);short.update(first);short.update(last.subarray(0,2));expect(()=>short.finish()).toThrow();const long=originalMultipartReadback(manifest(),first.length+last.length);long.update(first);expect(()=>long.update(new Uint8Array([4,5,6,7]))).toThrow();});
+ it("requires every fixed original boundary/size and canonical SHA256 before reading anything",()=>{for(const parts of [[],[{...manifest()[0]!,bytes:1},manifest()[1]!],[{...manifest()[0]!,partNumber:2},manifest()[1]!],[{...manifest()[0]!,checksumSha256:"not-base64"},manifest()[1]!],manifest().reverse()])expect(()=>originalMultipartReadback(parts,first.length+last.length)).toThrow();expect(()=>originalMultipartReadback(manifest(),first.length+last.length+1)).toThrow();});
+ it("snapshots the immutable manifest values and never returns a full file buffer or caller finish",()=>{const parts=manifest(),read=originalMultipartReadback(parts,first.length+last.length);parts[0]!.checksumSha256=Buffer.alloc(32).toString("base64");read.update(first);read.update(last);const result=read.finish();expect(result).not.toHaveProperty("body");expect(result).not.toHaveProperty("returnedAt");expect(result).not.toHaveProperty("consumedAt");});
+ it("does not replay a finished verifier or accept bytes after its full actual readback",()=>{const read=originalMultipartReadback(manifest(),first.length+last.length);read.update(first);read.update(last);read.finish();expect(()=>read.finish()).toThrow();expect(()=>read.update(new Uint8Array())).toThrow();});
+});

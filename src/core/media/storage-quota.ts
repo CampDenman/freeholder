@@ -21,10 +21,12 @@ export function postgresStorageQuota(namespace: string, maxBytes: number): Stora
   return {
     async reserve(key, bytes, token) {
       await db().transaction(async tx => {
+        await (await import("./transfer-requests")).bindOriginalMediaQuotaReservation(tx,{namespace,key,bytes,token});
         // The one namespace row serializes reservations across processes. No
         // provider call occurs while this row lock or transaction is open.
         const state = await tx.execute<{ max_bytes: string }>(sql`SELECT max_bytes::text FROM storage_quota_state WHERE namespace=${namespace} FOR UPDATE`);
         if (!state[0] || Number(state[0].max_bytes) !== maxBytes) throw new StorageQuotaError("storage_quota_inventory_required");
+        await (await import("./original-quota-evidence")).assertOriginalQuotaCoverage(tx,namespace,token);
         const object = await tx.execute<{ bytes: string; pending_token: string | null }>(sql`SELECT bytes::text,pending_token FROM storage_quota_objects WHERE namespace=${namespace} AND object_key=${key}`);
         if (object[0]?.pending_token) throw new StorageQuotaError("storage_quota_object_unresolved");
         const before = Number(object[0]?.bytes ?? 0), held = Math.max(before, bytes);
@@ -37,7 +39,7 @@ export function postgresStorageQuota(namespace: string, maxBytes: number): Stora
       await db().transaction(async tx => {
         // Same lock order as reserve; token binds the single accepted operation.
         await tx.execute(sql`SELECT namespace FROM storage_quota_state WHERE namespace=${namespace} FOR UPDATE`);
-        const changed = await tx.execute(sql`UPDATE storage_quota_objects SET bytes=${bytes},pending_token=NULL WHERE namespace=${namespace} AND object_key=${key} AND pending_token=${token} AND bytes>=${bytes} RETURNING object_key`);
+        const changed = await tx.execute(sql`UPDATE storage_quota_objects SET bytes=${bytes},pending_token=NULL,last_settled_token=${token}::uuid WHERE namespace=${namespace} AND object_key=${key} AND pending_token=${token} AND bytes>=${bytes} RETURNING object_key`);
         if (changed.length !== 1) throw new StorageQuotaError("storage_quota_operation_changed");
       });
     },

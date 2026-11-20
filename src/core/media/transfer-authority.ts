@@ -1,0 +1,150 @@
+// Copyright (C) 2026 Tony Aly
+// SPDX-License-Identifier: Apache-2.0
+// C1.12/C11.08: complete first capture, exact physical lineage and schema gate.
+import {and,asc,eq,inArray,isNull,isNotNull,sql} from "drizzle-orm";
+import type {StorageBinding} from "@/adapters/storage/types";
+import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
+import {actorString,type Actor,type Tx} from "@/core/service";
+import {mediaObjects} from "./schema";
+import {mediaObjectWrites} from "./write-schema";
+import {mediaMultipartResources} from "./multipart-schema";
+import {mediaStorageTransferCalls,mediaStorageTransferObjects,mediaStorageTransferPlans,mediaStorageTransferReceipts,mediaStorageTransferSubjects,mediaStorageWriterDrains} from "./transfer-schema";
+import {allowMediaReceiptWrites,lockObjectDigest,objectKeyDigest,storageOperationsHeld} from "./write-ledger";
+import {originalPhysicalLineage} from "./transfer-physical-lineage";
+import {captureSourceReview,assertCapturedSourceReview} from "./transfer-source-review";
+import {originalTransferObject,transferInventoryDigest} from "./transfer-witness";
+import {assertOriginalUploadWritable} from "./upload-ownership";
+import {requireCompleteTransferInventory,requireNoOutstandingTransferCalls,transferConflict,transferDigest,transferTargetKey} from "./transfer-proof";
+
+export async function transferSchemaAvailable(tx:Tx):Promise<boolean>{
+ const rows=await tx.execute<{present:boolean}>(sql`select to_regprocedure('freeholder_media_transfer_capability_v1()') is not null and to_regprocedure('freeholder_media_transfer_request_capability_v1()') is not null as present`);
+ return rows[0]?.present===true;
+}
+export async function requireTransferCapability(tx:Tx):Promise<void>{
+ if(!await transferSchemaAvailable(tx))transferConflict("Verified storage transfer is unavailable until its complete guarded migration is applied.");
+ const rows=await tx.execute<{capability:string}>(sql`select freeholder_media_transfer_capability_v1() as capability`);
+ if(rows[0]?.capability!=="verified-original-transfer-v1")transferConflict();
+ const requestCapability=await tx.execute<{present:boolean}>(sql`select to_regprocedure('freeholder_media_transfer_request_capability_v1()') is not null as present`);
+ if(requestCapability[0]?.present!==true)transferConflict("Apply the complete original request/inventory capability before storage transfer I/O.");
+ const verifiedRequestCapability=await tx.execute<{capability:string}>(sql`select freeholder_media_transfer_request_capability_v1() as capability`);
+ if(verifiedRequestCapability[0]?.capability!=="verified-original-request-inventory-v1")transferConflict("The exact original request/inventory capability is unavailable.");
+ await tx.execute(sql`select set_config('freeholder.media_transfer_v1','1',true)`);
+ await allowMediaReceiptWrites(tx);
+}
+export async function lockTransferInventory(tx:Tx):Promise<void>{
+ await lockContactIdentityForRead(tx);
+ await requireTransferCapability(tx);
+ await tx.execute(sql`select pg_advisory_xact_lock(1691709,82)`);
+}
+/** All aliases must reach the same immutable terminal receipt. Retired source
+ * PUTs stay live for privacy lineage, but are not counted as physical bytes.
+ * Excluding the in-progress plan prevents adoption from proving itself. */
+async function currentPhysicalKeys(tx:Tx,source:StorageBinding,excludedPlan:string|null=null,ownTargets:readonly(typeof mediaStorageTransferObjects.$inferSelect)[]=[]){
+ const reservations=await tx.select().from(mediaObjects).orderBy(asc(mediaObjects.key)).limit(10_001);
+ const live=await tx.select().from(mediaObjectWrites).where(isNull(mediaObjectWrites.deletedAt)).orderBy(asc(mediaObjectWrites.id)).limit(10_001);
+ if(reservations.length>10_000||live.length>10_000)transferConflict("The complete storage inventory exceeds this bounded transfer. No subset may be adopted.");
+ const targetReceipts=new Map<string,typeof mediaObjectWrites.$inferSelect>();
+ for(const target of ownTargets){if(!target.targetReceiptId)continue;const receipt=live.find(row=>row.id===target.targetReceiptId);if(!receipt||receipt.key!==target.targetKey||receipt.keyDigest!==target.targetKeyDigest||receipt.operation!=="put"||!receipt.originalReservationId)transferConflict("Restore the exact current plan target reservation; equal keys confer no exclusion.");targetReceipts.set(receipt.id,receipt);}
+ const keys=new Set<string>();
+ for(const pointer of reservations){
+  if([...targetReceipts.values()].some(receipt=>receipt.key===pointer.key&&receipt.originalReservationId===pointer.reservationId))continue;
+  const terminal=await originalPhysicalLineage(tx,pointer.key,excludedPlan);
+  if(terminal&&terminal.namespace!==source.namespace)transferConflict("The original alias belongs to a different terminal physical namespace.");
+  keys.add(terminal?.key??pointer.key);
+ }
+ for(const receipt of live){
+  if(targetReceipts.has(receipt.id))continue;
+  const[retirement]=await tx.execute<{retired:boolean}>(sql`select freeholder_media_transfer_source_physically_retired(${receipt.id}::uuid) as retired`);
+  if(retirement?.retired===true)continue;
+  if(receipt.namespace!==source.namespace||receipt.redactedAt||receipt.state!=="accepted"||receipt.operation!=="put")transferConflict("Every original namespace and physical caller must be recovered before a complete transfer.");
+  keys.add(receipt.key);
+ }
+ return[...keys].sort((a,b)=>objectKeyDigest(a)<objectKeyDigest(b)?-1:1);
+}
+export async function originalTransferInventory(tx:Tx,source:StorageBinding){
+ const compactOriginals=await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(and(eq(mediaMultipartResources.namespace,source.namespace),isNotNull(mediaMultipartResources.redactedAt),isNull(mediaMultipartResources.objectReceiptId)));
+ for(const original of compactOriginals)if(!await(await import("./multipart-certificate-coverage")).readOriginalMultipartCertificateCoverage(tx,original.id))transferConflict("Review new evidence or holds on the original upload before transferring this storage namespace.");
+ const keys=await currentPhysicalKeys(tx,source);
+ if(!keys.length)transferConflict("There are no proven original objects to transfer.");
+ for(const key of keys)await lockObjectDigest(tx,objectKeyDigest(key));
+ const multipart=await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(isNull(mediaMultipartResources.retiredAt)).limit(1);
+ if(multipart.length)transferConflict("Finish or recover every original multipart caller before transferring storage.");
+ const objects=[];
+ let receiptBudget=100_000;
+ for(const key of keys){
+  const history=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.keyDigest,objectKeyDigest(key))).orderBy(asc(mediaObjectWrites.id)).limit(receiptBudget+1);
+  if(history.length>receiptBudget)transferConflict("The complete original receipt inventory exceeds the bounded transfer.");
+  receiptBudget-=history.length;
+  const object=originalTransferObject(source,key,history);
+  if(await storageOperationsHeld(tx,history.map(row=>row.contactId)))transferConflict("A named hold preserves an original object or its copies.");
+  for(const id of object.contactIds)await assertOriginalUploadWritable(tx,id,null);
+  const sourceReviews=[];for(const receipt of history.filter(row=>row.operation==="put"&&row.state==="accepted"&&!row.deletedAt)){const proof=await captureSourceReview(tx,receipt);if(proof)sourceReviews.push(proof);}
+  objects.push({...object,sourceReviews});
+ }
+ return objects;
+}
+export async function claimOriginalTransfer(tx:Tx,input:{id:string;requestKey:string;drainId?:string;source:StorageBinding;target:StorageBinding},actor:Actor){
+ await lockTransferInventory(tx);
+ const[prior]=await tx.select().from(mediaStorageTransferPlans).where(eq(mediaStorageTransferPlans.requestKey,input.requestKey)).limit(1).for("update");
+ if(prior){
+  if(prior.sourceDrainId!==(input.drainId??null)||transferDigest(prior.originalSource)!==transferDigest(input.source)||transferDigest(prior.originalTarget)!==transferDigest(input.target))transferConflict("The immutable first transfer claim has different original resources.");
+  return prior;
+ }
+ const[drain]=input.drainId?await tx.select().from(mediaStorageWriterDrains).where(eq(mediaStorageWriterDrains.id,input.drainId)).limit(1).for("update"):[];
+ if(input.drainId&&(!drain||drain.state!=="verified"||drain.namespace!==input.source.namespace||!drain.stopProofDigest||!drain.verifiedAt))transferConflict("The original writer processes need an actual verified stop witness before transfer.");
+ const active=await tx.select({id:mediaStorageTransferPlans.id}).from(mediaStorageTransferPlans).where(inArray(mediaStorageTransferPlans.state,["planned","copying","unknown","verified","adopted","cleanup_pending","blocked"])).limit(1);
+ if(active.length)transferConflict("Finish the existing original transfer before claiming another inventory.");
+ const inventory=await originalTransferInventory(tx,input.source),manifestDigest=transferInventoryDigest(input.source,input.target,inventory);
+ const births=await tx.select().from(mediaObjectWrites).where(inArray(mediaObjectWrites.id,inventory.flatMap(row=>row.receipts.map(receipt=>receipt.id)))).orderBy(asc(mediaObjectWrites.id));
+ const capturedReviews=inventory.flatMap(row=>row.sourceReviews);
+ if(births.some(row=>!row.writerRuntimeId||!row.originalReservationId||!row.writerFinishedAt&&!capturedReviews.some(proof=>proof.receiptId===row.id)))transferConflict("A source needs its actual original tracked birth and finishes or its exact affirmative review. Historical identity cannot be invented by a later stop.");
+ const activeDrains=await tx.select().from(mediaStorageWriterDrains).where(and(eq(mediaStorageWriterDrains.namespace,input.source.namespace),sql`${mediaStorageWriterDrains.state}<>'released'`)).limit(1001);if(activeDrains.length>1000||activeDrains.some(row=>row.id!==input.drainId))transferConflict("Release the actual original recovery drain or explicitly select its verified receipt in this first claim; the original plan cannot be rebound later.");
+ const sourceStopEvidenceDigest=drain?.stopProofDigest??(capturedReviews.length?transferDigest({births:births.map(row=>({id:row.id,runtimeId:row.writerRuntimeId,finishedAt:row.writerFinishedAt})),reviews:capturedReviews}):transferDigest(births.map(row=>({id:row.id,runtimeId:row.writerRuntimeId,finishedAt:row.writerFinishedAt}))));
+ const totalBytes=inventory.reduce((sum,row)=>sum+BigInt(row.bytes),0n);
+ if(totalBytes>BigInt(Number.MAX_SAFE_INTEGER))transferConflict("The complete original inventory exceeds exact byte accounting limits.");
+ const[plan]=await tx.insert(mediaStorageTransferPlans).values({id:input.id,requestKey:input.requestKey,sourceDrainId:drain?.id,originalSource:input.source,originalTarget:input.target,sourceNamespace:input.source.namespace,targetNamespace:input.target.namespace,sourceStopEvidenceDigest,inventoryCount:inventory.length,inventoryBytes:Number(totalBytes),manifestDigest,state:"planned",createdBy:actorString(actor)}).returning();
+ for(const item of inventory){
+  const targetKey=transferTargetKey(plan!.id,item.keyDigest);
+  const[object]=await tx.insert(mediaStorageTransferObjects).values({planId:plan!.id,key:item.key,keyDigest:item.keyDigest,targetKey,targetKeyDigest:objectKeyDigest(targetKey),sha256:item.sha256,bytes:item.bytes,contentType:item.contentType,originalReceiptSetDigest:item.receiptSetDigest,state:"planned"}).returning();
+  const originalRows=await tx.select().from(mediaObjectWrites).where(inArray(mediaObjectWrites.id,item.receipts.map(row=>row.id)));
+  await tx.insert(mediaStorageTransferReceipts).values(item.receipts.map(row=>{const rowSnapshot=originalRows.find(original=>original.id===row.id);if(!rowSnapshot)transferConflict();const sourceReview=item.sourceReviews.find(proof=>proof.receiptId===row.id),snapshot={...rowSnapshot,...(sourceReview?{sourceReview}:{})};return{objectId:object!.id,receiptId:row.id,originalWitnessDigest:row.witnessDigest,originalSnapshot:snapshot,originalSnapshotDigest:transferDigest(snapshot)};}));
+  if(item.contactIds.length)await tx.insert(mediaStorageTransferSubjects).values(item.contactIds.map(contactId=>({objectId:object!.id,contactId})));
+ }
+ return plan!;
+}
+export async function lockedTransfer(tx:Tx,id:string){
+ await lockTransferInventory(tx);
+ const[plan]=await tx.select().from(mediaStorageTransferPlans).where(eq(mediaStorageTransferPlans.id,id)).limit(1).for("update");
+ if(!plan)transferConflict("The immutable original transfer plan is unavailable. Restore its exact backup.");
+ const objects=await tx.select().from(mediaStorageTransferObjects).where(eq(mediaStorageTransferObjects.planId,id)).orderBy(asc(mediaStorageTransferObjects.keyDigest)).for("update");
+ if(objects.length!==plan.inventoryCount)transferConflict("The original transfer membership is incomplete.");
+ for(const object of objects)await lockObjectDigest(tx,object.keyDigest);
+ return{plan,objects};
+}
+export async function assertTransferOwners(tx:Tx,objects:readonly {id:string}[],allowErasure=false):Promise<void>{
+ const subjects=objects.length?await tx.select().from(mediaStorageTransferSubjects).where(inArray(mediaStorageTransferSubjects.objectId,objects.map(row=>row.id))):[];
+ if(await storageOperationsHeld(tx,subjects.length?subjects.map(row=>row.contactId):[null]))transferConflict("A named hold preserves the original transfer and every copy.");
+ if(!allowErasure)for(const subject of subjects){if(!subject.contactId)transferConflict("The original transfer subject was already minimized.");await assertOriginalUploadWritable(tx,subject.contactId,null);}
+}
+export async function assertTransferOriginalMembership(tx:Tx,plan:typeof mediaStorageTransferPlans.$inferSelect,objects:readonly (typeof mediaStorageTransferObjects.$inferSelect)[]):Promise<void>{
+ requireCompleteTransferInventory(objects.map(row=>row.key),await currentPhysicalKeys(tx,plan.originalSource,plan.id,objects));
+ for(const object of objects){
+  const membership=await tx.select().from(mediaStorageTransferReceipts).where(eq(mediaStorageTransferReceipts.objectId,object.id)).orderBy(asc(mediaStorageTransferReceipts.receiptId));
+  const history=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.keyDigest,object.keyDigest)).orderBy(asc(mediaObjectWrites.id));
+  if(history.length!==membership.length||history.some(row=>!membership.some(member=>member.receiptId===row.id)))transferConflict("The complete original receipt membership changed after capture.");
+  const subjects=await tx.select().from(mediaStorageTransferSubjects).where(eq(mediaStorageTransferSubjects.objectId,object.id));
+  for(const row of history){
+   const member=membership.find(value=>value.receiptId===row.id)!;
+   if(transferDigest(member.originalSnapshot)!==member.originalSnapshotDigest)transferConflict("Restore the intact original transfer receipt snapshot.");
+   if(member.originalSnapshot.operation==="put"&&!member.originalSnapshot.deletedAt)await assertCapturedSourceReview(tx,object.id,row.id,member.originalSnapshot);
+   const immutable=(value:Record<string,unknown>)=>Object.fromEntries(Object.entries(value).filter(([key])=>key!=="contactId"&&key!=="sourceReview"));
+   if(transferDigest(immutable({...row}))!==transferDigest(immutable(member.originalSnapshot))||
+    (member.originalSnapshot.contactId===null?row.contactId!==null:!row.contactId||!subjects.some(subject=>subject.contactId===row.contactId)))transferConflict("An original physical fact changed after capture; current ownership alone cannot replace it.");
+  }
+ }
+}
+export async function assertTransferCallDrain(tx:Tx,ids:string[]):Promise<void>{
+ const calls=ids.length?await tx.select().from(mediaStorageTransferCalls).where(inArray(mediaStorageTransferCalls.objectId,ids)):[];
+ requireNoOutstandingTransferCalls(calls);
+ if(!await(await import("./transfer-requests")).transferRequestsDrained(tx,calls.map(row=>row.id)))transferConflict("An original physical provider subrequest remains unresolved.");
+}

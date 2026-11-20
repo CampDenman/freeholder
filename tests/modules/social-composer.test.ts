@@ -6,7 +6,7 @@ import sharp from "sharp";
 import { eq } from "drizzle-orm";
 import { users } from "@/core/auth/schema";
 import { assets } from "@/core/media/schema";
-import { storage } from "@/adapters/storage";
+import { fixtureStorage } from "../helpers/raw-storage";
 import { db } from "@/core/db";
 import { resetEnvForTests } from "@/core/env";
 import { ready } from "@/core/runtime";
@@ -253,7 +253,7 @@ describe.runIf(hasDatabase)("social composer", { timeout: 60_000 }, () => {
       const key = `legacy/${filename}`;
       const body = new Uint8Array(bytes.byteLength);
       body.set(bytes);
-      await storage().put(key, body, "image/png");
+      await fixtureStorage().put(key, body, "image/png");
       const [asset] = await db()
         .insert(assets)
         .values({

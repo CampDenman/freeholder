@@ -14,11 +14,13 @@
 // What this does own is the calendar: which period a subscription is in, when
 // that period ends, and every state it has passed through.
 import { sql } from "drizzle-orm";
+import type { TaxAddress } from "@/adapters/tax/types";
 import type { PublicMerchantSupport } from "@/core/commerce/merchant-identity";
 import {
   bigint,
   boolean,
   check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -32,6 +34,8 @@ import { contacts } from "@/core/contacts/schema";
 import { products, productVariants } from "@/modules/catalog/schema";
 import { invoices, paymentMethods } from "@/modules/invoicing/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
+import { merchantTaxProfiles, merchantTaxProfileVersions } from "@/modules/invoicing/merchant-tax-schema";
+import type { SubscriptionCommercialSnapshot, SubscriptionInitialTaxQuote } from "./merchant-terms-contract";
 
 export const PLAN_INTERVALS = ["day", "week", "month", "year"] as const;
 export const BILLING_MODES = ["provider", "platform", "manual"] as const;
@@ -128,6 +132,8 @@ export const subscriptions = pgTable(
   "subscriptions",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /** Existing agreements stay0; only new rows require the explicit merchant scope. */
+    merchantScopeVersion: integer("merchant_scope_version").notNull().default(1),
     contactId: uuid("contact_id")
       .notNull()
       .references(() => contacts.id, { onDelete: "restrict" }),
@@ -152,11 +158,15 @@ export const subscriptions = pgTable(
      * standing agreement about a price, so it holds its currency the same way.
      */
     currency: text("currency").notNull(),
+    /** NULL is an unknown historical obligation; never copy a later plan fee. */
+    acceptedSetupFeeMinor: bigint("accepted_setup_fee_minor", { mode: "number" }),
+    /** The first actual invoice discharges this one-time billing obligation. */
+    setupFeeInvoiceId: uuid("setup_fee_invoice_id").references(() => invoices.id, { onDelete: "restrict" }),
     /** Copied from the plan, because a plan can be edited and this cannot. */
     billingMode: text("billing_mode", { enum: BILLING_MODES }).notNull(),
     /** Whose schedule this is, when billing mode is `provider`. */
     provider: text("provider"),
-    providerRef: text("provider_ref"),
+    providerRef: text("provider_schedule_ref_v1"),
     /** Stored method used by platform charges and provider schedules. */
     paymentMethodId: uuid("payment_method_id").references(
       () => paymentMethods.id,
@@ -210,6 +220,9 @@ export const subscriptions = pgTable(
     updatedAt: updatedAtColumn(),
   },
   (t) => [
+    check("subscriptions_merchant_scope_version", sql`${t.merchantScopeVersion} in (0,1)`),
+    check("subscriptions_accepted_setup_fee", sql`${t.acceptedSetupFeeMinor} is null or ${t.acceptedSetupFeeMinor} between 0 and 9007199254740991`),
+    check("subscriptions_setup_fee_invoice", sql`${t.setupFeeInvoiceId} is null or ${t.acceptedSetupFeeMinor} is not null`),
     uniqueIndex("subscriptions_public_request_idx").on(t.contactId, t.publicRequestKey).where(sql`${t.publicRequestKey} is not null`),
     index("subscriptions_signup_idx").on(t.signupPending, t.signupInvoiceId),
     index("subscriptions_contact_idx").on(t.contactId),
@@ -258,6 +271,123 @@ export const subscriptionMarketPolicies = pgTable("subscription_market_policies"
   check("subscription_market_policies_fee_bps_check", sql`${t.siteFeeBps} between 0 and 10000`),
   check("subscription_market_policies_hold_days_check", sql`${t.holdDays} between 0 and 365`),
   check("subscription_market_policies_merchant_check", sql`${t.model} <> 'seller_merchant' or (${t.adapter} = 'stripe_connect' and ${t.sellerUserId} is not null and ${t.merchantName} is not null and ${t.providerAccountId} is not null)`),
+]);
+
+/** C12.38: no historical platform identity or buyer destination is inferred. */
+export const subscriptionMerchantScopes = pgTable("subscription_merchant_scopes", {
+  subscriptionId: uuid("subscription_id").primaryKey().references(() => subscriptions.id, { onDelete: "restrict" }),
+  agreementRoutingVersion: integer("agreement_routing_version").notNull().default(1),
+  providerScheduleApiVersion: text("provider_schedule_api_version").notNull().default("2026-10-28.endive"),
+  collectionKind: text("collection_kind", { enum: ["direct", "destination"] }).notNull(),
+  providerPlatformAccountId: text("provider_platform_account_id").notNull(),
+  chargeAccountId: text("charge_account_id"),
+  recipientAccountId: text("recipient_account_id").notNull(),
+  settlementMerchantAccountId: text("settlement_merchant_account_id").notNull(),
+  taxProfileId: uuid("tax_profile_id").notNull().references(() => merchantTaxProfiles.id, { onDelete: "restrict" }),
+  taxProfileVersion: integer("tax_profile_version").notNull(),
+  taxLiability: text("tax_liability", { enum: ["platform", "seller"] }).notNull(),
+  taxDestination: jsonb("tax_destination").$type<TaxAddress>(),
+  redactedAt: timestamp("redacted_at", { withTimezone: true }),
+  createdAt: createdAtColumn(),
+}, t => [
+  check("subscription_merchant_scopes_version", sql`${t.agreementRoutingVersion}=1`),
+  index("subscription_merchant_scopes_tax_profile_idx").on(t.taxProfileId),
+  check("subscription_merchant_scopes_schedule_api", sql`${t.providerScheduleApiVersion}='2026-10-28.endive'`),
+  foreignKey({ name: "subscription_merchant_scopes_tax_version_fk", columns: [t.taxProfileId, t.taxProfileVersion], foreignColumns: [merchantTaxProfileVersions.profileId, merchantTaxProfileVersions.version] }).onDelete("restrict"),
+  check("subscription_merchant_scopes_accounts", sql`${t.providerPlatformAccountId} ~ '^acct_[A-Za-z0-9]+$' and ${t.recipientAccountId} ~ '^acct_[A-Za-z0-9]+$'
+    and ${t.recipientAccountId}<>${t.providerPlatformAccountId} and ${t.settlementMerchantAccountId}=${t.recipientAccountId}
+    and ((${t.collectionKind}='direct' and ${t.chargeAccountId} is not null and ${t.chargeAccountId}=${t.recipientAccountId}) or (${t.collectionKind}='destination' and ${t.chargeAccountId} is null))`),
+  check("subscription_merchant_scopes_tax", sql`(${t.taxProfileVersion}>0 and ${t.taxLiability} in ('platform','seller')
+    and ((${t.taxDestination} is null and ${t.redactedAt} is not null) or (${t.taxDestination} is not null and ${t.redactedAt} is null and jsonb_typeof(${t.taxDestination})='object' and (${t.taxDestination}->>'country') ~ '^[A-Z]{2}$'))) is true`),
+]);
+
+/** Each amendment is a new accepted snapshot; the original charge scope stays
+ * independent and no pre80 agreement receives reconstructed commercial terms. */
+export const subscriptionCommercialTerms = pgTable("subscription_commercial_terms", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  subscriptionId: uuid("subscription_id").notNull().references(() => subscriptions.id, { onDelete: "restrict" }),
+  revision: integer("revision").notNull(),
+  previousTermsId: uuid("previous_terms_id"),
+  snapshot: jsonb("snapshot").$type<SubscriptionCommercialSnapshot>().notNull(),
+  profileId: uuid("profile_id").notNull().references(() => merchantTaxProfiles.id, { onDelete: "restrict" }),
+  profileVersion: integer("profile_version").notNull(),
+  taxLiability: text("tax_liability", { enum: ["platform", "seller"] }).notNull(),
+  taxDestination: jsonb("tax_destination").$type<TaxAddress>(),
+  acceptedQuoteDigest: text("accepted_quote_digest").notNull(),
+  initialTaxQuote: jsonb("initial_tax_quote").$type<SubscriptionInitialTaxQuote>().notNull(),
+  firstPeriodTaxQuote: jsonb("first_period_tax_quote").$type<SubscriptionInitialTaxQuote>().notNull(),
+  renewalTaxQuote: jsonb("renewal_tax_quote").$type<SubscriptionInitialTaxQuote>().notNull(),
+  noticeDigest: text("notice_digest").notNull(),
+  noticeSnapshot: jsonb("notice_snapshot").$type<{ locale: "en" | "es" | "fr" | "ar"; text: string }>().notNull(),
+  quoteOccurredAt: timestamp("quote_occurred_at", { withTimezone: true }).notNull(),
+  effectivePeriodStart: timestamp("effective_period_start", { withTimezone: true }).notNull(),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }).notNull(),
+  acceptanceSource: text("acceptance_source", { enum: ["public_join", "owner_subscription", "amendment"] }).notNull(),
+  redactedAt: timestamp("redacted_at", { withTimezone: true }),
+  createdAt: createdAtColumn(),
+}, t => [
+  uniqueIndex("subscription_commercial_terms_revision").on(t.subscriptionId, t.revision),
+  index("subscription_commercial_terms_profile").on(t.profileId),
+  foreignKey({ name: "subscription_commercial_terms_profile_version_fk", columns: [t.profileId, t.profileVersion], foreignColumns: [merchantTaxProfileVersions.profileId, merchantTaxProfileVersions.version] }).onDelete("restrict"),
+  foreignKey({ name: "subscription_commercial_terms_previous_fk", columns: [t.previousTermsId], foreignColumns: [t.id] }).onDelete("restrict"),
+  check("subscription_commercial_terms_revision_check", sql`${t.revision}>0 and ((${t.revision}=1 and ${t.previousTermsId} is null) or (${t.revision}>1 and ${t.previousTermsId} is not null))`),
+  check("subscription_commercial_terms_acceptance", sql`${t.acceptanceSource} in ('public_join','owner_subscription','amendment') and ${t.acceptedQuoteDigest} ~ '^[a-f0-9]{64}$' and ${t.noticeDigest} ~ '^[a-f0-9]{64}$'`),
+  check("subscription_commercial_terms_tax", sql`(${t.profileVersion}>0 and ${t.taxLiability} in ('platform','seller') and ((${t.taxDestination} is null and ${t.redactedAt} is not null) or (${t.taxDestination} is not null and ${t.redactedAt} is null and jsonb_typeof(${t.taxDestination})='object' and (${t.taxDestination}->>'country') ~ '^[A-Z]{2}$'))) is true`),
+]);
+
+/** Authenticated positive scheduled money survives later invoice/fee reconciliation. */
+export const subscriptionProviderChargeReceipts = pgTable("subscription_provider_charge_receipts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  subscriptionId: uuid("subscription_id").notNull().references(() => subscriptionMerchantScopes.subscriptionId, { onDelete: "restrict" }),
+  providerPlatformAccountId: text("provider_platform_account_id").notNull(),
+  chargeAccountId: text("charge_account_id"),
+  providerSubscriptionRef: text("provider_subscription_ref").notNull(),
+  providerApiVersion: text("provider_api_version").notNull().default("2026-10-28.endive"),
+  providerInvoiceRef: text("provider_invoice_ref").notNull(),
+  providerPaymentIntentRef: text("provider_payment_intent_ref").notNull(),
+  providerChargeRef: text("provider_charge_ref"),
+  amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
+  currency: text("currency").notNull(),
+  applicationFeeRef: text("application_fee_ref"),
+  observedApplicationFeeMinor: bigint("observed_application_fee_minor", { mode: "number" }),
+  observedApplicationFeeCurrency: text("observed_application_fee_currency"),
+  actualDestinationAccountId: text("actual_destination_account_id"),
+  actualSettlementMerchantAccountId: text("actual_settlement_merchant_account_id"),
+  merchantRouteVerified: boolean("merchant_route_verified").notNull().default(false),
+  customerChargeVerified: boolean("customer_charge_verified").notNull().default(false),
+  createdAt: createdAtColumn(),
+}, t => [
+  uniqueIndex("subscription_provider_charge_receipts_intent").on(t.providerPlatformAccountId, sql`coalesce(${t.chargeAccountId},'')`, t.providerPaymentIntentRef),
+  index("subscription_provider_charge_receipts_agreement").on(t.subscriptionId),
+  check("subscription_provider_charge_receipts_money", sql`${t.amountMinor} between 1 and 9007199254740991 and ${t.currency} ~ '^[A-Z]{3}$'
+    and (${t.observedApplicationFeeMinor} is null or ${t.observedApplicationFeeMinor} between 0 and 9007199254740991)
+    and (${t.observedApplicationFeeCurrency} is null or ${t.observedApplicationFeeCurrency} ~ '^[A-Z]{3}$')`),
+  check("subscription_provider_charge_receipts_api", sql`${t.providerApiVersion}='2026-10-28.endive'`),
+]);
+
+/** Later authenticated contradictions are durable debt, never overwritten cash. */
+export const subscriptionProviderChargeObservations = pgTable("subscription_provider_charge_observations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  subscriptionId: uuid("subscription_id").notNull().references(() => subscriptionMerchantScopes.subscriptionId, { onDelete: "restrict" }),
+  providerPlatformAccountId: text("provider_platform_account_id").notNull(),
+  chargeAccountId: text("charge_account_id"),
+  providerApiVersion: text("provider_api_version").notNull(),
+  providerSubscriptionRef: text("provider_subscription_ref").notNull(),
+  providerInvoiceRef: text("provider_invoice_ref").notNull(),
+  providerPaymentIntentRef: text("provider_payment_intent_ref").notNull(),
+  providerChargeRef: text("provider_charge_ref"),
+  amountMinor: bigint("amount_minor", { mode: "number" }).notNull(), currency: text("currency").notNull(),
+  actualDestinationAccountId: text("actual_destination_account_id"),
+  actualSettlementMerchantAccountId: text("actual_settlement_merchant_account_id"),
+  merchantRouteVerified: boolean("merchant_route_verified").notNull(),
+  customerChargeVerified: boolean("customer_charge_verified").notNull(),
+  observationDigest: text("observation_digest").notNull(),
+  createdAt: createdAtColumn(),
+}, t => [
+  uniqueIndex("subscription_charge_observations_fact").on(t.subscriptionId, t.observationDigest),
+  index("subscription_charge_observations_intent").on(t.providerPlatformAccountId, t.providerPaymentIntentRef),
+  check("subscription_charge_observations_money", sql`${t.amountMinor} between 1 and 9007199254740991 and ${t.currency} ~ '^[A-Z]{3}$'`),
+  check("subscription_charge_observations_digest", sql`${t.observationDigest} ~ '^[a-f0-9]{64}$'`),
 ]);
 
 export const subscriptionEvents = pgTable(
@@ -327,6 +457,7 @@ export const subscriptionCardSetups = pgTable("subscription_card_setups", {
   subscriptionId:uuid("subscription_id").notNull().references(()=>subscriptions.id,{onDelete:"cascade"}),
   provider:text("provider").notNull(),
   providerAccountId:text("provider_account_id").notNull().default(""),
+ providerPlatformAccountId:text("provider_platform_account_id"),
   request:jsonb("request").$type<Record<string,unknown>>().notNull(),
   requestHash:text("request_hash").notNull(),
   providerCheckoutRef:text("provider_checkout_ref"),
@@ -345,7 +476,7 @@ export const subscriptionCardSetups = pgTable("subscription_card_setups", {
   createdAt:createdAtColumn(),
 },t=>[
   uniqueIndex("subscription_card_setups_pending_idx").on(t.subscriptionId).where(sql`${t.confirmedAt} is null and ${t.closedAt} is null`),
-  uniqueIndex("subscription_card_setups_checkout_idx").on(t.provider,t.providerAccountId,t.providerCheckoutRef),
+  uniqueIndex("subscription_card_setups_checkout_idx").on(t.provider,sql`coalesce(${t.providerPlatformAccountId},'')`,t.providerAccountId,t.providerCheckoutRef),
   check("subscription_card_setups_provider_check",sql`length(trim(${t.provider})) between 1 and 100`),
   check("subscription_card_setups_account_check",sql`${t.providerAccountId}='' or (${t.provider}='stripe' and ${t.providerAccountId} ~ '^acct_[A-Za-z0-9]+$')`),
   check("subscription_card_setups_request_check",sql`jsonb_typeof(${t.request})='object' and length(${t.requestHash})=64`),

@@ -56,9 +56,10 @@ export async function prepareLaunch({ directory = process.cwd(), target = "repli
   const siteOrigin = publicOrigin(url ?? values.APP_URL ?? inferred ?? "http://localhost:3000");
   values.APP_URL = siteOrigin;
   // C3.44: Docker keeps media on the recipe's volume unless the owner chose
-  // S3 (FREEHOLDER_STORAGE=s3 or an S3 bucket supplied).
+  // an object store (an explicit Spaces choice or an S3 bucket supplied).
+  const spacesChosen = values.FREEHOLDER_STORAGE === "spaces";
   const s3Chosen = values.FREEHOLDER_STORAGE === "s3" || Boolean(values.S3_BUCKET);
-  values.FREEHOLDER_STORAGE = target === "replit" ? "replit" : s3Chosen ? "s3" : "local";
+  values.FREEHOLDER_STORAGE = target === "replit" ? "replit" : spacesChosen ? "spaces" : s3Chosen ? "s3" : "local";
   values.FREEHOLDER_SEED_DEMO ??= "0";
   const publicHttps = new URL(siteOrigin).protocol === "https:";
   // The HTTPS Compose file's Caddy requests a certificate for this name.
@@ -76,7 +77,7 @@ export async function prepareLaunch({ directory = process.cwd(), target = "repli
   const claimPath = join(privateDirectory, "claim-link.txt"); await regularFile(claimPath);
   await writeFile(claimPath, `${siteOrigin}/setup#claim=${encodeURIComponent(values.BOOTSTRAP_SECRET)}\n`, { mode: 0o600 }); await chmod(claimPath, 0o600);
   // Compose runs PostgreSQL and builds DATABASE_URL from POSTGRES_PASSWORD itself.
-  const required = target === "replit" ? ["DATABASE_URL", "REPLIT_BUCKET_ID"] : values.FREEHOLDER_STORAGE === "s3" ? ["S3_ENDPOINT", "S3_REGION", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"] : [];
+  const required = target === "replit" ? ["DATABASE_URL", "REPLIT_BUCKET_ID"] : values.FREEHOLDER_STORAGE === "spaces" ? ["S3_REGION", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"] : values.FREEHOLDER_STORAGE === "s3" ? ["S3_ENDPOINT", "S3_REGION", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"] : [];
   const composeFile = `deploy/docker-selfhost/infra/${publicHttps ? "compose.https.yml" : "compose.yml"}`;
   const startCommand = recipeStat ? `docker compose --env-file deploy/docker-selfhost/.env -f ${composeFile} up -d` : undefined;
   const missing = required.filter(name => !values[name]);
@@ -86,7 +87,7 @@ export async function prepareLaunch({ directory = process.cwd(), target = "repli
     ...(docker && startCommand ? { composeFile, startCommand } : {}),
     setupUrl: `${siteOrigin}/setup`, mcpUrl: `${siteOrigin}/api/mcp`,
     next: target === "replit" ? ["Provision Replit PostgreSQL and Object Storage using Replit Agent.", "Import the private .env into Replit Secrets; preserve these same secrets in the Deployment.", "Set APP_URL to the published HTTPS URL and rerun preparation with --url.", "Run pnpm start:replit for development; publish using the checked-in Deployment configuration.", "Open the private claim link yourself, create a passkey, and connect your assistant in /admin/connect."] : [
-      values.FREEHOLDER_STORAGE === "s3" ? "Put the S3 bucket values in the private .env. Compose runs PostgreSQL itself." : "Media stays on the recipe's Docker volume and is in the nightly backup; for S3 instead, set FREEHOLDER_STORAGE=s3 and the S3_* values and rerun. Compose runs PostgreSQL itself.",
+      ["s3", "spaces"].includes(values.FREEHOLDER_STORAGE) ? "Put the object-storage bucket values in the private .env. Compose runs PostgreSQL itself." : "Media stays on the recipe's Docker volume and is in the nightly backup; for Spaces or another S3-compatible store, set FREEHOLDER_STORAGE=spaces or s3 and the S3_* values and rerun. Compose runs PostgreSQL itself.",
       publicHttps ? `Point ${new URL(siteOrigin).hostname}'s DNS A record at this server and open ports 80 and 443; Caddy obtains the certificate itself.` : "This serves plain HTTP for local use. For a public site, rerun with --url https://YOUR-DOMAIN to use the HTTPS Compose file; passkeys need HTTPS.",
       startCommand ? `Start it from the repository root: ${startCommand}` : "Start it with deploy/docker-selfhost/README.md.",
       "Open the private claim link yourself, create a passkey, and issue your assistant's key in /admin/connect.",

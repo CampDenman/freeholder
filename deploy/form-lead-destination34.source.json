@@ -1,0 +1,40 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "form_lead_destination34.v1",
+  "checklist": ["C3.34"],
+  "status": "Original-destination source boundary verified with real PostgreSQL services and intercepted provider HTTP; live Paradise Modern acceptance remains open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "9a1f9402c0949eb0543c8dee995eaa56e8449b0c394cb154bc4481db286d02f1" },
+    { "path": "tests/core/form-screening-lead-sink.test.ts", "sha256": "276bc4b4b11560860d82b6b9d80e109ee6003e476422d4097cc148f2da75d9a2" },
+    { "path": "src/modules/forms/lead-sink.ts", "sha256": "cce709dc2e5b29b56d4561312a33e9ba76e07d2b90e139dc4890c60dcb460070" },
+    { "path": "src/modules/forms/lead-copy-state.ts", "sha256": "ff780ce8df1830949be1608262767fd0ee32d7905221646d315e6fbafdfb040f" }
+  ],
+  "controls": {
+    "baselineFreshDatabase": { "database": "lead_destination_20261115", "passed": 49, "failed": 0 },
+    "acceptedLegacyRegression": { "database": "lead_legacy_20261115", "passed": true, "providerCalls": 0 },
+    "focusedFinalFreshDatabase": { "database": "lead_boundary_final_20261115", "passed": 5, "failed": 0, "intentionallySkipped": 44 },
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "independentStaticAudit": "no new reachable defect in requested scope"
+  },
+  "preservedFailures": [
+    { "database": "lead_legacy_20261115", "behavioralFailures": 0, "setupStatementTimeouts": 2 },
+    { "database": "lead_legacy_retry_20261115", "commandDeadlineSeconds": 300, "reachedTests": false },
+    { "database": "lead_legacy_final_20261115", "behavioralFailures": 0, "setupStatementTimeouts": 1, "passed": 49 }
+  ],
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "9a1f9402c0949eb0543c8dee995eaa56e8449b0c394cb154bc4481db286d02f1",
+      "beforeSha256": "a7c1ce48988c7474ae23f68d8b1c3befe80db68bf02cdb6bb03c4c730f158fdb",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  *(Credential-binding follow-up, 2026-11-12: protected CodeQL identified an\n",
+          "after": "  *(Destination-boundary re-audit, 2026-11-15: the original account/key checks\n  and frozen request precede provider I/O. A fresh migration93 database passed\n  the existing 49 form/intake controls. The added accepted legacy-event control\n  proves that an enquiry with no original notice or destination cannot use a\n  replacement account or create a lead-copy witness. A fresh focused run passed\n  all five original-delivery, legacy-refusal, origin/key-replacement and\n  unknown-outcome controls. Two complete reruns also passed every product\n  assertion they reached; three setup-only failures were the unchanged 25-second\n  full-schema reset timing out under disk-sync load, not behavioral failures.\n  TypeScript, focused lint and an independent static audit found no new defect.\n  See `deploy/form-lead-destination34.source.json`. This supplies no live\n  provider acceptance; C3.34 remains unchecked.)*\n  *(Credential-binding follow-up, 2026-11-12: protected CodeQL identified an\n",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

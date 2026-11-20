@@ -1,0 +1,38 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_storage_transfer_lifecycle.v1",
+  "checklist": ["C1.12", "C1.08", "C11.08"],
+  "status": "Main durable verified storage-transfer lifecycle qualified on fresh migration108 PostgreSQL and fictional TCP storage; provider/ingress acceptance remains open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "bb107bf648ebd6b7a012a34d4cea106afd0ed1da3d99649c147eda8cdd5484f2" },
+    { "path": "src/core/jobs/core-jobs.ts", "sha256": "d42da88a0532366e6c6ee0add02f7a075a10e9352a5f918d42b4fdabf4964029" },
+    { "path": "tests/core/media-storage-transfer-lifecycle.test.ts", "sha256": "6f7f3fd58f303d0085a78b3d036848d2dd3995666a72b10b20190cbcfd17f49d" },
+    { "path": "tests/helpers/media-transfer-provider.ts", "sha256": "3c55c2cddd47c69c749d2b6781c571ad920227fe4d44a6cdef32fef254494de8" },
+    { "path": ".changeset/transfer-job-registration.md", "sha256": "5902fc04fa7ca514cd2c9615033a3ecd2305292ff7d91fcb50e668e68678b4f1" }
+  ],
+  "controls": {
+    "before": { "passed": 4, "failed": 5, "defects": ["fixture lacked inventory XML", "fixture lacked original request proof on later reads", "paused case timed out beneath fixture failures"] },
+    "registrationDefect": "advanceMediaStorageTransfer, eraseMediaStorageTransfer and reconcileMediaStorageTransfer were declared after the default core list and omitted from normal boot",
+    "final": { "database": "media_storage_transfer_lifecycle_20261116", "passed": 9, "failed": 0, "durationSeconds": 63.65 },
+    "registryCoverage": ["core.advanceMediaStorageTransfer", "core.eraseMediaStorageTransfer", "core.reconcileMediaStorageTransfer"],
+    "coverage": ["exact copy/adopt/conditional retire without erasing original lineage", "incomplete inventory and occupied target refused", "unknown target PUT never replayed or adopted", "immutable first capture and denied principals", "verified erasure blocks new copy", "named hold preserves both physical copies", "admitted TCP PUT keeps erasure pending and retains later ACK", "both physical copies retired while unrelated original and queued acknowledgement remain"],
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "bb107bf648ebd6b7a012a34d4cea106afd0ed1da3d99649c147eda8cdd5484f2",
+      "beforeSha256": "1c264eda33aec71b8c5555ff1a71b78d62e7b355b4c14fc9278a4e592c7a9a96",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  No provider account, process stop or C-item acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  No provider account, process stop or C-item acceptance follows.\n  Main storage-transfer qualification2026-11-16: the synthetic fixture now serves\n  bounded inventory XML and original request proof while preserving its target\n  pause/lost-reply behavior. Three transfer jobs declared after the old core list\n  were genuinely unregistered; normal boot now includes advance, erase and late-\n  fact reconciliation, with explicit registry assertions. Fresh108 passes9/9 in\n  63.65s, including conditional retirement, privacy holds and admitted-PUT debt.\n  Full TypeScript/focused lint pass. See\n  `deploy/media-storage-transfer-lifecycle.source.json`. No provider account,\n  ingress or C-item acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

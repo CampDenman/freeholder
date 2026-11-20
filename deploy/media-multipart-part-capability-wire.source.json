@@ -1,0 +1,33 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_multipart_part_capability_wire.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Original per-part local capability wire contract passes with actual SigV4; app authorization and provider acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "8b1e268524c925cc16ede47c630579d38084d695fc88fa86c3a865cb2868118b" },
+    { "path": "tests/core/media-multipart-part-capability-wire.test.ts", "sha256": "be4ed1f415e8e0b33db0c8a105972c8905b3c6259e067714e8c299725a580f67" }
+  ],
+  "controls": {
+    "final": { "passed": 10, "failed": 0, "durationSeconds": 0.75 },
+    "coverage": ["actual allHeaders SigV4 binds exact session/part/size/checksum/public nonce", "capability proof retains digests without raw server-held token", "bounded deadline with no provider network call", "missing original identity refused before signer", "invalid declarations and changed signer key/session/part/host refused", "old signature missing required headers refused", "returned header mutation refused", "actual mint fact survives retention failure without retry"],
+    "runtimeChanges": false,
+    "actualProviderAcceptance": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "8b1e268524c925cc16ede47c630579d38084d695fc88fa86c3a865cb2868118b",
+      "beforeSha256": "bf699f793395895eebb21df720fe686e2985667fc968b0c2d7a20c5eaaa9ec4b",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  passes. See `deploy/media-multipart-complete-wire.source.json`. No real auth,\n  provider account or terminal caller-consumption acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  passes. See `deploy/media-multipart-complete-wire.source.json`. No real auth,\n  provider account or terminal caller-consumption acceptance follows.\n  Part-capability wire qualification2026-11-16: all10 actual SigV4 controls pass.\n  Signed URLs bind exact session/part/size/checksum/public nonce; raw server-held\n  tokens stay out of responses and durable facts; no network call or provider ACK\n  is invented. Missing identity, altered signer output, excessive deadlines and\n  retention failure preserve the original boundary. Focused lint passes. See\n  `deploy/media-multipart-part-capability-wire.source.json`. No app authorization\n  or provider acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

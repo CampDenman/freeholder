@@ -10,6 +10,8 @@ import { requireStaffActor } from "../../guard";
 import { listImports } from "@/core/import/service";
 import { ImportStepForms } from "../ImportForms";
 import { GraphImportControls } from "../GraphImportControls";
+import { CrawlImportControls } from "../CrawlImportControls";
+import { crawlProgress } from "@/core/import/crawl-query";
 import { sourceGraphReview } from "@/core/import/graph-query";
 import { readerOwnershipReview } from "@/core/import/reader-ownership-review";
 import { listContacts } from "@/core/contacts/service";
@@ -34,6 +36,7 @@ export default async function ImportRunPage({
   const counts = run.counts && typeof run.counts === "object" ? (run.counts as Record<string, unknown>) : {};
   const checkpoint = run.checkpoint && typeof run.checkpoint === "object" ? run.checkpoint as Record<string, unknown> : {};
   const search = await searchParams;
+  const crawl = checkpoint.sourceCrawl ? await crawlProgress.call({ id }, actor) : null;
   const readers = actor.kind === "user" && actor.role === "owner" && ["wordpress-wxr", "wordpress-rest"].includes(run.kind ?? "") ? await readerOwnershipReview.call({ id, after: typeof search.readersAfter === "string" && search.readersAfter.length <= 260 ? search.readersAfter : "" }, actor) : null;
   const readerContacts = readers?.rows.length ? await listContacts.call({ search: typeof search.readerContact === "string" ? search.readerContact.slice(0, 200) : undefined, limit: 50 }, actor) : null;
   const after = z.coerce.number().int().min(-1).max(9_999).safeParse(search.after ?? -1);
@@ -114,10 +117,11 @@ export default async function ImportRunPage({
       <Card>
         <CardHeader title={t("imports.progress")} />
         <CardBody>
-          {graph ? <GraphImportControls id={id} status={run.status} sourceKind={run.kind ?? "html"} version={graph.version} upload={graph.upload} indexComplete={graph.indexComplete} planFrozen={graph.planFrozen} planReady={graph.planReady} invalidated={graph.invalidated} labels={{
+          {crawl ? <CrawlImportControls id={id} progress={crawl} owner={actor.kind === "user" && actor.role === "owner" && !actor.keyId} labels={{ intro: t("imports.live.intro"), advance: t("imports.resume.index"), pause: t("imports.resume.pause"), working: t("imports.resume.working"), saved: t("imports.resume.saved"), failed: t("imports.resume.failed"), stop: t("imports.live.stop"), stopped: t("imports.live.stopped"), expired: t("imports.live.expired"), recovery: t("imports.live.recovery"), cleanup: t("imports.live.cleanup"), requests: t("imports.count.crawlRequests"), pages: t("imports.count.pagesStaged"), indexed: t("imports.resume.entries"), pending: t("imports.live.pending"), bytes: t("imports.count.crawlBytes"), origin: t("imports.origin"), url: t("imports.pageUrl"), restartIntro: t("imports.live.restartIntro"), restart: t("imports.live.restart"), confirmRestart: t("imports.live.confirmRestart"), verifyOriginal: t("imports.live.verifyOriginal"), confirmOriginal: t("imports.live.confirmOriginal"), storageRecovery: t("imports.live.storageRecovery"), freshVerification: t("imports.live.freshVerification") }} /> : null}
+          {graph && (!crawl || crawl.planReady) ? <GraphImportControls liveSource={crawl !== null} id={id} status={run.status} sourceKind={run.kind ?? "html"} version={graph.version} upload={graph.upload} indexComplete={graph.indexComplete} planFrozen={graph.planFrozen} planReady={graph.planReady} invalidated={graph.invalidated} labels={{
             intro: t("imports.resume.intro"), index: t("imports.resume.index"), commit: t("imports.resume.commit"), pause: t("imports.resume.pause"), working: t("imports.resume.working"), failed: t("imports.resume.failed"), saved: t("imports.resume.saved"), restoreHint: t("imports.resume.restoreHint"), limits: t("imports.resume.limits"), reviewHint: t("imports.resume.reviewHint"),
             review: t("imports.review"), slug: t("imports.slug"), slugHint: t("cms.field.slugHint"), keep: t("imports.keepExisting"), replace: t("imports.replace"), rename: t("imports.rename"), renamedSlug: t("imports.renamedSlug"), reconcile: t("imports.reconcile"), publish: t("imports.publish"), rollback: t("imports.rollback"), upload: t("imports.upload"), uploadHint: t("imports.uploadHint"), stage: t("imports.stage"), uploading: t("imports.uploading"), readingSource: t("imports.readingSource"), uploadFailed: t("imports.uploadFailed"),
-          }} /> : <ImportStepForms
+          }} /> : !crawl ? <ImportStepForms
             id={run.id}
             status={run.status}
             sourceKind={run.kind ?? "html"}
@@ -152,7 +156,7 @@ export default async function ImportRunPage({
               crawlHint: t("imports.crawlHint"),
               crawling: t("imports.crawling"),
             }}
-          />}
+          /> : null}
         </CardBody>
       </Card>
       {graph ? <Card><CardHeader title={t("imports.resume.title")} /><CardBody>

@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { AwsClient } from "aws4fetch";
+import {createS3TransferProtocol,createReplitTransferProtocol,readS3ObjectBody,readReplitObjectBody,requireS3ConditionalAuthority,establishS3ConditionalAuthority} from "./media-transfer-protocol.mjs";
 
 function argument(name, fallback) {
   const index = process.argv.indexOf(`--${name}`);
@@ -36,6 +37,7 @@ function checkedRevision(revision, key, binding, kind) {
   if (kind === "etag" ? !/^"[\x21\x23-\x7e\x80-\xff]+"$/.test(revision.value) : !/^[1-9][0-9]{0,19}$/.test(revision.value)) {
     throw new Error("The original storage revision is unavailable or invalid.");
   }
+  if(revision.versionId!==undefined&&(kind!=="etag"||typeof revision.versionId!=="string"||!revision.versionId||revision.versionId.length>4096||/[\u0000-\u001f\u007f]/.test(revision.versionId)))throw new Error("The exact original version identifier is invalid.");
   return revision.value;
 }
 
@@ -89,27 +91,37 @@ export function createS3Store(environment, prefix, { allowInsecureHttp = false, 
   const binding = transferBinding("s3", { endpoint, bucket });
   return {
     binding,
+    // Authority is established here too, not only in src/adapters/storage/s3.ts.
+    // This store serves the original-request and transfer paths -- which is how
+    // media retirement reaches the protocol -- and without it every non-AWS
+    // endpoint refused its own recorded delete with `conditional_unproven`
+    // after the write had already been authorised elsewhere.
+    accounted(observer){return createS3TransferProtocol({client,url,binding,observer,authority:establishS3ConditionalAuthority({client,url,endpoint,bucket})});},
     async readVersioned(key) {
       const response = await client.fetch(url(key), { redirect: "error", headers: { "accept-encoding": "identity" } });
       if (response.status === 404) return undefined;
       if (!response.ok) throw new Error(`${prefix}: versioned source read failed (${response.status}).`);
-      const revision = { kind: "etag", key, namespace: binding.namespace, value: response.headers.get("etag") };
+      const versionId=response.headers.get("x-amz-version-id")??undefined;
+      const revision = { kind: "etag", key, namespace: binding.namespace, value: response.headers.get("etag"), ...(versionId!==undefined?{versionId}:{}) };
       checkedRevision(revision, key, binding, "etag");
-      const body = new Uint8Array(await response.arrayBuffer());
+      const body = await readS3ObjectBody(response);
       return { body, contentType: response.headers.get("content-type") ?? "application/octet-stream", revision };
     },
     async deleteVersioned(key, revision) {
       const value = checkedRevision(revision, key, binding, "etag");
-      const response = await client.fetch(url(key), { method: "DELETE", redirect: "error", headers: { "if-match": value } });
+      requireS3ConditionalAuthority(binding,url,key,revision.versionId);
+      const target=new URL(url(key));if(revision.versionId!==undefined)target.searchParams.set("versionId",revision.versionId);
+      const response = await client.fetch(target, { method: "DELETE", redirect: "error", headers: { "if-match": value } });
       if (!response.ok) throw new Error(`${prefix}: conditional source deletion failed (${response.status}).`);
     },
     async get(key) {
       const response = await client.fetch(url(key), { redirect: "error" });
       if (response.status === 404) return undefined;
       if (!response.ok) throw new Error(`${prefix}: GET ${key} failed (${response.status}).`);
-      return new Uint8Array(await response.arrayBuffer());
+      return readS3ObjectBody(response);
     },
     async put(key, bytes, contentType) {
+      requireS3ConditionalAuthority(binding,url,key);
       const response = await client.fetch(url(key), {
         method: "PUT",
         redirect: "error",
@@ -129,9 +141,6 @@ export async function createReplitStore(environment, prefix) {
   };
   requireOriginalEndpoint();
   const bucketId = required(environment, `${prefix}_REPLIT_BUCKET_ID`);
-  const { Client } = await import("@replit/object-storage");
-  requireOriginalEndpoint();
-  const client = new Client({ bucketId });
   let writableBucket;
   const destination = () => (writableBucket ??= (async () => {
     // Pinned @replit/object-storage 1.0.0 uses this same official Google
@@ -141,7 +150,7 @@ export async function createReplitStore(environment, prefix) {
     // or default bucket may replace this explicit original resource.
     const { Storage } = await import("@google-cloud/storage");
     requireOriginalEndpoint();
-    const google = new Storage({ projectId: "", retryOptions: { autoRetry: false }, credentials: {
+    const google = new Storage({ projectId: "", retryOptions: { autoRetry: false, maxRetries: 0 }, credentials: {
       audience: "replit", subject_token_type: "access_token", type: "external_account",
       token_url: "http://127.0.0.1:1106/token", universe_domain: "googleapis.com",
       credential_source: { url: "http://127.0.0.1:1106/credential", format: { type: "json", subject_token_field_name: "access_token" } },
@@ -151,6 +160,7 @@ export async function createReplitStore(environment, prefix) {
   const binding = transferBinding("replit", { bucket: bucketId });
   return {
     binding,
+    accounted(observer){return createReplitTransferProtocol({destination,binding,requireOriginalEndpoint,observer});},
     async readVersioned(key) {
       validateObjectKey(key);
       const bucket = await destination();
@@ -163,40 +173,35 @@ export async function createReplitStore(environment, prefix) {
       }
       const revision = { kind: "generation", key, namespace: binding.namespace, value: String(metadata?.generation ?? "") };
       checkedRevision(revision, key, binding, "generation");
+      const expected=Number(metadata?.size);if(!Number.isSafeInteger(expected)||expected<0)throw new Error(`${prefix}: original generation size changed.`);
       // The body belongs to this exact generation, even if the live key changes.
       // A later body-read failure is never reinterpreted as current absence.
       let body;
-      try { [body] = await bucket.file(key, { generation: revision.value }).download({ validation: false }); }
+      try { body = await readReplitObjectBody(bucket.file(key, { generation: revision.value }),expected); }
       catch (error) {
         const code = error && typeof error === "object" && "code" in error ? error.code : "unclassified";
         throw new Error(`${prefix}: original generation body read failed (${code}).`);
       }
-      if (!Number.isSafeInteger(Number(metadata?.size)) || Number(metadata.size) !== body.byteLength) throw new Error(`${prefix}: original generation size changed.`);
-      return { body: new Uint8Array(body), contentType: metadata.contentType ?? "application/octet-stream", revision };
+      if (expected !== body.byteLength) throw new Error(`${prefix}: original generation size changed.`);
+      return { body, contentType: metadata.contentType ?? "application/octet-stream", revision };
     },
     async deleteVersioned(key, revision) {
       const value = checkedRevision(revision, key, binding, "generation");
-      try { await (await destination()).file(key).delete({ ifGenerationMatch: value }); }
+      try { await (await destination()).file(key,{generation:value}).delete({ ifGenerationMatch: value }); }
       catch (error) {
         const code = error && typeof error === "object" && "code" in error ? error.code : "unclassified";
         throw new Error(`${prefix}: conditional source deletion failed (${code}).`);
       }
     },
     async get(key) {
-      const result = await client.downloadAsBytes(key);
-      if (!result.ok) {
-        if (result.error?.statusCode === 404) return undefined;
-        throw new Error(`${prefix}: GET ${key} failed (${result.error?.statusCode ?? "unclassified"}).`);
-      }
-      if (!result.value) throw new Error(`${prefix}: GET ${key} omitted its successful result.`);
-      return new Uint8Array(Buffer.concat(result.value));
+      return (await this.readVersioned(key))?.body;
     },
     async put(key, bytes, contentType) {
       try {
         // The SDK's checksum-error cleanup deletes by name without a
         // generation constraint. Never give it that authority: our caller
         // verifies the complete original and target SHA-256 independently.
-        await (await destination()).file(key).save(Buffer.from(bytes), { validation: false, preconditionOpts: { ifGenerationMatch: 0 }, metadata: { contentType } });
+        await (await destination()).file(key).save(Buffer.from(bytes), { resumable:false,validation: false, preconditionOpts: { ifGenerationMatch: 0 }, metadata: { contentType } });
       } catch (error) {
         const code = error && typeof error === "object" && "code" in error ? error.code : "unclassified";
         throw new Error(`${prefix}: create-only PUT ${key} failed (${code}).`);
@@ -300,10 +305,8 @@ async function main() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  try {
-    await main();
-  } catch (error) {
+  void main().catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
-  }
+  });
 }

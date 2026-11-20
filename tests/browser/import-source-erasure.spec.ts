@@ -7,6 +7,7 @@ import { expect, test } from "@playwright/test";
 import { eq } from "drizzle-orm";
 import { db, closeDb } from "@/core/db";
 import { contacts } from "@/core/contacts/schema";
+import { lockContactIdentity } from "@/core/contacts/identity-lock";
 import { dataRequests, dataRequestArtifacts } from "@/core/privacy/schema";
 import { importRuns } from "@/core/plugins/schema";
 import { auditLog } from "@/core/events/schema";
@@ -26,7 +27,10 @@ test.describe("original import-file erasure feedback", () => {
       const [run] = await db().insert(importRuns).values({ source: "https://source.example", origin: "https://source.example", kind: "wordpress-wxr", createdBy: `user:${C11_OWNER.userId}` }).returning();
       const uploadId = randomUUID();
       await db().update(importRuns).set({ checkpoint: { sourceUpload: { uploadId, filename: "source.xml", bytes: 1024, chunkBytes: 4 * 1024 * 1024, chunks: 1, received: [], digests: {}, keyPrefix: `imports/${run!.id}/${uploadId}`, createdBy: `user:${C11_OWNER.userId}`, expiresAt: new Date(Date.now() + 86_400_000).toISOString() } } }).where(eq(importRuns.id, run!.id));
-      const [request] = await db().insert(dataRequests).values({ contactId: contact!.id, kind: "erasure", status: "verified", requestedBy: `user:${C11_OWNER.userId}`, details: { kind: "erasure" }, verifiedAt: new Date(), responseDueAt: new Date(Date.now() + 86_400_000) }).returning();
+      const [request] = await db().transaction(async tx => {
+        await lockContactIdentity(tx);
+        return tx.insert(dataRequests).values({ contactId: contact!.id, kind: "erasure", status: "verified", requestedBy: `user:${C11_OWNER.userId}`, details: { kind: "erasure" }, verifiedAt: new Date(), responseDueAt: new Date(Date.now() + 86_400_000) }).returning();
+      });
       const context = await browser.newContext({ baseURL: C11_BASE_URL, viewport: { width: 320, height: 900 } });
       try {
         await useOwnerSession(context, token);

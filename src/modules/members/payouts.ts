@@ -18,6 +18,8 @@ import { orderForInvoice, orderInvoiceRevenue, orderSellers, registerSellerGate 
 import { PAYOUT_PROVIDER_IDS } from "@/adapters/payouts";
 import { getInvoiceMarketPolicy, marketFeeMinor } from "@/modules/invoicing/market-policy";
 import { merchantSettlement } from "@/modules/invoicing/merchant-settlement";
+import { merchantRefundBankState } from "@/modules/invoicing/merchant-refund-bank-state-service";
+import { getMerchantCollectionConfiguration } from "@/modules/invoicing/merchant-collection";
 import { notifyMember } from "./notify";
 import { openMessage, sealMessage } from "./message-crypto";
 import {
@@ -102,7 +104,9 @@ registerSellerGate(async (ctx, sellerIds) => {
   if (!adapter || !adapter.models.includes(rules.model)) return "Buying from members is not set up on this site yet.";
   const members = sellerIds.filter((id): id is string => id !== null);
   if (rules.model === "seller_merchant" && sellerIds.length > 1) {
-    return "Each seller is paid directly, so check out one seller at a time.";
+    // New per-party checkout freezes its original business/tax/charge scopes
+    // on one invoice. An older, unconfigured direct path has no such proof.
+    if (rules.adapter !== "stripe_connect" || !await ctx.callAsSystem(getMerchantCollectionConfiguration, {})) return "Each seller is paid directly, so check out one seller at a time.";
   }
   if (members.length === 0) return null;
   const ready = await ctx.tx
@@ -198,12 +202,24 @@ export const recordPayouts = defineService({
     });
     const frozen = order.invoiceId ? await ctx.callAsSystem(getInvoiceMarketPolicy, { invoiceId: order.invoiceId }) : null;
     const rules = frozen ?? await marketRules(ctx);
-    const settled = rules.model === "seller_merchant" && order.invoiceId && frozen?.sellerUserId ? await ctx.callAsSystem(merchantSettlement,{invoiceId:order.invoiceId,sellerUserId:frozen.sellerUserId}) : null;
-    if(rules.model === "seller_merchant" && (!settled || order.lines.some(line=>line.sellerUserId!==frozen?.sellerUserId))) throw new ServiceError("conflict","The original seller payment needs reconciliation.");
+    const settlements = new Map<string, Awaited<ReturnType<typeof merchantSettlement.call>>>();
+    if (rules.model === "seller_merchant") {
+      for (const sellerUserId of new Set(originalLines.map(line=>line.sellerUserId))) {
+        settlements.set(sellerUserId,await ctx.callAsSystem(merchantSettlement,{invoiceId:order.invoiceId,sellerUserId}));
+      }
+    }
     let fees=originalLines.map(line=>marketFeeMinor(line.revenueMinor,rules.siteFeeBps));
+    if (frozen?.collectionVersion === 1 && rules.model === "seller_merchant") {
+      fees = originalLines.map(line=>{
+        const original=settlements.get(line.sellerUserId)?.lineFees?.find(fee=>fee.invoiceLineId===line.invoiceLineId);
+        if(!original || original.revenueMinor!==line.revenueMinor)throw new ServiceError("conflict","Reconcile this seller's original invoice earnings before recording its payout.");
+        return original.feeMinor;
+      });
+    }
     if(frozen && fees.reduce((sum,fee)=>sum+fee,0)!==frozen.feeMinor){
-      // Older invoices froze commission against pre-discount catalog totals.
-      // Preserve that exact known fee; never reprice an issued provider charge.
+      // Pre-allocation invoices may have frozen commission against their gross
+      // catalog amount. New allocations always retain their exact line fees.
+      if(frozen.collectionVersion===1)throw new ServiceError("conflict","Reconcile the original seller fee allocation before recording earnings.");
       const legacy=originalLines.map(line=>marketFeeMinor(line.originalMinor,rules.siteFeeBps));
       if(legacy.reduce((sum,fee)=>sum+fee,0)!==frozen.feeMinor)throw new ServiceError("conflict","Reconcile the original seller fee allocation before recording earnings.");
       fees=legacy;
@@ -211,6 +227,7 @@ export const recordPayouts = defineService({
     let recorded = 0;
     for (const [position,line] of originalLines.entries()) {
       if(recordedItems.has(line.orderItemId))continue;
+      const settled=settlements.get(line.sellerUserId);
       const fee=fees[position]!;
       if(fee>line.revenueMinor)throw new ServiceError("conflict","The original seller fee exceeds this line's invoice revenue. Reconcile its existing terms first.");
       const now = new Date();
@@ -264,10 +281,16 @@ export const reversePayouts = defineService({
     if (!orderId && !direct) return { changed: 0 };
     const source = orderId ? eq(memberPayouts.orderId, orderId) : eq(memberPayouts.invoiceId, input.invoiceId);
     const policy = await ctx.callAsSystem(getInvoiceMarketPolicy,{invoiceId:input.invoiceId});
-    if(policy?.model === "seller_merchant" && policy.sellerUserId) {
-      const settled = await ctx.callAsSystem(merchantSettlement,{invoiceId:input.invoiceId,sellerUserId:policy.sellerUserId});
-      const changed = await ctx.tx.update(memberPayouts).set({state:settled.state,note:settled.state === "cancelled" ? "Original seller payment refunded in full." : "Review the original seller payment's refund or dispute."}).where(and(source,eq(memberPayouts.model,"seller_merchant"))).returning({id:memberPayouts.id});
-      return {changed:changed.length};
+    if(policy?.model === "seller_merchant") {
+      const sellers=await ctx.tx.selectDistinct({sellerId:memberPayouts.sellerId}).from(memberPayouts).where(and(source,eq(memberPayouts.model,"seller_merchant")));
+      let count=0;
+      for(const {sellerId} of sellers){
+        const settled=await ctx.callAsSystem(merchantSettlement,{invoiceId:input.invoiceId,sellerUserId:sellerId});
+        const changed=await ctx.tx.update(memberPayouts).set({state:settled.state,note:settled.state === "cancelled" ? "Original seller payment refunded in full." : settled.state === "review" ? "Review the original seller payment's refund or dispute." : null})
+          .where(and(source,eq(memberPayouts.model,"seller_merchant"),eq(memberPayouts.sellerId,sellerId))).returning({id:memberPayouts.id});
+        count+=changed.length;
+      }
+      return {changed:count};
     }
     const full = orderId ? totalMinor !== null && input.amountMinor >= totalMinor : input.amountMinor >= direct!.grossMinor;
     const open = await ctx.tx
@@ -529,9 +552,28 @@ export async function onRefundSucceeded(payload: unknown): Promise<void> {
   await reversePayouts.call({ invoiceId, amountMinor }, { kind: "system" });
 }
 
+export const reconcileBankRefundPayouts = defineService({
+  name: "members.reconcileBankRefundPayouts", summary: "Recheck original merchant earnings against current bank cash and the remaining customer refund promise.",
+  kind: "mutation", permission: "system", external: false, writeClass: "money",
+  input: z.object({ invoiceId: uuid, refundId: uuid }), output: z.object({ changed: z.number().int() }),
+  handler: async (input, ctx) => {
+    const actual = await ctx.callAsSystem(merchantRefundBankState, { refundId: input.refundId });
+    if (!actual.original || actual.invoiceId !== input.invoiceId) return { changed: 0 };
+    const policy = await ctx.callAsSystem(getInvoiceMarketPolicy, { invoiceId: input.invoiceId });
+    if (policy?.model !== "seller_merchant") return { changed: 0 };
+    return ctx.callAsSystem(reversePayouts, { invoiceId: input.invoiceId, amountMinor: 0 });
+  },
+});
+
+export async function onBankRefundStateChanged(payload: unknown): Promise<void> {
+  const input = z.object({ invoiceId: uuid, refundId: uuid }).safeParse(payload);
+  if (input.success) await reconcileBankRefundPayouts.call(input.data, { kind: "system" });
+}
+
 export default [
   recordPayouts,
   reversePayouts,
+  reconcileBankRefundPayouts,
   releaseDuePayouts,
   myPayoutAccount,
   savePayoutInstructions,

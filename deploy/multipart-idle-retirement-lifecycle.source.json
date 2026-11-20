@@ -1,0 +1,32 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "multipart_idle_retirement_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Genuine idle multipart retirement qualified on fresh migration105 PostgreSQL and fictional TCP storage; provider-account acceptance remains open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "40c8a62faeb30c468b723ccd34da696746e4b830a0c79900a08be0af839725b8" },
+    { "path": "tests/core/media-multipart-idle-retirement-lifecycle.test.ts", "sha256": "018dab1a78badcc93ab62d5cc173fb9d5e2f7ac226ec0350ef57065b1cfafa08" }
+  ],
+  "controls": {
+    "final": { "database": "multipart_idle_retirement_20261116", "passed": 7, "failed": 0, "durationSeconds": 81.54 },
+    "coverage": ["actual ACK/FIN, exact absence reads and two complete inventories", "retained-first-ACK CREATE review composed with idle ABORT without replacing first failure", "exposed provider URL and named hold refused before deletion", "retained provider-shaped version blocks logical404 retirement", "lost ABORT reply remains unknown and is never replayed", "paused ABORT cannot be forged retired and its genuine continuation succeeds"],
+    "runtimeChanges": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "40c8a62faeb30c468b723ccd34da696746e4b830a0c79900a08be0af839725b8",
+      "beforeSha256": "164f9a5ce6c7192c46c91d69fd3de86498eb48f4855035daf540df38e4ec5be3",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  No provider account, OS-stop proof or C-item acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  No provider account, OS-stop proof or C-item acceptance follows.\n  Idle-session retirement qualification2026-11-16: fresh migration105 passes7/7.\n  Genuine ACK/FIN, two-request absence and two complete inventories retire only\n  the never-exposed original; retained-first-ACK CREATE recovery composes without\n  replacing its failed first result. Exposed links, named holds, retained physical\n  debris, lost ABORT replies and paused writers preserve honest recovery debt.\n  Focused lint passes. See `deploy/multipart-idle-retirement-lifecycle.source.json`.\n  No provider account or C-item acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

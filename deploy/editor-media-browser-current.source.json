@@ -1,0 +1,34 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "editor_media_browser_current.v1",
+  "checklist": ["C1.12", "C11.17"],
+  "status": "Current Chromium editor-media lifecycle passes; hosted provider and signed clean-room acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "32a8c550a608b1ff836e01f44115a6dc949783ee9372cdc9b96f20a03ba1009a" },
+    { "path": "tests/browser/editor-media-tools.spec.ts", "sha256": "e973ded61bae7878d822f9f527a1c19c96e7d5d8286f72473d8b15813083cf09" }
+  ],
+  "controls": {
+    "database": "browser_editor_media_tools_a11y_current_20261116",
+    "native": { "passed": 1, "failed": 0, "durationSeconds": 37.0 },
+    "coverage": ["canvas image upload", "crop and focal point", "save", "published page renders the edited image"],
+    "storage": "Explicit disposable local browser storage, not a hosted provider",
+    "testOracleChanged": false,
+    "productCodeChanged": false,
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "32a8c550a608b1ff836e01f44115a6dc949783ee9372cdc9b96f20a03ba1009a",
+      "beforeSha256": "7463e5eafc350b6bbe5d985c37869bc71ac5e58bdb82682843e285e63e856017",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  See `deploy/media-consent-browser-current.source.json`. Full clean-room and signed\n  acceptance remain open.\n  Raster-fixture qualification2026-11-16 (C1.12/C11.10): the full file passes15/15",
+          "after": "  See `deploy/media-consent-browser-current.source.json`. Full clean-room and signed\n  acceptance remain open.\n  Editor-media browser qualification2026-11-16 (C1.12/C11.17): the unchanged Chromium\n  journey PASSes1/1 in37.0s on a fresh current database: canvas upload, crop/focal point,\n  save and published-page rendering. Local disposable storage supplies no hosted claim.\n  No product source changed. See `deploy/editor-media-browser-current.source.json`.\n  Full clean-room and signed acceptance remain open.\n  Raster-fixture qualification2026-11-16 (C1.12/C11.10): the full file passes15/15",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

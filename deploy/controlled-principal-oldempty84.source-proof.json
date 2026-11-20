@@ -1,0 +1,39 @@
+{
+  "$comment": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "base": "dbd464c55841001ded0fe7f316d2b78dd4de2661",
+  "sourceOnly": true,
+  "controls": "9 selector +2 source PREPARED/UNRUN; 2 actual principal natives UNRUN",
+  "sameTransactionGuardSha256Unchanged": "0ccce83abe958a351a898a2c293bc812801cc91e1e81ae017d037c641bb6e5a8",
+  "commerceHelper": {
+    "commit": "b5876570",
+    "path": "tests/helpers/actual-controlled-current-manifest84.ts",
+    "sha256": "18d06b0a5d4b8eee7dbce8ac1205f1d3a1ca000c5b7388bccd2c531e24d63cdc",
+    "exactBytesPreserved": true
+  },
+  "sourceFiles": {
+    "src/modules/invoicing/controlled-canonical-bank-policy.ts": "a032cf0c203910cc008ce673108797013adf919e6d1636b118858cd701abaf3e",
+    "src/modules/invoicing/controlled-canonical-bank-principal.ts": "7f4fbfa95a550fb3b5ce20c99ce04a00f8fd89c660ed4898670a3e8c057e6d6b",
+    "tests/modules/controlled-canonical-oldempty84.test.ts": "6e6c06a9e40f9c14636129ad08b35ccc83ae60d44727275e3f741da9695abd31",
+    "tests/modules/controlled-canonical-bank-principal84.test.ts": "313d0d9bb1e7802c04182d9227712eb6499f7efc9570ba99bd833bd759a4460d",
+    "tests/helpers/actual-controlled-current-manifest84.ts": "18d06b0a5d4b8eee7dbce8ac1205f1d3a1ca000c5b7388bccd2c531e24d63cdc"
+  },
+  "readOnlyMoneyCallChainSources": {
+    "src/modules/invoicing/controlled-receipt-batch-application.ts": "26c28abad9c5fc4371732ee84c8ea2462e17ec8ee2efcf937b66120899194a3e",
+    "src/modules/invoicing/controlled-cash-application-evaluation.ts": "2d770d673372e7ba5e86388cf1075981d105a61701c1be386f6dad54421264ef",
+    "src/modules/invoicing/invoice-service.ts": "f093f0bd3b91eef558d58048eff53eaa8c2cdde003d71ca2e9b596da9333b137",
+    "src/modules/invoicing/merchant-agreement-charge.ts": "632af8c48d78ed1df49f3f49140be9ba5d44c20e323be19e832850aeab3746f7",
+    "src/modules/invoicing/agreement-fee-store.ts": "5f4bd2cf9162e8aa1a9dc67fbb3de985d4e8bfdc4d9bbc6575553368a8039c9c",
+    "src/modules/invoicing/merchant-payment-request.ts": "77bf6e051eae7eb55a1514a1cb6226f7a609643b3cba18e5ba0febca39b05383",
+    "src/modules/invoicing/merchant-payment-observations.ts": "4b8eb7a48aecf49cbfb0e6d68d11821373cc101ccf21923215c2f25e8bdb2115",
+    "src/modules/invoicing/payment-plan-ledger.ts": "a8dd3f2fc8db87b856ceec9bc0260a79c337c651a500285db179c631848e36ab",
+    "src/modules/invoicing/merchant-fee-service.ts": "7557423c4a15d005118dd1e9a02ef8cca30cb514ad8c576e415a78f4fe9fa197",
+    "src/modules/subscriptions/proration-payment-protocol.ts": "4e8c29f744018499878515d3e863bb2197989c555f9d8ce0aacae5f45bb9dbda",
+    "src/core/service.ts": "429dbe4ea7e9aaa8c3a0255e18d422b5aa01e6c96ab973840ba423209196a22f"
+  },
+  "sqlUntouched": {
+    "deploy/controlled-cash-application-protocol84.fragment.sql": "d6e08c2703ab087343c452d525d438ac18b160bb70d81a875f73cbbc579286fb",
+    "deploy/controlled-cash-application-stages84.fragment.sql": "06d4cdc17c1e5b93119318a6e7f4de4089aa096827b813aaf3ea4a9a276eebfd",
+    "deploy/controlled-cash-atomic-fee84.fragment.sql": "cc4c6960f2881d2db279132bb7445d5ab4b96259b3fbfdd0c50f4639848cf5e5"
+  },
+  "assumption": "Genuine actual signed receipt+trigger-only immutable birth invariants, not arbitrary corrupted-link detection after bypassed SQL guards."
+}

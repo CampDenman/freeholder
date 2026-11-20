@@ -1,0 +1,60 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C12.38",
+    "C9.33",
+    "C1.08"
+  ],
+  "status": "ROOT_SOURCE_ASSEMBLED_UNRUN",
+  "rootBeforeMerge": "45ab0b2bc92ba9406ba50f34da69de43f04cbca9",
+  "frozenLeaf": "dd3ea9b2cd1ef1ea2663fccac500dd97ae14833b",
+  "leafManifest": {
+    "path": "deploy/controlled-atomic-refund-bank-fence84.manifest.json",
+    "sha256": "78fae78d8bcd2989395a50d89bdc72b9001df009467ea6cb09f945cb9d1befd7"
+  },
+  "priorWholePrefix": {
+    "file": "db/migrations/0085_controlled_collection_application.sql",
+    "bytes": 897579,
+    "sha256": "55a1fb22c590b4469902a0f9ed13bcab27f97fba2dd0bbc206c6b22391e80683"
+  },
+  "tail": {
+    "path": "deploy/controlled-atomic-refund-bank-fence84.fragment.sql",
+    "bytes": 37966,
+    "sha256": "6a57c2a0c216367f56593f5aa04116e12f99ffab118e42fe2ee3945677a2894a"
+  },
+  "normal85": {
+    "path": "db/migrations/0085_controlled_collection_application.sql",
+    "ownedPath": "deploy/sql/0085_controlled_collection_application.unapplied.sql",
+    "bytes": 935571,
+    "sha256": "9af79c2c1a301d3a0bda3d920ef180bf2619b1d9e1093422cbe434a3962b4f30"
+  },
+  "normal82Unchanged": {
+    "bytes": 1017398,
+    "sha256": "4e6c7c96fc76325b3787f55db698f09e93cf52e070360af254bbb4438c1409c4"
+  },
+  "successors": [
+    {
+      "name": "freeholder_controlled_atomic_refund_bank_state",
+      "beforeBodySha256": "ca4cc826d361ab5c070b5c7df0dea678a988b319a415d6a457be11b2a1b68f6e",
+      "afterBodySha256": "c793259d4dd2949f650d6ae9bfaebb562816f27faedc356640f9436fcf2ccc8d"
+    },
+    {
+      "name": "freeholder_atomic_auxiliary_fee_ready",
+      "beforeBodySha256": "588e71c1e2b9f8538665e97ff76b11e128c0f283852b40a2797a1a093f257eee",
+      "afterBodySha256": "72b64098e82e4a9673a5cad9def58835965e15fa1030101b72e561fbbe1408ac"
+    }
+  ],
+  "oldFdManifestBookkeepingCorrection": {
+    "file": "deploy/controlled-atomic-refund-current-bank84.manifest.json",
+    "beforeSha256": "bae7dfc11aeee7ec249a9ddcc3d9d4c714c3bdbcf23c3c9566843e78bc2d9fe3",
+    "afterSha256": "33dc9630e433852383e0b12b9881950bf0c69dc3dc57a73a409dcae43583d2bc",
+    "beforeEncoded": "\" const{readControlledAtomicRefundBankState}=await import(\\\"./controlled-atomic-refund-bank-state\\\");\\n const currentRefundBanks:NonNullable<Awaited<ReturnType<typeof readControlledAtomicRefundBankState>>>[]=[];\\n for(const resource of resources){const current=await readControlledAtomicRefundBankState(ctx,resource.paymentId);if(current){if(current.receiptId!==resource.receiptId||current.refundedMinor!==resource.refundedMinor)return unavailable;currentRefundBanks.push(current);}}\\n if(currentRefundBanks.length){const union=new Set(currentRefundBanks.flatMap(bank=>bank.physicalEntries.map(row=>`${row.table}:${row.id}`)));\\n  for(const batch of batches)union.add(`controlled_cash_application_batches:${batch.id}`);for(const proof of proofs)union.add(`controlled_cash_application_receipts:${proof.id}`);\\n  for(const row of rows){union.add(`payments:${row.payment_id}`);union.add(`merchant_agreement_payment_routes:${row.payment_id}`);union.add(`subscription_provider_charge_receipts:${row.receipt_id}`);union.add(`controlled_cash_application_links:${row.receipt_id}`);}\\n  if(union.size>5000)return unavailable;\\n }\"",
+    "afterEncoded": "\" const{readControlledAtomicRefundBankState}=await import(\\\"./controlled-atomic-refund-bank-state\\\");\\n const currentRefundBanks:NonNullable<Awaited<ReturnType<typeof readControlledAtomicRefundBankState>>>[]=[];\\n for(const resource of resources){const current=await readControlledAtomicRefundBankState(ctx,resource.paymentId);if(current){if(current.receiptId!==resource.receiptId||current.refundedMinor!==resource.refundedMinor)return unavailable;currentRefundBanks.push(current);}}\\n if(currentRefundBanks.length){const union=new Set(currentRefundBanks.flatMap(bank=>bank.physicalEntries.map(row=>`${row.table}:${row.id}`)));\\n  for(const batch of batches)union.add(`controlled_cash_application_batches:${batch.id}`);for(const proof of proofs)union.add(`controlled_cash_application_receipts:${proof.id}`);\\n  for(const row of rows){union.add(`payments:${row.payment_id}`);union.add(`merchant_agreement_payment_routes:${row.payment_id}`);union.add(`subscription_provider_charge_receipts:${row.receipt_id}`);union.add(`controlled_cash_application_links:${row.receipt_id}`);}\\n  if(union.size>5000)return unavailable;\\n }\\n\"",
+    "scope": "Consume only the inserted block final newline; old beforeSHA/product target/native bodies unchanged"
+  },
+  "fullBodyReversalsExact": true,
+  "allSixProtectedFilesExact": true,
+  "masterWholeRootAndOnly22LeafLines": true,
+  "noNewSignaturesModelsColumnsKindsServicesGuardsIndexes": true,
+  "currentSourceSchemaSdkOriginalNativeProviderStableAcceptance": false
+}

@@ -7,6 +7,26 @@ import { join, resolve, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 import { expect, it } from "vitest";
 
+it("keeps the runtime storage binding out of standalone dependency tracing", () => {
+  const source = readFileSync(resolve("src/adapters/storage/index.ts"), "utf8");
+  expect(source).toContain(
+    'resolve(/* turbopackIgnore: true */ e.LOCAL_STORAGE_ROOT ?? ".data/media")',
+  );
+});
+
+it("migrates the browser database before opening the application server", () => {
+  const source = readFileSync(resolve("scripts/start-browser-server.mjs"), "utf8");
+  expect(source.indexOf("await migrate();")).toBeGreaterThan(-1);
+  expect(source.indexOf("await migrate();")).toBeLessThan(source.indexOf("await import(pathToFileURL"));
+});
+
+it("uses Next's shared-chunk production compiler", () => {
+  const manifest = JSON.parse(readFileSync(resolve("package.json"), "utf8")) as {
+    scripts: { build: string };
+  };
+  expect(manifest.scripts.build).toContain("next build --webpack");
+});
+
 it("rejects repository metadata and scrubs only the generated artifact", () => {
   const workspace = mkdtempSync(join(tmpdir(), "freeholder-artifact-test-"));
   const artifact = join(workspace, ".next/standalone");

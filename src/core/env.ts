@@ -134,6 +134,24 @@ const envSchema = z.object({
    * migration has to unpick. Required only when storage is set to "s3".
    */
   S3_ENDPOINT: z.string().url().optional(),
+  /** C11.08: explicitly configured private transfer destination; never API inputs. */
+  MEDIA_TRANSFER_SOURCE_STORAGE: z.enum(["s3", "replit"]).optional(),
+  MEDIA_TRANSFER_SOURCE_S3_ENDPOINT: z.string().url().optional(),
+  MEDIA_TRANSFER_SOURCE_S3_REGION: z.string().optional(),
+  MEDIA_TRANSFER_SOURCE_S3_BUCKET: z.string().optional(),
+  MEDIA_TRANSFER_SOURCE_S3_ACCESS_KEY_ID: z.string().optional(),
+  MEDIA_TRANSFER_SOURCE_S3_SECRET_ACCESS_KEY: z.string().optional(),
+  MEDIA_TRANSFER_SOURCE_S3_ADDRESSING_STYLE: z.enum(["path", "virtual"]).optional(),
+  MEDIA_TRANSFER_SOURCE_REPLIT_BUCKET_ID: z.string().optional(),
+  MEDIA_TRANSFER_TARGET_STORAGE: z.enum(["s3", "replit"]).optional(),
+  MEDIA_TRANSFER_TARGET_S3_ENDPOINT: z.string().url().optional(),
+  MEDIA_TRANSFER_TARGET_S3_REGION: z.string().optional(),
+  MEDIA_TRANSFER_TARGET_S3_BUCKET: z.string().optional(),
+  MEDIA_TRANSFER_TARGET_S3_ACCESS_KEY_ID: z.string().optional(),
+  MEDIA_TRANSFER_TARGET_S3_SECRET_ACCESS_KEY: z.string().optional(),
+  MEDIA_TRANSFER_TARGET_S3_ADDRESSING_STYLE: z.enum(["path", "virtual"]).optional(),
+  MEDIA_TRANSFER_TARGET_REPLIT_BUCKET_ID: z.string().optional(),
+  MEDIA_TRANSFER_TARGET_QUOTA_BYTES: z.string().regex(/^[1-9][0-9]*$/).optional(),
   S3_REGION: z.string().optional(),
   S3_BUCKET: z.string().optional(),
   S3_ACCESS_KEY_ID: z.string().optional(),
@@ -302,7 +320,7 @@ const envSchema = z.object({
    * environment overrides it, which is the only arrangement where a shared
    * image and a per-instance configuration can both be true.
    */
-  FREEHOLDER_STORAGE: z.enum(["s3", "replit", "local"]).optional(),
+  FREEHOLDER_STORAGE: z.enum(["s3", "spaces", "replit", "local"]).optional(),
 
   /** C10.32: opt-in exact-namespace inventory is required before writes. */
   FREEHOLDER_STORAGE_QUOTA_BYTES: z.string().regex(/^[1-9]\d{0,15}$/)
@@ -433,6 +451,48 @@ const envSchema = z.object({
   FREEHOLDER_UPDATE_CHECK: z.enum(["on", "off"]).optional(),
   /** Override the signed `releases.json` URL. Must be a public http(s) origin. */
   FREEHOLDER_UPDATE_FEED_URL: z.string().url().optional(),
+
+  /**
+   * The container repository an image-swap rollback must pin to (§39.8,
+   * C10.10). Default is the upstream registry; an instance that mirrors or
+   * self-hosts its images sets its own. The digest requirement is NOT relaxed
+   * by this: `rollbackCutover` still refuses anything that is not an
+   * immutable `<repository>@sha256:<64 hex>`, because the safety property is
+   * the digest, not which registry serves it. Hardcoding the registry meant a
+   * forge-hosted or mirrored instance could never roll back at all.
+   */
+  /**
+   * Extra hosts a contributed code link may point at (§4.8, C1.33).
+   *
+   * Comma-separated hostnames. `github.com` is always accepted because it is
+   * the upstream merge path; this adds the forge an instance actually keeps
+   * its code on, so a contributor can cite the repository they worked in.
+   * It stays an allowlist on purpose: `externalUrl` arrives from outside and
+   * is rendered to a reviewer, so an open field would be a phishing surface.
+   */
+  FREEHOLDER_CODE_LINK_HOSTS: z
+    .string()
+    .trim()
+    .max(500)
+    .refine(
+      (value) =>
+        value
+          .split(",")
+          .map((host) => host.trim())
+          .filter(Boolean)
+          .every((host) => /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(host)),
+      "must be a comma-separated list of hostnames, without scheme or path",
+    )
+    .optional(),
+
+  FREEHOLDER_IMAGE_REPOSITORY: z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .refine((value) => /^[a-z0-9]+([._-][a-z0-9]+)*(\.[a-z0-9]+([._-][a-z0-9]+)*)*(:[0-9]+)?(\/[a-z0-9]+([._-][a-z0-9]+)*)+$/.test(value),
+      "must be a lowercase registry/path repository with no tag or digest")
+    .optional(),
 
   /**
    * Upstream, for the fork lane (§39.7, C10.09).

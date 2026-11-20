@@ -229,6 +229,16 @@ async function directUpload(
   options: UploadOptions,
 ): Promise<string | null> {
   const partSize = reservation.partSize!;
+  // Declare the entire selected body before accepting remote resume progress
+  // or requesting any capability. These browser hashes are immutable limits;
+  // only actual provider/body evidence can later prove their physical receipt.
+  const declaredParts:Array<{partNumber:number;bytes:number;sha256:string}>=[];
+  for(let partNumber=1;partNumber<=reservation.partCount!;partNumber++){
+    const start=(partNumber-1)*partSize,end=Math.min(start+partSize,file.size),body=await file.slice(start,end).arrayBuffer();
+    const digest=await crypto.subtle.digest("SHA-256",body),sha256=Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,"0")).join("");
+    declaredParts.push({partNumber,bytes:end-start,sha256});
+  }
+  await apiJson("/api/media/uploads/part-manifest",{method:"POST",body:JSON.stringify({id:reservation.id,parts:declaredParts})});
   const status = await apiJson<UploadStatus>(
     `/api/media/uploads?id=${encodeURIComponent(reservation.id)}`,
   );
@@ -239,7 +249,7 @@ async function directUpload(
   for (let partNumber = 1; partNumber <= reservation.partCount!; partNumber += 1) {
     if (completed.has(partNumber)) continue;
     const signed = await apiJson<{
-      parts: { partNumber: number; url: string; method: "PUT" }[];
+      parts: { partNumber: number; url: string; method: "PUT";headers:Record<string,string> }[];
     }>("/api/media/uploads/parts", {
       method: "POST",
       body: JSON.stringify({ id: reservation.id, partNumbers: [partNumber] }),
@@ -248,6 +258,7 @@ async function directUpload(
     const end = Math.min(start + partSize, file.size);
     const response = await fetch(signed.parts[0]!.url, {
       method: "PUT",
+      headers:signed.parts[0]!.headers,
       body: file.slice(start, end),
       signal: options.signal,
     });

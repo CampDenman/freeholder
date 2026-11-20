@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C5.08 advanced money terms on top of the one invoice/payment ledger.
 
+import { invoiceOutstanding } from "./invoice-balance";
 import { createHash } from "node:crypto";
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -224,7 +225,7 @@ export const createPaymentPlan = defineService({
     }
     const [existingPlan] = await ctx.tx.select({ id: paymentPlans.id }).from(paymentPlans).where(eq(paymentPlans.invoiceId, invoice.id)).limit(1);
     if (existingPlan) throw new ServiceError("conflict", "That invoice already has a payment plan.");
-    const outstandingMinor = invoice.totalMinor - invoice.paidMinor;
+    const outstandingMinor = invoiceOutstanding(invoice);
     if (sumMinor(input.installments.map((row) => row.amountMinor), "Payment-plan principal") !== outstandingMinor) {
       throw new ServiceError("validation", "Installments must add up exactly to the invoice's current outstanding balance.");
     }
@@ -468,7 +469,7 @@ export const assessLateFee = defineService({
     }
     const eligibleAt = new Date(invoice.dueAt.getTime() + input.graceDays * 86_400_000);
     if (input.asOf <= eligibleAt) throw new ServiceError("conflict", "The invoice is still inside its due-date or grace period.");
-    const outstandingMinor = invoice.totalMinor - invoice.paidMinor;
+    const outstandingMinor = invoiceOutstanding(invoice);
     let assessedMinor = input.terms.basis === "fixed"
       ? input.terms.fixedMinor
       : safeMinor(roundRatio(BigInt(outstandingMinor) * BigInt(input.terms.ratePpm), 1_000_000n), "Late fee");

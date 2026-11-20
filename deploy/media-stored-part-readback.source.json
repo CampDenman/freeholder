@@ -1,0 +1,31 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_stored_part_readback.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Seven bounded stored-part readback controls pass; provider, caller-terminal and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "81938ba31cd423026692bcad6c4195345abffaad67c51ffdd63db2e6eed2e9b1" },
+    { "path": "tests/core/media-multipart-readback.test.ts", "sha256": "f3a8119c22c1822a625c71f0a2f347745bad63abe706b16c7567fb9db9faae36" }
+  ],
+  "controls": {
+    "final": { "passed": 7, "failed": 0, "durationSeconds": 0.439 },
+    "coverage": ["provider stream chunking cannot alter original part boundaries", "altered, missing or extra bytes refuse", "exact part numbers, sizes and canonical SHA256 required before reading", "manifest values are snapshotted and only its exact digest returned", "finished verifier cannot replay or accept more bytes"],
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "81938ba31cd423026692bcad6c4195345abffaad67c51ffdd63db2e6eed2e9b1",
+      "beforeSha256": "be44f1e7399959f39b17e41da64c6b041ff7becfdbb1b4927541c5668031dc1d",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  These structural controls do not close provider, kernel-stop or C-item acceptance.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  These structural controls do not close provider, kernel-stop or C-item acceptance.\n  Stored-part readback qualification2026-11-16 (C1.12/C11.08): all7 controls pass.\n  Original part boundaries and canonical SHA256 are verified independently of stream\n  chunks; altered/missing/extra bytes, malformed manifests and verifier replay refuse.\n  The result retains only the exact selected manifest digest, never a full body or\n  caller FIN. Focused lint passes. See `deploy/media-stored-part-readback.source.json`.\n  No provider, caller-terminal or checklist acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

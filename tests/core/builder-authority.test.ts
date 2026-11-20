@@ -115,6 +115,20 @@ describe.runIf(hasDatabase)("the code lane is the owner's alone", { timeout: 60_
 });
 
 describe("content is data, never instruction", () => {
+  function mockCodeReservation(): void {
+    vi.doMock("@/core/db", () => ({
+      db: () => ({
+        transaction: async <Out>(run: (tx: object) => Promise<Out>): Promise<Out> => run({
+          execute: async () => [{ used: 0 }],
+          select: () => ({ from: () => ({ where: async () => [{ used: 0 }] }) }),
+          insert: () => ({ values: () => ({ returning: async () => [{ id: "00000000-0000-4000-8000-000000000001" }] }) }),
+          update: () => ({ set: () => ({ where: () => ({ returning: async () => [] }) }) }),
+          delete: () => ({ where: async () => [] }),
+        }),
+      }),
+    }));
+  }
+
   afterEach(() => {
     vi.restoreAllMocks();
     vi.resetModules();
@@ -124,6 +138,7 @@ describe("content is data, never instruction", () => {
     // Reset before mocking, not only after: an earlier describe imported the
     // real adapter, and a cached module would quietly defeat the mock.
     vi.resetModules();
+    mockCodeReservation();
     // The whole hazard in one string. If this ever reaches the instruction
     // position, a customer who types it into a contact form is issuing
     // commands to the thing that edits the site.
@@ -175,6 +190,7 @@ describe("content is data, never instruction", () => {
 
   it("tells the model the boundary in the prompt as well as enforcing it", async () => {
     vi.resetModules();
+    mockCodeReservation();
     const seen: string[] = [];
     vi.doMock("@/adapters/agent", () => ({
       builderAgent: () => ({
