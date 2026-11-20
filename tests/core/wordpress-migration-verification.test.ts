@@ -2,17 +2,22 @@
 // SPDX-License-Identifier: Apache-2.0
 import { afterAll, describe, expect, it } from "vitest";
 import { createServer, type Server } from "node:http";
-import { htmlMetadata, verifyMigration } from "../../scripts/verify-wordpress-migration.mjs";
+import { renderEntityFeed } from "@/core/seo/feeds";
+import { htmlMetadata, verifyMigration, type MigrationFeedDecision } from "../../scripts/verify-wordpress-migration.mjs";
 const servers: Server[] = [];
-async function fixture(mode: "source" | "destination") {
+const reservedFeedWarning = "WordPress /feed is Freeholder's member feed; WordPress feed aliases use /feeds/blog.xml.";
+const feedAliases = ["/?feed=rss2", "/?feed=atom", "/?feed=rss"];
+const atomMetadata = '<id>urn:example:blog</id><title>Blog</title><updated>2026-11-20T20:00:00Z</updated>';
+const atomFeed = `<feed xmlns="http://www.w3.org/2005/Atom">${atomMetadata}</feed>`;
+async function fixture(mode: "source" | "destination", { brokenFeed, feedBody = atomFeed }: { brokenFeed?: string; feedBody?: string | Buffer } = {}) {
   const server = createServer((request, response) => {
     if (request.url === "/old" || request.url === "/two") { response.writeHead(301, { location: request.url === "/old" ? "/story" : "/old" }).end(); return; }
     if (request.url === "/temporary") { response.writeHead(302, { location: "/story" }).end(); return; }
     if (request.url === "/story/") { response.writeHead(301, { location: "/story" }).end(); return; }
     if (request.url === "/no-location") { response.writeHead(301).end(); return; }
     if (request.url === "/wrong-type") { response.writeHead(200, { "content-type": "application/json" }).end('{"error":"Page unavailable"}'); return; }
-    if (request.url === "/?feed=rss2") { response.writeHead(301, { location: "/feeds/blog.xml" }).end(); return; }
-    if (request.url === "/feeds/blog.xml") { response.writeHead(200, { "content-type": "application/atom+xml; charset=utf-8" }).end('<feed xmlns="http://www.w3.org/2005/Atom"><title>Blog</title></feed>'); return; }
+    if (request.url && feedAliases.includes(request.url)) { response.writeHead(request.url === brokenFeed ? 302 : 301, { location: "/feeds/blog.xml" }).end(); return; }
+    if (request.url === "/feeds/blog.xml") { response.writeHead(200, { "content-type": "application/atom+xml; charset=utf-8" }).end(feedBody); return; }
     const defaultCanonical = request.url === "/" ? "/" : "/story";
     const canonicalPath = request.url === "/legacy-story" ? "/old" : defaultCanonical;
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(`<html><head><title>A complete original title &amp; its brand</title><meta name="description" content="A description."><link rel="canonical" href="${canonicalPath}"><meta property="og:title" content="A social title"><meta property="og:description" content="A social description"><meta property="og:image" content="https://images.example.test/owned.jpg">${request.url === "/mismatch" && mode === "destination" ? '<meta name="robots" content="noindex">' : ''}<link rel="alternate" hreflang="fr" href="/fr/story"></head><body>Story</body></html>`);
@@ -22,6 +27,22 @@ async function fixture(mode: "source" | "destination") {
   return `http://127.0.0.1:${address.port}`;
 }
 afterAll(async () => { await Promise.all(servers.map(server => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())))); });
+
+async function publishedFeedFixture(options?: Parameters<typeof fixture>[1]) {
+  const sourceOrigin = await fixture("source"), destinationOrigin = await fixture("destination", options);
+  const identity = { runId: "96dc85db-50a4-4eb3-a7e8-c599db608c53", generation: "4efb751f-da89-47de-abb0-bb6dd3f4255a", planDigest: "a".repeat(64) };
+  const feedDecision: MigrationFeedDecision = {
+    ...identity, sourceOrigin, destinationOrigin,
+    schema: "freeholder/wordpress-feed-decision/v1",
+    decision: "keep-freeholder-member-feed",
+    reference: "fictional-owner-decision-17",
+    referenceSha256: "b".repeat(64),
+  };
+  const home = { sourceUrl: `${sourceOrigin}/`, requestPath: "/", destinationPath: "/", redirect: false, expected: {} };
+  const aliases = feedAliases.map(requestPath => ({ sourceUrl: sourceOrigin, requestPath, destinationPath: "/feeds/blog.xml", redirect: true, expected: {} }));
+  const window = { sourceOrigin, status: "published", warnings: [reservedFeedWarning], checks: [home, ...aliases], nextOrdinal: null, window: { ...identity, afterOrdinal: -1 } };
+  return { destinationOrigin, window, feedDecision };
+}
 
 describe("WordPress migration HTTP acceptance report", () => {
   it("reads entities and metadata from parsed HTML", () => {
@@ -90,6 +111,104 @@ describe("WordPress migration HTTP acceptance report", () => {
     const alias = { sourceUrl: `${source}/old`, requestPath: "/old", destinationPath: "/story", redirect: true, expected: {} };
     const plan = { sourceOrigin: source, status: "published", warnings: [], checks: [landed, alias] };
     expect(await verifyMigration(plan, destination)).toMatchObject({ accepted: true, rows: [{ errors: [] }, { errors: [] }] });
+  });
+
+  it("records the exact private owner reference after all three Atom aliases pass", async () => {
+    const { destinationOrigin, window, feedDecision } = await publishedFeedFixture();
+    expect(await verifyMigration([window], destinationOrigin)).toMatchObject({ accepted: false, unresolved: [reservedFeedWarning] });
+    expect(await verifyMigration([window], destinationOrigin, { feedDecision })).toMatchObject({
+      accepted: true,
+      unresolved: [],
+      feedDisposition: { receipt: feedDecision, status: "applied", warning: reservedFeedWarning, verifiedAliases: feedAliases },
+    });
+    const unrelated = "An orphan attachment needs an owner destination.";
+    expect(await verifyMigration([{ ...window, warnings: [reservedFeedWarning, unrelated] }], destinationOrigin, { feedDecision })).toMatchObject({
+      accepted: false,
+      unresolved: [unrelated],
+      feedDisposition: { status: "applied" },
+    });
+  });
+
+  it("keeps the collision open when any alias is missing, duplicated or fails HTTP validation", async () => {
+    const { destinationOrigin, window, feedDecision } = await publishedFeedFixture();
+    for (const checks of [window.checks.slice(0, -1), [...window.checks, window.checks[1]!]]) {
+      expect(await verifyMigration([{ ...window, checks }], destinationOrigin, { feedDecision })).toMatchObject({
+        accepted: false, unresolved: [reservedFeedWarning], feedDisposition: { status: "unverified" },
+      });
+    }
+    const broken = await publishedFeedFixture({ brokenFeed: "/?feed=atom" });
+    expect(await verifyMigration([broken.window], broken.destinationOrigin, { feedDecision: broken.feedDecision })).toMatchObject({
+      accepted: false, unresolved: [reservedFeedWarning], feedDisposition: { status: "unverified", verifiedAliases: ["/?feed=rss2", "/?feed=rss"] },
+    });
+  });
+
+  it.each([
+    ["empty", ""],
+    ["HTML", "<html><title>Blog</title></html>"],
+    ["invalid XML", atomFeed.replace("</feed>", "</broken>")],
+    ["multiple XML roots", atomFeed + atomFeed],
+    ["foreign namespace", atomFeed.replace("http://www.w3.org/2005/Atom", "urn:example:not-atom")],
+    ["invalid namespace name", atomFeed.replace(/^<feed[^>]*>/, '<a:feed:extra xmlns:a="http://www.w3.org/2005/Atom">').replace("</feed>", "</a:feed:extra>")],
+    ["unbound namespace prefix", atomFeed.replace("</feed>", "<unbound:metadata/></feed>")],
+    ["unbound attribute prefix", atomFeed.replace("<title>", '<title unbound:lang="en">')],
+    ["missing metadata", atomFeed.replace(/<id>.*?<\/id>/, "")],
+    ["duplicate metadata", atomFeed.replace("</feed>", "<title>Second title</title></feed>")],
+    ["foreign metadata", atomFeed.replace("<title>", '<title xmlns="urn:example:other">')],
+    ["invalid timestamp", atomFeed.replace("2026-11-20T20:00:00Z", "yesterday")],
+    ["nonexistent date", atomFeed.replace("2026-11-20T20:00:00Z", "2026-02-30T20:00:00Z")],
+    ["malformed entry", atomFeed.replace("</feed>", "<entry><title>No ID or date</title></entry></feed>")],
+    ["document type", `<!DOCTYPE feed [<!ENTITY witness "changed">]>${atomFeed}`],
+    ["undeclared entity", atomFeed.replace("Blog", "&unregistered;")],
+    ["illegal character reference", atomFeed.replace("Blog", "&#0;")],
+    ["raw XML control character", atomFeed.replace("Blog", String.fromCodePoint(1))],
+    ["decoded whitespace title", atomFeed.replace("Blog", "&#32;")],
+    ["invalid UTF-8", Buffer.from([0x3c, 0xff, 0x3e])],
+    ["oversized XML", atomFeed.replace("Blog", "x".repeat(20 * 1024 * 1024))],
+  ])("refuses %s Atom response bodies even with the expected HTTP status and type", async (_name, feedBody) => {
+    const { destinationOrigin, window, feedDecision } = await publishedFeedFixture({ feedBody });
+    const report = await verifyMigration([window], destinationOrigin, { feedDecision });
+    expect(report).toMatchObject({ accepted: false, unresolved: [reservedFeedWarning], feedDisposition: { status: "unverified", verifiedAliases: [] } });
+    expect(report.rows.slice(1).every(row => row.errors.some(error => error.includes("Atom")))).toBe(true);
+  });
+
+  it("accepts Atom namespaces with a prefix and checks each entry's metadata", async () => {
+    const feedBody = '<a:feed xmlns:a="http://www.w3.org/2005/Atom">' +
+      '<a:id>urn:example:blog</a:id><a:title>Blog</a:title><a:updated>2026-11-20T20:00:00Z</a:updated>' +
+      '<a:entry><a:id>urn:example:post</a:id><a:title>Post</a:title><a:updated>2026-11-20T20:00:00Z</a:updated></a:entry></a:feed>';
+    const { destinationOrigin, window, feedDecision } = await publishedFeedFixture({ feedBody });
+    expect(await verifyMigration([window], destinationOrigin, { feedDecision })).toMatchObject({ accepted: true, feedDisposition: { verifiedAliases: feedAliases } });
+  });
+
+  it("accepts the application's rendered Atom feed with an escaped title and a dated article", async () => {
+    const feedBody = renderEntityFeed({
+      origin: "https://destination.example.test", kind: "blog", title: "Blog & notes",
+      entities: [{ kind: "article", slug: "blog/notes", title: "Wind & water", updatedAt: new Date("2026-11-20T20:00:00Z"), priority: 0.5, locale: "en" }],
+    });
+    const { destinationOrigin, window, feedDecision } = await publishedFeedFixture({ feedBody });
+    expect(await verifyMigration([window], destinationOrigin, { feedDecision })).toMatchObject({ accepted: true, feedDisposition: { verifiedAliases: feedAliases } });
+  });
+
+  it("recognizes XML text and numeric references without treating CDATA as markup", async () => {
+    const feedBody = atomFeed.replace("urn:example:blog", "urn&#58;example:blog").replace("Blog", "<![CDATA[&unregistered;]]>");
+    const { destinationOrigin, window, feedDecision } = await publishedFeedFixture({ feedBody });
+    expect(await verifyMigration([window], destinationOrigin, { feedDecision })).toMatchObject({ accepted: true });
+  });
+
+  it("refuses a decision for a different source, destination, run, generation or plan", async () => {
+    const { destinationOrigin, window, feedDecision } = await publishedFeedFixture();
+    for (const change of [
+      { sourceOrigin: "https://different.example.test" },
+      { destinationOrigin: "https://different.example.test" },
+      { runId: "212fadc4-3921-4a80-8e58-cea6021e4337" },
+      { generation: "04b1b903-b7ae-443d-9846-1d2201775d1f" },
+      { planDigest: "7".repeat(64) },
+    ]) {
+      await expect(verifyMigration([window], destinationOrigin, { feedDecision: { ...feedDecision, ...change } })).rejects.toThrow(/match the complete published import/);
+    }
+    const fabricated = { ...window, window: undefined, nextOrdinal: undefined, windowSequence: { ...window.window, count: 1 } };
+    await expect(verifyMigration(fabricated, destinationOrigin, { feedDecision })).rejects.toThrow(/all original verification windows/);
+    await expect(verifyMigration([{ ...window, status: "committed" }], destinationOrigin, { feedDecision })).rejects.toThrow(/complete published import/);
+    await expect(verifyMigration([window], destinationOrigin, { feedDecision: { ...feedDecision, referenceSha256: "unverified" } })).rejects.toThrow();
   });
 
   it("requires a literal 301 to a real target and the final route's expected media type", async () => {

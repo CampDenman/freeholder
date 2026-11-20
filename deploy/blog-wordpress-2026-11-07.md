@@ -75,8 +75,11 @@ destination without cookies. It requires final HTTP 200 and the expected content
 type. A redirect must provide a single literal 301 to the planned destination.
 For pages it checks the canonical and imported search and social text, compares
 rendered source title, description, robots and hreflang, and records missing
-source evidence. Blog feed aliases must end at an Atom response. A report with
-zero URL checks, failures, warnings or unresolved source features exits nonzero.
+source evidence. Blog feed aliases must end at a well-formed Atom XML feed
+of at most 20 MiB. The verifier checks its namespace and one nonempty `id`, `title`
+and `updated` per feed and entry, including an absolute ID and a timestamp.
+A report with zero URL checks, failures, warnings or unresolved source features
+exits nonzero. [Atom feed and entry metadata](https://www.rfc-editor.org/rfc/rfc4287.html#section-4.1)
 For a graph import, export an ordered JSON array of the original verification
 windows from one published run. Start at `afterOrdinal: -1`, use each returned
 `nextOrdinal` for the next request, and include the final response with
@@ -84,6 +87,36 @@ windows from one published run. Start at `afterOrdinal: -1`, use each returned
 generation, plan digest and number of windows. The verifier rejects gaps and
 mixed imports before making requests. A standalone window can report URL
 results for its entries and exits nonzero for migration-wide acceptance.
+
+The owner can explicitly retain Freeholder's member feed at `/feed`. For a
+published graph import, record the existing private owner decision in a local
+JSON file and give it to the verifier with the complete original windows.
+
+```sh
+node scripts/verify-wordpress-migration.mjs PLAN.json https://destination.example REPORT.json FEED-DECISION.json
+```
+
+- Set `schema` to `freeholder/wordpress-feed-decision/v1` and `decision` to
+  `keep-freeholder-member-feed`.
+- Copy `sourceOrigin`, `runId`, `generation` and `planDigest` exactly from the
+  original windows. Set `destinationOrigin` to the destination's scheme,
+  hostname and port when applicable.
+- Set `reference` to the private owner decision's stable identifier and
+  `referenceSha256` to the lowercase SHA-256 of that exact record. Keep the
+  record, decision file and acceptance report in the private migration record.
+
+The migration operator verifies who made the original owner decision and
+retains it with its exact digest. Export each window directly from the scoped
+service and retain the original request and response cursors, including the
+terminal response. The CLI treats the private receipt and window files as
+operator-supplied evidence. It checks their declared identity and cursor
+sequence, then records measured HTTP results. Owner authenticity and complete
+export provenance come from the retained private records and service receipts.
+
+The verifier retains the receipt and original warning. It resolves the warning
+once each of the three plan aliases reaches a structurally checked Atom feed
+through one 301. Other warnings continue to block acceptance. The old `/feed`
+URL serves the Freeholder member feed under this disposition.
 
 ## Remaining cutover decisions and limits
 

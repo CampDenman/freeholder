@@ -1,0 +1,33 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "wordpress_atom_parser_dependency_source_continuation.v1",
+  "status": "Reversible source continuation for the direct import of existing pinned saxes 6.0.0.",
+  "testContinuations": [
+    {
+      "path": "package.json",
+      "beforeSha256": "31db8e0400084cd839dcd66caf07fa2e26aca1ac1f396cc88b33974637072a4d",
+      "afterSha256": "20ee8f0443c632a2d0f10e2d6976463947c3afd686003f629a210e2de2359b36",
+      "continue": true,
+      "edits": [
+        {
+          "before": "    \"sharp\": \"^0.35.5\",\n",
+          "after": "    \"saxes\": \"6.0.0\",\n    \"sharp\": \"^0.35.5\",\n",
+          "occurrences": 1
+        }
+      ]
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "beforeSha256": "1be34a1d5569042e1bb2d648f4434f775a88bce0d3812a817fceeaafac2767ed",
+      "afterSha256": "1b0260b37623e0adf091e68439b44ecd016d931d733f8d7076488a7586f05ed9",
+      "continue": true,
+      "edits": [
+        {
+          "before": "      sharp:\n        specifier: ^0.35.5\n",
+          "after": "      saxes:\n        specifier: 6.0.0\n        version: 6.0.0\n      sharp:\n        specifier: ^0.35.5\n",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

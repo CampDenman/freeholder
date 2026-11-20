@@ -2,7 +2,7 @@
 // C1.08/C3.47/C11.14: a new verified request finishes a released original hold.
 import { createHash } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { eq, sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, closeDb } from "@/core/db";
 import { users, totpFactors } from "@/core/auth/schema";
@@ -68,6 +68,9 @@ async function snapshot(runId: string, graphId: string) {
     media: await db().select().from(importSourceMedia).where(eq(importSourceMedia.graphId, graphId)),
   };
 }
+function snapshotOriginalWrites(key: string) {
+  return db().select().from(mediaObjectWrites).where(eq(mediaObjectWrites.key, key)).orderBy(asc(mediaObjectWrites.id));
+}
 
 for (const kind of ["wordpress-wxr", "archive"] as const) describe.runIf(hasDatabase)(`released ${kind} original redrive (C1.08/C3.47/C11.14)`, { timeout: 60_000 }, () => {
   beforeEach(async () => {
@@ -111,7 +114,7 @@ for (const kind of ["wordpress-wxr", "archive"] as const) describe.runIf(hasData
     [retainedArtifact] = await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, first.id));
     expect(retainedArtifact!.expiresAt.getTime()).toBe(retainedArtifact!.createdAt.getTime() + 1);
     expect(erasureArtifactIsIntact(retainedArtifact)).toBe(true);
-    const originalWrites = await db().select().from(mediaObjectWrites).where(eq(mediaObjectWrites.key, original.key));
+    const originalWrites = await snapshotOriginalWrites(original.key);
     expect(originalWrites.filter(write => write.operation === "put")).toHaveLength(1);
     expect(originalWrites.filter(write => write.operation === "delete")).toHaveLength(1);
     expect(originalWrites.every(write => write.state === "accepted" && write.deletedAt !== null)).toBe(true);
@@ -164,11 +167,11 @@ for (const kind of ["wordpress-wxr", "archive"] as const) describe.runIf(hasData
     expect(await captured(first.id)).toEqual(firstCapture); expect(await captured(next.id)).toEqual(nextCapture);
     expect((await db().select().from(dataRequests).where(eq(dataRequests.id, first.id)))[0]?.status).toBe("partially_completed");
     expect((await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, first.id)))[0]).toEqual(retainedArtifact);
-    expect(await db().select().from(mediaObjectWrites).where(eq(mediaObjectWrites.key, original.key))).toEqual(originalWrites);
+    expect(await snapshotOriginalWrites(original.key)).toEqual(originalWrites);
     expect(await snapshot(later.run.id, later.graph.id)).toEqual(laterBefore); expect(await storage().get(later.key)).toEqual(laterBytes);
     await eraseImportSourceObjects.handler(job.data, context);
     expect((await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, next.id)))[0]).toEqual(finishedArtifact);
-    expect(await db().select().from(mediaObjectWrites).where(eq(mediaObjectWrites.key, original.key))).toEqual(originalWrites);
+    expect(await snapshotOriginalWrites(original.key)).toEqual(originalWrites);
     expect(await snapshot(later.run.id, later.graph.id)).toEqual(laterBefore); expect(await storage().get(later.key)).toEqual(laterBytes);
   });
 });
