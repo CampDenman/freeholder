@@ -71,11 +71,16 @@ node scripts/verify-wordpress-migration.mjs PLAN.json https://destination.exampl
 ```
 
 The operator-owned plan and report stay private. The script fetches source and
-destination without cookies, requires final HTTP 200 after at most one redirect,
-requires literal 301 for aliases, checks canonical/imported search and social
-text, compares rendered source title/description/robots/hreflang and records
-missing source evidence. A report with failures, warnings or unresolved source
-features exits nonzero. This is cutover evidence, not permission to change DNS.
+destination without cookies. It requires final HTTP 200 and the expected content
+type. A redirect must provide a single literal 301 to the planned destination.
+For pages it checks the canonical and imported search and social text, compares
+rendered source title, description, robots and hreflang, and records missing
+source evidence. Blog feed aliases must end at an Atom response. A report with
+zero URL checks, failures, warnings or unresolved source features exits nonzero.
+For a graph import, this command can check URLs in an individual window. The
+window's report exits nonzero even when its cursor is null because prior windows
+are outside that report. Retain the URL results for each window in the owner's
+cutover review.
 
 ## Remaining cutover decisions and limits
 
