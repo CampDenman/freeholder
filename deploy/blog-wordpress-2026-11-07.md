@@ -85,6 +85,29 @@ generation, plan digest and number of windows. The verifier rejects gaps and
 mixed imports before making requests. A standalone window can report URL
 results for its entries and exits nonzero for migration-wide acceptance.
 
+The owner can explicitly retain Freeholder's member feed at `/feed`. For a
+published graph import, record the existing private owner decision in a local
+JSON file and give it to the verifier with the complete original windows.
+
+```sh
+node scripts/verify-wordpress-migration.mjs PLAN.json https://destination.example REPORT.json FEED-DECISION.json
+```
+
+- Set `schema` to `freeholder/wordpress-feed-decision/v1` and `decision` to
+  `keep-freeholder-member-feed`.
+- Copy `sourceOrigin`, `runId`, `generation` and `planDigest` exactly from the
+  original windows. Set `destinationOrigin` to the destination's scheme,
+  hostname and port when applicable.
+- Set `reference` to the private owner decision's stable identifier and
+  `referenceSha256` to the lowercase SHA-256 of that exact record. Keep the
+  record, decision file and acceptance report in the private migration record.
+
+The verifier records the receipt and original warning. It resolves the warning
+once each of the three plan aliases reaches the Atom feed through one 301.
+Other warnings continue to block acceptance. The old `/feed` URL remains the
+Freeholder member feed under this disposition. The recorded authority comes
+from the original owner decision.
+
 ## Remaining cutover decisions and limits
 
 - WordPress `/feed` collides with Freeholder's existing member feed. The new blog

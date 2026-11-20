@@ -5,6 +5,22 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { parse } from "parse5";
+import { z } from "zod";
+
+const reservedFeedWarning = "WordPress /feed is Freeholder's member feed; WordPress feed aliases use /feeds/blog.xml.";
+const feedAliases = ["/?feed=rss2", "/?feed=atom", "/?feed=rss"];
+const sha256 = z.string().regex(/^[a-f0-9]{64}$/);
+const feedDecisionSchema = z.strictObject({
+  schema: z.literal("freeholder/wordpress-feed-decision/v1"),
+  decision: z.literal("keep-freeholder-member-feed"),
+  reference: z.string().min(1).max(256).refine(value => value === value.trim()),
+  referenceSha256: sha256,
+  sourceOrigin: z.string().min(1).max(2048),
+  destinationOrigin: z.string().min(1).max(2048),
+  runId: z.uuid(),
+  generation: z.uuid(),
+  planDigest: sha256,
+});
 
 export function htmlMetadata(html) {
   const result = { title: "", canonical: "", description: "", robots: "", ogTitle: "", ogDescription: "", ogImage: "", hreflang: {} };
@@ -58,12 +74,27 @@ function assembleVerificationWindows(windows) {
   };
 }
 
-export async function verifyMigration(planOrWindows, destinationOrigin) {
-  const plan = Array.isArray(planOrWindows) ? assembleVerificationWindows(planOrWindows) : planOrWindows;
+function bindFeedDecision(receipt, plan, destinationOrigin) {
+  const decision = feedDecisionSchema.parse(receipt);
+  const identity = plan.windowSequence;
+  if (plan.status !== "published" || !identity || decision.runId !== identity.runId ||
+      decision.generation !== identity.generation || decision.planDigest !== identity.planDigest ||
+      decision.sourceOrigin !== plan.sourceOrigin || decision.destinationOrigin !== destinationOrigin) {
+    throw new Error("The reserved feed decision must match the complete published import and its exact source and destination.");
+  }
+  if (!plan.warnings.includes(reservedFeedWarning)) throw new Error("The published import did not report the reserved feed collision named by this decision.");
+  return decision;
+}
+
+export async function verifyMigration(planOrWindows, destinationOrigin, { feedDecision } = {}) {
+  const completeWindows = Array.isArray(planOrWindows);
+  if (feedDecision !== undefined && !completeWindows) throw new Error("The reserved feed decision requires all original verification windows.");
+  const plan = completeWindows ? assembleVerificationWindows(planOrWindows) : planOrWindows;
   const origin = new URL(destinationOrigin);
   if (!["http:", "https:"].includes(origin.protocol) || origin.username || origin.password) throw new Error("Use an HTTP(S) destination without credentials.");
   const source = new URL(plan.sourceOrigin);
   if (!["http:", "https:"].includes(source.protocol) || source.username || source.password) throw new Error("Use an HTTP(S) source without credentials.");
+  const decision = feedDecision === undefined ? undefined : bindFeedDecision(feedDecision, plan, origin.origin);
   const sourceMap = new Map();
   for (const check of plan.checks) {
     const url = new URL(check.sourceUrl);
@@ -84,7 +115,7 @@ export async function verifyMigration(planOrWindows, destinationOrigin) {
     parsed.pathname = parsed.pathname.replace(/\/+$/, "") || "/";
     parsed.searchParams.sort(); return parsed.href;
   };
-  const unresolved = [...plan.warnings];
+  let unresolved = [...plan.warnings];
   if (plan.checks.length === 0) unresolved.push("The plan contains no public URL checks.");
   // Graph plans include the cursor even in their final window. A standalone
   // window covers only its own entries.
@@ -144,14 +175,36 @@ export async function verifyMigration(planOrWindows, destinationOrigin) {
     } catch (error) { errors.push(error.message); }
     rows.push({ ...check, errors, warnings, sourceMeta, destinationMeta });
   }
-  return { verifiedAt: new Date().toISOString(), destinationOrigin: origin.origin, status: plan.status, accepted: plan.status === "published" && !unresolved.length && rows.every(row => !row.errors.length && !row.warnings.length), unresolved, rows, ...(plan.windowSequence ? { windowSequence: plan.windowSequence } : {}) };
+  let feedDisposition;
+  if (decision) {
+    const verifiedAliases = feedAliases.filter(path => {
+      const matches = rows.filter(row => row.requestPath === path);
+      if (matches.length !== 1) return false;
+      const row = matches[0];
+      return row.sourceUrl === plan.sourceOrigin && row.redirect === true && row.destinationPath === "/feeds/blog.xml" &&
+        !row.errors.length && !row.warnings.length;
+    });
+    const applied = verifiedAliases.length === feedAliases.length;
+    if (applied) unresolved = unresolved.filter(warning => warning !== reservedFeedWarning);
+    feedDisposition = { receipt: decision, status: applied ? "applied" : "unverified", warning: reservedFeedWarning, verifiedAliases };
+  }
+  return {
+    verifiedAt: new Date().toISOString(),
+    destinationOrigin: origin.origin,
+    status: plan.status,
+    accepted: plan.status === "published" && !unresolved.length && rows.every(row => !row.errors.length && !row.warnings.length),
+    unresolved, rows,
+    ...(plan.windowSequence ? { windowSequence: plan.windowSequence } : {}),
+    ...(feedDisposition ? { feedDisposition } : {}),
+  };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
-  const [planPath, destination, outputPath] = process.argv.slice(2);
-  if (!planPath || !destination || !outputPath) throw new Error("Usage: node scripts/verify-wordpress-migration.mjs PLAN.json https://destination.example REPORT.json");
-  const report = await verifyMigration(JSON.parse(await readFile(planPath, "utf8")), destination);
-  await writeFile(outputPath, JSON.stringify(report, null, 2) + "\n");
+  const [planPath, destination, outputPath, decisionPath] = process.argv.slice(2);
+  if (!planPath || !destination || !outputPath) throw new Error("Usage: node scripts/verify-wordpress-migration.mjs PLAN.json https://destination.example REPORT.json [FEED-DECISION.json]");
+  const feedDecision = decisionPath === undefined ? undefined : JSON.parse(await readFile(decisionPath, "utf8"));
+  const report = await verifyMigration(JSON.parse(await readFile(planPath, "utf8")), destination, { feedDecision });
+  await writeFile(outputPath, JSON.stringify(report, null, 2) + "\n", { mode: 0o600 });
   console.log(`${report.rows.length} URL checks; ${report.rows.filter(row => row.errors.length).length} failed; ${report.unresolved.length} unresolved source features. Report: ${outputPath}`);
   if (!report.accepted) process.exitCode = 1;
 }

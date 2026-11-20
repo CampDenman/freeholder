@@ -3,6 +3,14 @@
 export interface HtmlMetadata { title: string; canonical: string; description: string; robots: string; ogTitle: string; ogDescription: string; ogImage: string; hreflang: Record<string, string> }
 export interface MigrationCheck { sourceUrl: string; requestPath: string; destinationPath: string; redirect: boolean; expected: Record<string, unknown> }
 export interface MigrationWindowIdentity { runId: string; generation: string; planDigest: string }
+export interface MigrationFeedDecision extends MigrationWindowIdentity {
+  schema: "freeholder/wordpress-feed-decision/v1";
+  decision: "keep-freeholder-member-feed";
+  reference: string;
+  referenceSha256: string;
+  sourceOrigin: string;
+  destinationOrigin: string;
+}
 export interface MigrationPlan {
   sourceOrigin: string;
   status: string;
@@ -19,6 +27,7 @@ export interface MigrationReport {
   unresolved: string[];
   rows: Array<MigrationCheck & { errors: string[]; warnings: string[]; sourceMeta?: HtmlMetadata; destinationMeta?: HtmlMetadata }>;
   windowSequence?: MigrationWindowIdentity & { count: number };
+  feedDisposition?: { receipt: MigrationFeedDecision; status: "applied" | "unverified"; warning: string; verifiedAliases: string[] };
 }
 export function htmlMetadata(html: string): HtmlMetadata;
-export function verifyMigration(plan: MigrationPlan | MigrationPlan[], destinationOrigin: string): Promise<MigrationReport>;
+export function verifyMigration(plan: MigrationPlan | MigrationPlan[], destinationOrigin: string, options?: { feedDecision?: MigrationFeedDecision }): Promise<MigrationReport>;
