@@ -60,3 +60,44 @@ BEGIN
  END IF;
  EXECUTE format('CREATE OR REPLACE FUNCTION freeholder_controlled_cash_scope(target_collection_uuid uuid) RETURNS jsonb LANGUAGE plpgsql VOLATILE AS $body$%s$body$',successor_body);
 END $migration$;
+--> statement-breakpoint
+-- Re-pin the one dependent that hashes the function rewritten above, and then
+-- ASSERT the gate, which is what migration 0091 does and what this migration
+-- failed to do in its first form.
+--
+-- `freeholder_credit_atomic_fee_ready()` pins `freeholder_controlled_cash_scope`'s
+-- body hash as one of 68 conjuncts. Rewriting that body therefore turned the
+-- gate permanently false, and I shipped exactly that: measured on a database
+-- migrated from zero, `ready()` was false with the new body and true with the
+-- predecessor restored in a rolled-back transaction, so the delta above was the
+-- only variable. Nothing failed loudly, because no test asserts the gate
+-- against a migrated database -- it is read at runtime by
+-- atomic-credit-fee-partition.ts and atomic-credit-invoice-disposition.ts,
+-- where a false gate refuses, and by two partition functions that RETURN with
+-- no rows rather than raise. Fail-closed, but a permanent production refusal on
+-- the atomic-credit-fee path, and the silent-return pair is the "a gate that
+-- can be skipped is not a gate" shape this estate has been bitten by before.
+--
+-- Exactly one installed object pins it -- verified by scanning `pg_proc` for the
+-- predecessor hash: this function, one occurrence, and no trigger. The final
+-- RAISE is the part that matters most: had it been here originally, the first
+-- form of this migration could not have applied.
+DO $migration$
+DECLARE source_body text; successor_body text;
+BEGIN
+ SELECT prosrc INTO source_body FROM pg_proc WHERE oid=to_regprocedure('freeholder_credit_atomic_fee_ready()');
+ IF source_body IS NULL OR encode(sha256(convert_to(source_body,'UTF8')),'hex')<>'e34d9d62a18172c8b0a4c9565bc775906115204677ee422b258e547ed0497b12' THEN
+  RAISE EXCEPTION 'Unexpected atomic credit fee readiness predecessor' USING ERRCODE='23514';
+ END IF;
+ IF (length(source_body)-length(replace(source_body,'2fcf83d06dd9b39209f208214a6cc40e110b63dd12ac1bcc53fc64ed4b7feb6f','')))/64<>1 THEN
+  RAISE EXCEPTION 'Expected exactly one controlled cash scope hash in the readiness gate' USING ERRCODE='23514';
+ END IF;
+ successor_body:=replace(source_body,'2fcf83d06dd9b39209f208214a6cc40e110b63dd12ac1bcc53fc64ed4b7feb6f','6d586ce4382265c9fda2497f70fdfa21a4aca3426eeb5fffb24366c49597e509');
+ IF encode(sha256(convert_to(successor_body,'UTF8')),'hex')<>'c148118ad019ae080d0e188275a9a8000ad3895634fe2751b991748faaaa193f' THEN
+  RAISE EXCEPTION 'Atomic credit fee readiness re-pin composition failed' USING ERRCODE='23514';
+ END IF;
+ EXECUTE format('CREATE OR REPLACE FUNCTION freeholder_credit_atomic_fee_ready() RETURNS boolean LANGUAGE sql STABLE AS $body$%s$body$',successor_body);
+ IF NOT freeholder_credit_atomic_fee_ready() THEN
+  RAISE EXCEPTION 'Atomic credit fee readiness did not survive the canonical controlled cash scope' USING ERRCODE='23514';
+ END IF;
+END $migration$;
