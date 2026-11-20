@@ -369,7 +369,7 @@ describe.runIf(hasDatabase)("durable large-source import (C3.47)", { timeout: 18
     for (let window = 0; window < 12; window++) {
       const manifest = await wordpressVerificationPlan.call({ id: run.id, afterOrdinal, limit: 50 }, OWNER);
       expect(manifest.checks.length).toBeLessThanOrEqual(253);
-      expect(manifest.window).toEqual({ runId: run.id, generation: verificationGraph?.generation, planDigest: verificationGraph?.planDigest, afterOrdinal });
+      expect(manifest).toHaveProperty("window", { runId: run.id, generation: verificationGraph?.generation, planDigest: verificationGraph?.planDigest, afterOrdinal });
       for (const check of manifest.checks) verifiedPaths.add(check.requestPath);
       const nextOrdinal = z.object({ nextOrdinal: z.number().int().nonnegative().nullable() }).parse(manifest).nextOrdinal;
       if (nextOrdinal === null) break;
