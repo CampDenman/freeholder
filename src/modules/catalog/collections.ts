@@ -26,7 +26,7 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { isUniqueViolation } from "@/core/db";
-import { customerLocalePolicy, localePath } from "@/core/i18n/customer";
+import { customerLocalePolicy } from "@/core/i18n/customer";
 import { recordRedirect } from "@/core/seo/service";
 import { segmentIsLive, segmentMembership } from "@/core/segments/service";
 import { makeTrashServices } from "@/core/trash";
@@ -558,7 +558,7 @@ export const collectionPaths = defineService({
   summary: "Every published collection's path, for sitemaps and feeds.",
   kind: "query",
   permission: "public",
-  input: z.object({ locale: z.string().default("en") }),
+  input: z.object({ locale: z.string().optional() }),
   output: listed(
     row({
       slug: z.string(),
@@ -569,8 +569,10 @@ export const collectionPaths = defineService({
     }),
   ),
   handler: async (input, ctx) => {
-    const { defaultLocale, enabledLocales } = await customerLocalePolicy(ctx.tx);
-    if (!enabledLocales.includes(input.locale)) return [];
+    // Collection titles and descriptions share the same content across the
+    // localized storefront. The sitemap lists just the canonical version.
+    const { defaultLocale } = await customerLocalePolicy(ctx.tx);
+    if ((input.locale ?? defaultLocale) !== defaultLocale) return [];
     const rows = await ctx.tx
       .select({
         slug: collections.slug,
@@ -583,7 +585,7 @@ export const collectionPaths = defineService({
       .where(and(eq(collections.published, true), isNull(collections.trashedAt)))
       .orderBy(asc(collections.slug));
     return rows.map((entry) => ({
-      slug: localePath(`c/${entry.slug}`, input.locale, defaultLocale).slice(1),
+      slug: `c/${entry.slug}`,
       title: entry.title,
       description: entry.seo.description ?? entry.description ?? undefined,
       updatedAt: entry.updatedAt,
