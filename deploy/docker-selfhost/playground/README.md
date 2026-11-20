@@ -77,9 +77,10 @@ freeholder-playground-heal.timer` and `systemctl start freeholder-playground-res
 The fixed reset script alternates between the two fixed projects
 `freeholder-playground` and `freeholder-playground-b`: it boots the fresh one
 while the current one serves, waits for readiness (health, jobs, the entry page
-and a warm home page), gives it the proxy alias, then stops the old one. The serving
-project is whichever app holds the proxy network. Until the hand-over, any
-failure removes the fresh stack and the previous playground keeps serving.
+and a warm home page), gives it the proxy alias, then stops the old one. The
+serving project is the app that holds `playground-app` on the proxy network.
+Until the hand-over, any failure removes the fresh stack and the previous
+playground keeps serving when there is room to run both.
 When the host has less than `PLAYGROUND_OVERLAP_MIN_MB` available, the old
 playground stops first instead. The default, 2200, is the second stack's caps
 (1,408 MB) plus about 800 MB left for production's growth and page cache, so
@@ -109,6 +110,21 @@ private workspace. A visitor may overwrite another visitor's work.
 Availability is bounded by the reset and container limits; this recipe is not
 a multi-tenant hosting service. Update its pinned image explicitly and reset
 after an upgrade.
+
+For `demo.freeholder.ai`, the private Forgejo workflow runs the reviewed
+`reset.sh --update-image` under the same host lock as the reset and heal timers.
+The command pulls the promoted `edge` image and boots it through the regular
+handover. It records the new pin only after the sole running `playground-app`
+alias holder has the promoted digest and image ID and the public readiness
+endpoint returns 200. A failed update retains the prior pin. If the handover
+had already stopped the previous app, the command attempts to restore its
+image. The command requires a regular `.env` file with one `FREEHOLDER_IMAGE`
+assignment. If retiring the old project fails while both managed apps hold
+the alias, the handover keeps a ready app serving and reports the failed
+retirement. After an interruption, reset or heal can reconcile the exact two
+managed holders when one is ready on the saved image. An unknown holder, a
+third holder, or a managed pair without a ready app on the saved image
+requires operator inspection.
 
 The service layer also fails closed on outbound delivery: queued mail, SMS
 and webhook deliveries are refused with a playground reason before any

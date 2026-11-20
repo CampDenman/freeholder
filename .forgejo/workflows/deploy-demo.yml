@@ -21,8 +21,8 @@
 # scripts/deploy-droplet.mjs is therefore the wrong tool and would be REFUSED
 # there: deploy-droplet-remote.sh will not swap unless a backup.sh sits beside
 # compose.yml, and the playground directory has none. The work is done by
-# deploy/docker-selfhost/playground/update-image.sh, which repins and rolls
-# back on an unhealthy result.
+# deploy/docker-selfhost/playground/reset.sh --update-image, which shares the
+# timer lock and proves the digest on the actual proxy alias holder.
 #
 # Production is untouched and stays manual and confirmed.
 name: Deploy demo
@@ -32,8 +32,7 @@ on:
     branches: [main]
   # The image is published by GitHub CI, so a push can outrun its own build.
   # An hourly run picks up anything a push missed instead of waiting for the
-  # next merge. The script is idempotent: it exits 0 saying "already current"
-  # when there is nothing to do.
+  # next merge. The script skips the reset if the promoted digest already serves.
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
@@ -56,17 +55,11 @@ jobs:
         with:
           persist-credentials: false
 
-      # Production and the playground differ only by directory on one droplet,
-      # and this workflow runs unattended with no confirmation. Refuse before
-      # touching the host if the target is unset or is production's directory.
-      # update-image.sh refuses again on the far side; this is the cheaper of
-      # the two refusals, not a replacement for it.
       - name: Refuse any target but the demo
         env:
           DEMO_DIR: ${{ secrets.FREEHOLDER_DEMO_DIR }}
         run: |
-          test -n "$DEMO_DIR" || { echo "FREEHOLDER_DEMO_DIR is unset; refusing to guess" >&2; exit 1; }
-          test "$DEMO_DIR" != "/opt/freeholder" || { echo "FREEHOLDER_DEMO_DIR is production; refusing" >&2; exit 1; }
+          test "$DEMO_DIR" = /opt/freeholder-playground || { echo "FREEHOLDER_DEMO_DIR must be /opt/freeholder-playground" >&2; exit 1; }
 
       - name: Configure the deploy identity
         env:
@@ -78,18 +71,14 @@ jobs:
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 0600 "$HOME/.ssh/freeholder_deploy" "$HOME/.ssh/known_hosts"
 
-      # Copied every run so the host cannot drift from the reviewed copy.
-      - name: Install the updater and run it
+      # Execute the reviewed reset code for this run. The installed timer
+      # script may predate --update-image, but it uses the same lock and pin.
+      - name: Hand over to the promoted image and verify the serving digest
         env:
           DEPLOY_HOST: ${{ secrets.FREEHOLDER_DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.FREEHOLDER_DEPLOY_USER }}
-          DEMO_DIR: ${{ secrets.FREEHOLDER_DEMO_DIR }}
-          DEMO_HEALTH_URL: ${{ secrets.FREEHOLDER_DEMO_HEALTH_URL }}
         run: |
-          ssh_opts="-i $HOME/.ssh/freeholder_deploy -o BatchMode=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts -o StrictHostKeyChecking=yes"
-          # shellcheck disable=SC2086
-          scp $ssh_opts deploy/docker-selfhost/playground/update-image.sh \
-            "${DEPLOY_USER:-root}@${DEPLOY_HOST}:${DEMO_DIR}/update-image.sh"
-          # shellcheck disable=SC2086
-          ssh $ssh_opts "${DEPLOY_USER:-root}@${DEPLOY_HOST}" \
-            "chmod 700 ${DEMO_DIR}/update-image.sh && PLAYGROUND_DIR='${DEMO_DIR}' PLAYGROUND_HEALTH_URL='${DEMO_HEALTH_URL}' ${DEMO_DIR}/update-image.sh"
+          ssh -T -i "$HOME/.ssh/freeholder_deploy" -o BatchMode=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -o StrictHostKeyChecking=yes \
+            -- "${DEPLOY_USER:-root}@${DEPLOY_HOST}" 'sh -s -- --update-image' \
+            < deploy/docker-selfhost/playground/reset.sh

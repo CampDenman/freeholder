@@ -3,30 +3,65 @@
 // C1.38 capacity: the hourly reset's hand-over and the heal check, run against
 // a stand-in `docker` so every ordering decision is exercised without a host.
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { probeSchema } from "@/core/runtime/schema-probe";
 
 const A = "freeholder-playground";
 const B = "freeholder-playground-b";
+const REPO = "ghcr.io/campdenman/freeholder";
+const targetDigest = `sha256:${"a".repeat(64)}`;
+const targetPin = `${REPO}@${targetDigest}`;
+const priorPin = `${REPO}@sha256:${"b".repeat(64)}`;
+const targetId = `sha256:${"c".repeat(64)}`;
+const priorId = `sha256:${"d".repeat(64)}`;
+const fixtureDirs: string[] = [];
 
-// State lives in files: <project>.up (running), .proxy (holds the alias),
-// .probe (what the app's schema probe reports; "ok" when absent).
+afterEach(() => {
+  for (const dir of fixtureDirs.splice(0)) rmSync(dir, { force: true, recursive: true });
+});
+
+// .proxy records aliases on the proxy network, .image records Docker image
+// metadata, and .probe is the schema probe result ("ok" when absent).
 const FAKE_DOCKER = `#!/bin/sh
 echo "docker $*" >> "$SIM/log"
+if [ "$1" = pull ]; then
+  [ "$2" = '${REPO}:edge' ] || exit 1
+  echo 'Digest: ${targetDigest}'
+  exit 0
+fi
+if [ "$1" = image ]; then
+  [ "$5" = '${targetPin}' ] || exit 1
+  echo '${targetId}'
+  exit 0
+fi
 if [ "$1" = compose ]; then
   project=$3; shift 5
   case "$1" in
     ps) [ -f "$SIM/$project.up" ] && echo "id-$project"; exit 0 ;;
-    down) rm -f "$SIM/$project.up" "$SIM/$project.proxy" "$SIM/$project.probe"; exit 0 ;;
-    up) touch "$SIM/$project.up"; exit 0 ;;
+    down)
+      if [ "\${STALE_HANDOVER:-}" = 1 ] && [ "$project" = '${B}' ]; then exit 0; fi
+      if [ "\${FAIL_RETIREMENT:-}" = before-stop ] && [ "$project" = '${B}' ]; then exit 1; fi
+      rm -f "$SIM/$project.up" "$SIM/$project.proxy" "$SIM/$project.probe" "$SIM/$project.image"
+      if [ "\${FAIL_RETIREMENT:-}" = after-stop ] && [ "$project" = '${B}' ]; then exit 1; fi
+      exit 0 ;;
+    up)
+      touch "$SIM/$project.up"
+      pin=\${FREEHOLDER_IMAGE:-$(sed -n 's/^FREEHOLDER_IMAGE=//p' .env)}
+      id='${priorId}'
+      if [ "$pin" = '${targetPin}' ] && [ "\${STALE_IMAGE_ID:-}" != 1 ]; then id='${targetId}'; fi
+      printf '%s %s\\n' "$pin" "$id" > "$SIM/$project.image"
+      exit 0 ;;
   esac
 fi
 if [ "$1" = inspect ]; then
   project=$(echo "$4" | sed 's/^id-//')
-  [ -f "$SIM/$project.proxy" ] && echo yes
+  case "$3" in
+    *Config.Image*) cat "$SIM/$project.image"; exit $? ;;
+    *) [ ! -f "$SIM/$project.proxy" ] || cat "$SIM/$project.proxy" ;;
+  esac
   exit 0
 fi
 if [ "$1" = exec ]; then
@@ -35,55 +70,104 @@ if [ "$1" = exec ]; then
     *health/db*) cat "$SIM/$project.probe" 2>/dev/null || echo ok; exit 0 ;;
   esac
   [ -n "\${FAIL_READY:-}" ] && exit 1
+  [ "\${FAIL_READY_PROJECT:-}" = "$project" ] && exit 1
+  exit 0
+fi
+if [ "$1" = network ] && [ "$2" = inspect ]; then
+  for path in "$SIM/"*.proxy; do
+    [ -f "$path" ] || continue
+    name=\${path##*/}
+    echo "id-\${name%.proxy}"
+  done
   exit 0
 fi
 if [ "$1" = network ] && [ "$2" = connect ]; then
   [ -n "\${FAIL_CONNECT:-}" ] && exit 1
-  touch "$SIM/$(echo "$6" | sed 's/^id-//').proxy"; exit 0
+  [ "\${STALE_HANDOVER:-}" = 1 ] && exit 0
+  printf '%s\\n' "$4" > "$SIM/$(echo "$6" | sed 's/^id-//').proxy"
+fi
+if [ "$1" = network ] && [ "$2" = disconnect ]; then
+  [ "\${FAIL_DISCONNECT:-}" = 1 ] && exit 1
+  rm -f "$SIM/$(echo "$4" | sed 's/^id-//').proxy"
 fi
 exit 0
 `;
 
-interface Run { status: number; log: string[]; running: string[]; serving: string[] }
+const FAKE_CURL = `#!/bin/sh
+echo "curl $*" >> "$SIM/log"
+if [ "\${CHANGE_ALIAS_ON_HEALTH:-}" = 1 ]; then
+  rm -f "$SIM/${B}.proxy"
+  echo playground-app > "$SIM/${A}.proxy"
+fi
+printf '%s' "\${HTTP_CODE:-200}"
+`;
+
+interface Run { status: number; log: string[]; running: string[]; serving: string[]; stdout: string; stderr: string }
 
 /** A pretend host whose state persists across reset.sh runs. */
-function host(state: { up?: string[]; proxy?: string[]; probe?: Record<string, string> } = {}) {
+function host(state: {
+  up?: string[];
+  proxy?: string[];
+  probe?: Record<string, string>;
+  otherAliases?: string[];
+  pin?: string;
+  images?: Record<string, string>;
+} = {}) {
   const dir = mkdtempSync(join(tmpdir(), "playground-reset-"));
+  fixtureDirs.push(dir);
   const sim = join(dir, "state");
   mkdirSync(sim);
   writeFileSync(join(dir, "docker"), FAKE_DOCKER);
   chmodSync(join(dir, "docker"), 0o755);
+  writeFileSync(join(dir, "curl"), FAKE_CURL, { mode: 0o755 });
+  const envFile = join(dir, ".env");
+  writeFileSync(envFile, `PLAYGROUND_DOMAIN=demo.example.test\nFREEHOLDER_IMAGE=${state.pin ?? priorPin}\n`, { mode: 0o600 });
   const script = readFileSync("deploy/docker-selfhost/playground/reset.sh", "utf8")
     .replaceAll("/run/lock/", `${dir}/`)
-    .replace("cd /opt/freeholder-playground", `cd ${dir}`)
-    .replace("sleep 3", "true");
+    .replace("PLAYGROUND_PATH=/opt/freeholder-playground", `PLAYGROUND_PATH=${dir}`)
+    .replace("sleep 3", "true")
+    .replace("sleep 10", "true");
   writeFileSync(join(dir, "reset.sh"), script);
-  for (const project of state.up ?? []) writeFileSync(join(sim, `${project}.up`), "");
-  for (const project of state.proxy ?? []) writeFileSync(join(sim, `${project}.proxy`), "");
+  for (const project of state.up ?? []) {
+    writeFileSync(join(sim, `${project}.up`), "");
+    const image = state.images?.[project] ?? priorPin;
+    writeFileSync(join(sim, `${project}.image`), `${image} ${image === targetPin ? targetId : priorId}\n`);
+  }
+  for (const project of state.proxy ?? []) writeFileSync(join(sim, `${project}.proxy`), "playground-app\n");
+  for (const project of state.otherAliases ?? []) writeFileSync(join(sim, `${project}.proxy`), "other-playground-app\n");
   for (const [project, probe] of Object.entries(state.probe ?? {})) writeFileSync(join(sim, `${project}.probe`), probe);
 
-  return Object.assign(run, { dir });
+  return Object.assign(run, { dir, envFile, image: (project: string) => readFileSync(join(sim, `${project}.image`), "utf8").trim() });
 
   function run(env: Record<string, string> = {}, args: string[] = []): Run {
     writeFileSync(join(sim, "log"), "");
     let status = 0;
+    let stdout = "";
+    let stderr = "";
     try {
-      execFileSync("sh", [join(dir, "reset.sh"), ...args], {
+      const streaming = args.includes("--update-image");
+      stdout = execFileSync("sh", streaming ? ["-s", "--", ...args] : [join(dir, "reset.sh"), ...args], {
         env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, SIM: sim, ...env },
+        encoding: "utf8",
         stdio: "pipe",
+        input: streaming ? script : undefined,
       });
     } catch (error) {
-      status = (error as { status: number }).status;
+      ({ status, stdout, stderr } = error as { status: number; stdout: string; stderr: string });
     }
     const log = readFileSync(join(sim, "log"), "utf8").trim().split("\n")
-      .filter((line) => line && !line.includes(" ps -q app") && !line.startsWith("docker inspect") && !line.includes("health/db"))
+      .filter((line) => line && !line.includes(" ps -q app") && !line.startsWith("docker inspect") &&
+        !line.startsWith("docker network inspect") && !line.includes("health/db"))
       .map((line) => line.replace(/node -e .*/, "node -e <ready>").replace(/--project-name | --file compose.yml/g, ""));
     const files = readdirSync(sim);
     return {
       status,
       log,
+      stdout,
+      stderr,
       running: files.filter((f) => f.endsWith(".up")).map((f) => f.slice(0, -3)).sort(),
-      serving: files.filter((f) => f.endsWith(".proxy")).map((f) => f.slice(0, -6)).sort(),
+      serving: files.filter((f) => f.endsWith(".proxy") && readFileSync(join(sim, f), "utf8").trim() === "playground-app")
+        .map((f) => f.slice(0, -6)).sort(),
     };
   }
 }
@@ -133,6 +217,24 @@ describe("playground reset hand-over", () => {
       expect(run.log).not.toContain(`docker compose ${A} down --timeout 5`);
       expect(run).toMatchObject({ running: [A], serving: [A] });
     });
+
+  it("removes the standby alias if retiring the still-running old project fails", () => {
+    const result = host({ up: [B], proxy: [B] })({ ...ROOM, FAIL_RETIREMENT: "before-stop" });
+    expect(result).toMatchObject({ status: 1, running: [B], serving: [B] });
+    expect(result.log).toContain(`docker network disconnect freeholder-playground-proxy id-${A}`);
+  });
+
+  it("keeps the fresh app serving if the old stack failed cleanup after it stopped", () => {
+    const result = host({ up: [B], proxy: [B] })({ ...ROOM, FAIL_RETIREMENT: "after-stop" });
+    expect(result).toMatchObject({ status: 1, running: [A], serving: [A] });
+    expect(result.log.some((line) => line.startsWith("docker network disconnect"))).toBe(false);
+  });
+
+  it("keeps a ready standby serving if the old app is still attached but no longer ready", () => {
+    const result = host({ up: [B], proxy: [B] })({ ...ROOM, FAIL_RETIREMENT: "before-stop", FAIL_READY_PROJECT: B });
+    expect(result).toMatchObject({ status: 1, running: [A, B], serving: [A] });
+    expect(result.log).toContain(`docker network disconnect freeholder-playground-proxy id-${B}`);
+  });
   }
 });
 
@@ -143,6 +245,30 @@ describe("playground heal check", () => {
     const run = host({ up: [A], proxy: [A] });
     expect(run(ROOM, heal)).toMatchObject(UNCHANGED);
     expect(run(ROOM, heal)).toMatchObject(UNCHANGED);
+  });
+
+  it("reconciles a previous interrupted handover to the healthy managed app with the saved pin", () => {
+    const run = host({ up: [A, B], proxy: [A, B], images: { [A]: targetPin } });
+    const healed = run(ROOM, heal);
+    expect(healed).toMatchObject({ status: 0, running: [B], serving: [B] });
+    expect(healed.log).toContain(`docker network disconnect freeholder-playground-proxy id-${A}`);
+    expect(readFileSync(run.envFile, "utf8")).toContain(`FREEHOLDER_IMAGE=${priorPin}\n`);
+  });
+
+  it("reconciles a known pair on a later heal pass after Docker refuses a disconnect", () => {
+    const run = host({ up: [B], proxy: [B] });
+    const failed = run({ ...ROOM, FAIL_RETIREMENT: "before-stop", FAIL_DISCONNECT: "1" });
+    expect(failed).toMatchObject({ status: 1, serving: [A, B] });
+    expect(failed.log.filter((line) => line.startsWith("docker network disconnect"))).toHaveLength(1);
+    expect(run(ROOM, heal)).toMatchObject({ status: 0, running: [A], serving: [A] });
+  });
+
+  it("refuses automatic selection when neither managed holder is ready on the saved pin", () => {
+    const run = host({ up: [A, B], proxy: [A, B], images: { [A]: targetPin } });
+    const failed = run({ ...ROOM, FAIL_READY_PROJECT: B }, heal);
+    expect(failed).toMatchObject({ status: 1, running: [A, B], serving: [A, B] });
+    expect(failed.stderr).toContain("Neither managed proxy holder is ready on the saved image pin");
+    expect(failed.log.some((line) => line.startsWith("docker network disconnect"))).toBe(false);
   });
 
   it("ignores one failed probe, and a success in between starts the count again", () => {
@@ -178,6 +304,91 @@ describe("playground heal check", () => {
 
   it("rebuilds at once when nothing is serving at all", () => {
     expect(host()(ROOM, heal)).toMatchObject({ status: 0, running: [A], serving: [A] });
+  });
+});
+
+describe("promoted playground image handover", () => {
+  const update = ["--update-image"];
+
+  it("moves the proxy from the stale alternate project and commits the proven digest", () => {
+    const run = host({ up: [B], proxy: [B] });
+    const updated = run(ROOM, update);
+    expect(updated, updated.stderr).toMatchObject({ status: 0, running: [A], serving: [A] });
+    expect(updated.stdout).toContain(`Playground now serves ${targetPin}`);
+    expect(run.image(A)).toBe(`${targetPin} ${targetId}`);
+    expect(readFileSync(run.envFile, "utf8")).toBe(`PLAYGROUND_DOMAIN=demo.example.test\nFREEHOLDER_IMAGE=${targetPin}\n`);
+    expect(updated.log).toContain("curl -sS --max-time 15 -o /dev/null -w %{http_code} https://demo.freeholder.ai/api/health");
+  });
+
+  it("does no reset when the alternate project serves the target and another member has a similar alias", () => {
+    const run = host({ up: [A, B], proxy: [B], otherAliases: [A], pin: targetPin, images: { [B]: targetPin } });
+    const current = run(ROOM, update);
+    expect(current, current.stderr).toMatchObject({ status: 0, running: [A, B], serving: [B] });
+    expect(current.stdout).toContain(`Playground already serves ${targetPin}`);
+    expect(current.log.some((line) => line.includes(" up -d") || line.includes(" down --timeout"))).toBe(false);
+  });
+
+  it("refuses success when the target pin and standby are current but the stale alternate still owns the alias", () => {
+    const run = host({ up: [B], proxy: [B], pin: targetPin });
+    const stale = run({ ...ROOM, HTTP_CODE: "200", STALE_HANDOVER: "1" }, update);
+    expect(stale).toMatchObject({ status: 1, running: [A, B], serving: [B] });
+    expect(stale.stderr).toContain("handover did not establish the standby as the sole proxy alias holder");
+    expect(stale.log.some((line) => line.startsWith("curl "))).toBe(false);
+    expect(run.image(B)).toBe(`${priorPin} ${priorId}`);
+    expect(run.image(A)).toBe(`${targetPin} ${targetId}`);
+  });
+
+  it("checks the serving digest again after a public HTTP 200", () => {
+    const run = host({ up: [A, B], proxy: [B], images: { [B]: targetPin } });
+    const changed = run({ ...ROOM, CHANGE_ALIAS_ON_HEALTH: "1" }, update);
+    expect(changed).toMatchObject({ status: 1, running: [A, B], serving: [A] });
+    expect(changed.stderr).toContain("proxy alias changed during the public readiness check");
+    expect(readFileSync(run.envFile, "utf8")).toContain(`FREEHOLDER_IMAGE=${priorPin}\n`);
+  });
+
+  it.each([[A, B, "stray"], [B, "stray"], ["stray"]].map((aliases) => [aliases] as const))(
+    "refuses unknown proxy alias holders %j before touching either managed project",
+    (aliases) => {
+      const run = host({ up: aliases, proxy: aliases, images: { [A]: targetPin } });
+      const ambiguous = run(ROOM, update);
+      expect(ambiguous).toMatchObject({ status: 1, serving: [...aliases].sort() });
+      expect(ambiguous.log.some((line) => /docker (compose|pull|network disconnect)/.test(line))).toBe(false);
+      expect(ambiguous.stderr).toMatch(/proxy alias (belongs to an unexpected container|outside the managed pair)/);
+    },
+  );
+
+  it("keeps the last verified pin and restores the sole old alias after a failed retirement", () => {
+    const run = host({ up: [B], proxy: [B] });
+    const failed = run({ ...ROOM, FAIL_RETIREMENT: "before-stop" }, update);
+    expect(failed).toMatchObject({ status: 1, running: [B], serving: [B] });
+    expect(failed.stderr).toContain("The previous playground is still serving");
+    expect(readFileSync(run.envFile, "utf8")).toContain(`FREEHOLDER_IMAGE=${priorPin}\n`);
+  });
+
+  it("refuses multiple pin assignments even when the trailing one is empty", () => {
+    const run = host({ up: [B], proxy: [B] });
+    appendFileSync(run.envFile, "FREEHOLDER_IMAGE=\n");
+    const invalid = run(ROOM, update);
+    expect(invalid).toMatchObject({ status: 1, log: [], serving: [B] });
+    expect(invalid.stderr).toContain("A single immutable FREEHOLDER_IMAGE pin is required");
+  });
+
+  it("rejects a matching standby pin with the wrong runtime image ID before it takes the alias", () => {
+    const run = host({ up: [B], proxy: [B] });
+    const stale = run({ ...ROOM, STALE_IMAGE_ID: "1" }, update);
+    expect(stale).toMatchObject({ status: 1, running: [B], serving: [B] });
+    expect(stale.stderr).toContain("Standby playground is running a different image");
+    expect(readFileSync(run.envFile, "utf8")).toContain(`FREEHOLDER_IMAGE=${priorPin}\n`);
+  });
+
+  it("restores the prior image and retains its pin when the promoted image fails public readiness", () => {
+    const run = host({ up: [B], proxy: [B] });
+    const failed = run({ ...NO_ROOM, HTTP_CODE: "503" }, update);
+    expect(failed).toMatchObject({ status: 1, running: [B], serving: [B] });
+    expect(failed.stderr).toContain("Public playground health returned HTTP 503");
+    expect(failed.stderr).toContain("Restored the previous playground image");
+    expect(run.image(B)).toBe(`${priorPin} ${priorId}`);
+    expect(readFileSync(run.envFile, "utf8")).toContain(`FREEHOLDER_IMAGE=${priorPin}\n`);
   });
 });
 
