@@ -26,6 +26,7 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { isUniqueViolation } from "@/core/db";
+import { customerLocalePolicy, localePath } from "@/core/i18n/customer";
 import { recordRedirect } from "@/core/seo/service";
 import { segmentIsLive, segmentMembership } from "@/core/segments/service";
 import { makeTrashServices } from "@/core/trash";
@@ -567,7 +568,9 @@ export const collectionPaths = defineService({
       kind: z.literal("collection"),
     }),
   ),
-  handler: async (_input, ctx) => {
+  handler: async (input, ctx) => {
+    const { defaultLocale, enabledLocales } = await customerLocalePolicy(ctx.tx);
+    if (!enabledLocales.includes(input.locale)) return [];
     const rows = await ctx.tx
       .select({
         slug: collections.slug,
@@ -580,7 +583,7 @@ export const collectionPaths = defineService({
       .where(and(eq(collections.published, true), isNull(collections.trashedAt)))
       .orderBy(asc(collections.slug));
     return rows.map((entry) => ({
-      slug: `c/${entry.slug}`,
+      slug: localePath(`c/${entry.slug}`, input.locale, defaultLocale).slice(1),
       title: entry.title,
       description: entry.seo.description ?? entry.description ?? undefined,
       updatedAt: entry.updatedAt,

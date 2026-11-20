@@ -132,9 +132,10 @@ export async function generateMetadata({
   searchParams: Promise<Query>;
 }): Promise<Metadata> {
   const [{ slug }, query] = await Promise.all([params, searchParams]);
-  const [{ result: browseResult }, business] = await Promise.all([
+  const [{ result: browseResult }, business, locale] = await Promise.all([
     browse(slug, query),
     currentBusiness(),
+    getLocale(),
   ]);
   const collection = browseResult.collection;
   if (!collection) return {};
@@ -150,7 +151,7 @@ export async function generateMetadata({
   const description = composeDescription(
     seo.description ?? collection.description ?? undefined,
   );
-  const canonical = canonicalFor(origin, collection.slug, defaultLocale, defaultLocale);
+  const canonical = canonicalFor(origin, collection.slug, locale, defaultLocale);
   const alternates = alternatesFor(origin, collection.slug, business);
 
   // Filtered, sorted and paginated views are real URLs a visitor can land

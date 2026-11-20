@@ -285,11 +285,13 @@ describe.runIf(hasDatabase)("the collection page at /c/<slug>", { timeout: 60_00
       ar: { next: "التالي", pagination: "ترقيم الصفحات", direction: "rtl" },
     };
     for (const [locale, labels] of Object.entries(expected)) {
-      const { html } = await renderPage("big-wall", {}, locale);
+      const { html, metadata } = await renderPage("big-wall", {}, locale);
       expect(html).toContain(`href="/${locale}/products/print-0"`);
       expect(html).toContain(labels.next);
       expect(html).toContain(labels.pagination);
       expect(localeDirection(locale)).toBe(labels.direction);
+      expect(metadata.alternates?.canonical).toBe(`http://localhost:3000/${locale}/c/big-wall`);
+      expect(metadata.openGraph).toMatchObject({ url: metadata.alternates?.canonical });
     }
     // Default locale carries no prefix.
     const { html: english } = await renderPage("big-wall", {}, "en");
@@ -324,5 +326,8 @@ describe.runIf(hasDatabase)("the collection page at /c/<slug>", { timeout: 60_00
     const xml = renderSitemap("http://localhost:3000", entries);
     expect(xml).toContain("<loc>http://localhost:3000/c/wall</loc>");
     expect(xml).not.toContain("unpublished");
+    const french = await collectionPaths.call({ locale: "fr" }, ANONYMOUS);
+    expect(french.map(({ slug }) => slug)).toEqual(["fr/c/wall"]);
+    expect(await collectionPaths.call({ locale: "de" }, ANONYMOUS)).toEqual([]);
   });
 });
