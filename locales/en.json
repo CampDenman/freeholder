@@ -8862,6 +8862,8 @@
   "portal.room.renewals": "Renewals",
   "renewals.add": "Track a subscription",
   "renewals.edit": "Edit this charge",
+  "renewals.stop": "Stop renewal warnings",
+  "renewals.confirmStop": "Stop warning me about this charge.",
   "renewals.newTitle": "Track a subscription",
   "renewals.editTitle": "Edit a tracked subscription",
   "renewals.cycle.monthly": "Monthly",

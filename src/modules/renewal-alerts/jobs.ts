@@ -29,6 +29,7 @@ import { sendMail } from "@/core/mail/service";
 import { renewalAlerts, trackedSubscriptions } from "./schema";
 import { renewalAlertMessage } from "./mail";
 import { DAY_MS, nextRenewalAfter } from "./cycle";
+import { renewalAlertsEnabled } from "./settings";
 
 // Re-exported because the look-ahead is where this date arithmetic was born
 // and its tests name it here. The write surface needs the same function, so
@@ -55,6 +56,7 @@ export async function runRenewalLookAhead(now: Date = new Date()): Promise<Renew
     failed: 0,
     suppressed: 0,
   };
+  if (!await renewalAlertsEnabled(db())) return result;
 
   const due = await db()
     .select({

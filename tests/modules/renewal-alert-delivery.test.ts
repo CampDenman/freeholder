@@ -11,8 +11,10 @@ import { startJobProducer, stopJobs } from "@/core/jobs";
 import { mailDeliveries } from "@/core/mail/schema";
 import { deliverQueuedMail } from "@/core/mail/service";
 import { ready } from "@/core/runtime";
+import { moduleSettings } from "@/core/settings/schema";
 import { runRenewalLookAhead } from "@/modules/renewal-alerts/jobs";
 import { renewalAlerts, trackedSubscriptions } from "@/modules/renewal-alerts/schema";
+import { RENEWAL_ALERTS_MODULE } from "@/modules/renewal-alerts/settings";
 import { closeDb, hasDatabase, truncateSpine } from "../helpers/spine";
 
 type SmtpMessage = { to: string; subject: string; text: string; html: string };
@@ -66,6 +68,7 @@ describe.runIf(hasDatabase)("scheduled renewal alert delivery", () => {
       response: "250 queued",
     }));
     await truncateSpine();
+    await db().insert(moduleSettings).values({ module: RENEWAL_ALERTS_MODULE, enabled: true });
     await startJobProducer();
   });
 
@@ -135,5 +138,16 @@ describe.runIf(hasDatabase)("scheduled renewal alert delivery", () => {
     mailAdapter("smtp");
     await expect(runRenewalLookAhead(now)).resolves.toMatchObject({ alerted: 1, failed: 0, suppressed: 0 });
     expect(await db().select().from(renewalAlerts)).toHaveLength(1);
+  });
+
+  it("leaves due renewals alone until an owner enables the module", async () => {
+    await seedCharge("Opt-in");
+    await db().delete(moduleSettings).where(eq(moduleSettings.module, RENEWAL_ALERTS_MODULE));
+    await expect(runRenewalLookAhead(now)).resolves.toEqual({
+      examined: 0, rolledForward: 0, alerted: 0, failed: 0, suppressed: 0,
+    });
+    expect(await db().select().from(mailDeliveries)).toHaveLength(0);
+    await db().insert(moduleSettings).values({ module: RENEWAL_ALERTS_MODULE, enabled: true });
+    await expect(runRenewalLookAhead(now)).resolves.toMatchObject({ alerted: 1 });
   });
 });

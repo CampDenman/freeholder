@@ -13,6 +13,7 @@
 // decoration; "Monthly" beside a date is the thing a person actually reads.
 import { registerPortalSection } from "@/core/portal/sections";
 import { ServiceError } from "@/core/service";
+import { renewalAlertsEnabled } from "./settings";
 import {
   getTrackedSubscription,
   listTrackedSubscriptions,
@@ -28,6 +29,8 @@ registerPortalSection({
   // list of records somebody else created; this is a register the member keeps
   // themselves, so the room needs a way in.
   add: { href: "/portal/renewals/new", labelKey: "renewals.add" },
+  available: (ctx) => renewalAlertsEnabled(ctx.tx),
+  cancelCopy: { buttonKey: "renewals.stop", confirmationKey: "renewals.confirmStop" },
   load: async (ctx, contactId, limit) => {
     const rows = await ctx.call(listTrackedSubscriptions, {
       contactId,

@@ -8862,6 +8862,8 @@
   "portal.room.renewals": "التجديدات",
   "renewals.add": "تتبع اشتراكًا",
   "renewals.edit": "تعديل هذا الخصم",
+  "renewals.stop": "إيقاف تنبيهات التجديد",
+  "renewals.confirmStop": "إيقاف تنبيهي بشأن هذا الخصم.",
   "renewals.newTitle": "تتبع اشتراكًا",
   "renewals.editTitle": "تعديل اشتراك متتبَّع",
   "renewals.cycle.monthly": "شهري",

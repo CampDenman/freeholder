@@ -23,6 +23,7 @@ import { ready } from "@/core/runtime";
 import { Button, Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
 import { setModuleEnabledAction } from "../../settings-module-actions";
 import { env } from "@/core/env";
+import { RENEWAL_ALERTS_MODULE } from "@/modules/renewal-alerts/settings";
 import { domainOrNull } from "../../read-helpers";
 
 export const dynamic = "force-dynamic";
@@ -56,7 +57,7 @@ export default async function AdminSettingsPage({
   const byName = new Map((storedModules ?? []).map((row) => [row.module, row]));
   const moduleRows = report.modules.map((name) => ({
     module: name,
-    enabled: name === "core" ? true : (byName.get(name)?.enabled ?? true),
+    enabled: name === "core" ? true : (byName.get(name)?.enabled ?? name !== RENEWAL_ALERTS_MODULE),
     alwaysOn: name === "core",
   }));
   const canManageSettings = hasModuleAccess(actor, "settings", "manage");

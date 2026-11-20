@@ -75,6 +75,10 @@ export type PortalSection = {
    * implementation of a list this registry exists to avoid.
    */
   add?: { href: string; labelKey: string };
+  /** An optional room's current availability to the signed-in customer. */
+  available?: (ctx: ServiceContext) => Promise<boolean>;
+  /** Copy for a section-specific cancellation action. */
+  cancelCopy?: { buttonKey: string; confirmationKey: string };
   /**
    * Read this contact's records **through the module's own service**.
    *

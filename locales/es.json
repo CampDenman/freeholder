@@ -8862,6 +8862,8 @@
   "portal.room.renewals": "Renovaciones",
   "renewals.add": "Seguir una suscripción",
   "renewals.edit": "Editar este cargo",
+  "renewals.stop": "Desactivar los avisos de renovación",
+  "renewals.confirmStop": "Dejar de recibir avisos sobre este cargo.",
   "renewals.newTitle": "Seguir una suscripción",
   "renewals.editTitle": "Editar una suscripción seguida",
   "renewals.cycle.monthly": "Mensual",
