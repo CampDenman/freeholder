@@ -95,6 +95,16 @@ exit 0
 
 const FAKE_CURL = `#!/bin/sh
 echo "curl $*" >> "$SIM/log"
+case "$*" in
+  *https://demo.freeholder.ai/)
+    if [ "\${CHANGE_ALIAS_ON_HOME:-}" = 1 ]; then
+      rm -f "$SIM/${B}.proxy"
+      echo playground-app > "$SIM/${A}.proxy"
+    fi
+    [ "\${HOME_TIMEOUT:-}" != 1 ] || exit 28
+    printf '%s' "\${HOME_CODE:-200}"
+    exit 0 ;;
+esac
 if [ "\${CHANGE_ALIAS_ON_HEALTH:-}" = 1 ]; then
   rm -f "$SIM/${B}.proxy"
   echo playground-app > "$SIM/${A}.proxy"
@@ -318,6 +328,7 @@ describe("promoted playground image handover", () => {
     expect(run.image(A)).toBe(`${targetPin} ${targetId}`);
     expect(readFileSync(run.envFile, "utf8")).toBe(`PLAYGROUND_DOMAIN=demo.example.test\nFREEHOLDER_IMAGE=${targetPin}\n`);
     expect(updated.log).toContain("curl -sS --max-time 15 -o /dev/null -w %{http_code} https://demo.freeholder.ai/api/health");
+    expect(updated.log).toContain("curl -sS --max-time 8 -o /dev/null -w %{http_code} https://demo.freeholder.ai/");
   });
 
   it("does no reset when the alternate project serves the target and another member has a similar alias", () => {
@@ -343,6 +354,14 @@ describe("promoted playground image handover", () => {
     const changed = run({ ...ROOM, CHANGE_ALIAS_ON_HEALTH: "1" }, update);
     expect(changed).toMatchObject({ status: 1, running: [A, B], serving: [A] });
     expect(changed.stderr).toContain("proxy alias changed during the public readiness check");
+    expect(readFileSync(run.envFile, "utf8")).toContain(`FREEHOLDER_IMAGE=${priorPin}\n`);
+  });
+
+  it("checks the serving digest again after the homepage returns HTTP 200", () => {
+    const run = host({ up: [A, B], proxy: [B], images: { [B]: targetPin } });
+    const changed = run({ ...ROOM, CHANGE_ALIAS_ON_HOME: "1" }, update);
+    expect(changed).toMatchObject({ status: 1, running: [A, B], serving: [A] });
+    expect(changed.stderr).toContain("proxy alias changed during the public homepage check");
     expect(readFileSync(run.envFile, "utf8")).toContain(`FREEHOLDER_IMAGE=${priorPin}\n`);
   });
 
@@ -386,6 +405,16 @@ describe("promoted playground image handover", () => {
     const failed = run({ ...NO_ROOM, HTTP_CODE: "503" }, update);
     expect(failed).toMatchObject({ status: 1, running: [B], serving: [B] });
     expect(failed.stderr).toContain("Public playground health returned HTTP 503");
+    expect(failed.stderr).toContain("Restored the previous playground image");
+    expect(run.image(B)).toBe(`${priorPin} ${priorId}`);
+    expect(readFileSync(run.envFile, "utf8")).toContain(`FREEHOLDER_IMAGE=${priorPin}\n`);
+  });
+
+  it("restores the prior image when health succeeds but the public homepage times out", () => {
+    const run = host({ up: [B], proxy: [B] });
+    const failed = run({ ...ROOM, HTTP_CODE: "200", HOME_TIMEOUT: "1" }, update);
+    expect(failed).toMatchObject({ status: 1, running: [B], serving: [B] });
+    expect(failed.stderr).toContain("Public playground health returned HTTP 200. Homepage probe: 000.");
     expect(failed.stderr).toContain("Restored the previous playground image");
     expect(run.image(B)).toBe(`${priorPin} ${priorId}`);
     expect(readFileSync(run.envFile, "utf8")).toContain(`FREEHOLDER_IMAGE=${priorPin}\n`);
