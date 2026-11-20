@@ -341,7 +341,36 @@ export const reconcileReturnBankRefundState=defineService({
    if(!parts.some(part=>assigned(invoice,request,part).some(refund=>refund.id===input.refundId))) continue;
    const credit=invoice.creditNotes.find(note=>note.id===request.creditNoteId);
    if(!credit||credit.status==="void") throw new ServiceError("conflict","Restore this bank refund's exact original return credit; do not create a replacement credit.");
-   if(!actual.resolvedSuccess&&request.status==="refunded"){
+   // A failed refund must NOT reopen a return whose credit a replacement has
+   // already settled. `reconcileActualReturn` reconciles every refund in the
+   // chain in ONE pass, ordered by `legacyBankInspectionRefundIds`, which sorts
+   // by uuid -- so after a replacement the failed original and the successful
+   // replacement arrive in an order decided by random identifiers. Processed
+   // failure-then-success the return ended `refunded`; success-then-failure the
+   // failure reopened it and it ended `received`. Measured 2026-11-20 across
+   // six parallel runs: the outcome tracked the original's position in the
+   // sorted list exactly, position 2 of 3 failing and positions 0 and 1
+   // passing. That is a coin flip on a customer-visible money state, not a
+   // race, and it reproduces in isolation once the identifiers fall the wrong
+   // way.
+   //
+   // Covered is scoped to the SAME allocation on purpose: a replacement is
+   // another refund for the same part, so a genuine failure on a DIFFERENT
+   // part still reopens the return.
+   const covering=await (async()=>{
+    if(actual.resolvedSuccess||request.status!=="refunded") return false;
+    for(const part of parts){
+     const siblings=assigned(invoice,request,part);
+     if(!siblings.some(refund=>refund.id===input.refundId)) continue;
+     for(const sibling of siblings){
+      if(sibling.id===input.refundId) continue;
+      const settled=await ctx.callAsSystem(merchantRefundBankState,{refundId:sibling.id});
+      if(settled.resolvedSuccess&&settled.invoiceId===input.invoiceId) return true;
+     }
+    }
+    return false;
+   })();
+   if(!actual.resolvedSuccess&&request.status==="refunded"&&!covering){
     if(credit.status!=="issued") throw new ServiceError("conflict","Restore the issued original credit before reopening its unsettled bank refund.");
     await ctx.tx.update(returnRequests).set({status:"received",updatedAt:sql`now()`}).where(eq(returnRequests.id,request.id));
     await ctx.emitTimeline({contactId:request.contactId,eventType:"return.refundNeedsAttention",subjectType:"return",subjectId:request.id,
