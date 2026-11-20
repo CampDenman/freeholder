@@ -190,6 +190,7 @@ export const myRecords = defineService({
       let records: Awaited<ReturnType<typeof section.load>> = [];
       let failed = false;
       try {
+        if (section.available && !await section.available(ctx)) continue;
         records = await section.load(ctx, contact.id, input.limit);
       } catch {
         failed = true;

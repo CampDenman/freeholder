@@ -21,6 +21,7 @@ import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { contactForActor } from "@/core/portal/service";
 import { nextRenewalAfter } from "./cycle";
+import { requireRenewalAlertsEnabled } from "./settings";
 import {
   RENEWAL_CYCLES,
   TRACKED_STATUSES,
@@ -206,6 +207,7 @@ export const listTrackedSubscriptions = defineService({
   }),
   output: listed(trackedRow),
   handler: async (input, ctx) => {
+    await requireRenewalAlertsEnabled(ctx.tx);
     const filters = [
       input.contactId ? eq(trackedSubscriptions.contactId, input.contactId) : undefined,
       input.status ? eq(trackedSubscriptions.status, input.status) : undefined,
@@ -231,6 +233,7 @@ export const getTrackedSubscription = defineService({
     alerts: listed(row({ id: uuidSchema, renewalAt: timestamp, daysAhead: z.number() })),
   }),
   handler: async (input, ctx) => {
+    await requireRenewalAlertsEnabled(ctx.tx);
     const scope = [
       eq(trackedSubscriptions.id, input.id),
       input.contactId ? eq(trackedSubscriptions.contactId, input.contactId) : undefined,
@@ -267,6 +270,7 @@ export const trackMySubscription = defineService({
   input: z.object(trackedInput),
   output: trackedRow,
   handler: async (input, ctx) => {
+    await requireRenewalAlertsEnabled(ctx.tx);
     requireInterval(input);
     const me = await contactForActor(ctx);
     const [created] = await ctx.tx
@@ -306,6 +310,7 @@ export const updateMyTrackedSubscription = defineService({
   input: z.object({ id: uuidSchema, ...trackedInput }),
   output: trackedRow,
   handler: async (input, ctx) => {
+    await requireRenewalAlertsEnabled(ctx.tx);
     requireInterval(input);
     const me = await contactForActor(ctx);
     const [updated] = await ctx.tx
@@ -349,6 +354,7 @@ export const untrackMySubscription = defineService({
   input: z.object({ id: uuidSchema }),
   output: row({ id: uuidSchema, status: z.enum(TRACKED_STATUSES) }),
   handler: async (input, ctx) => {
+    await requireRenewalAlertsEnabled(ctx.tx);
     const me = await contactForActor(ctx);
     const [archived] = await ctx.tx
       .update(trackedSubscriptions)

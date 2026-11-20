@@ -8862,6 +8862,8 @@
   "portal.room.renewals": "Renouvellements",
   "renewals.add": "Suivre un abonnement",
   "renewals.edit": "Modifier ce prélèvement",
+  "renewals.stop": "Désactiver les rappels de renouvellement",
+  "renewals.confirmStop": "Ne plus recevoir de rappels pour ce prélèvement.",
   "renewals.newTitle": "Suivre un abonnement",
   "renewals.editTitle": "Modifier un abonnement suivi",
   "renewals.cycle.monthly": "Mensuel",

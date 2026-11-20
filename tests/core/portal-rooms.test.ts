@@ -16,7 +16,7 @@ import { users } from "@/core/auth/schema";
 import { myRecords } from "@/core/portal/service";
 import { portalSections } from "@/core/portal/sections";
 import { resolveContact } from "@/core/contacts/service";
-import { updateBusiness } from "@/core/settings/service";
+import { setModuleEnabled, updateBusiness } from "@/core/settings/service";
 import { closeDb, CUSTOMER, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const BUSINESS = {
@@ -126,13 +126,20 @@ describe.runIf(hasDatabase)("the customer portal's rooms", () => {
     expect(error.code).toBe("not_found");
   });
 
-  it("returns every room when asked for no section in particular", async () => {
+  it("returns every available room and adds Renewals only after the owner opts in", async () => {
     const { actor } = await signedInCustomer();
+    const registered = portalSections().map((section) => section.key);
     const rooms = await myRecords.call({}, actor);
-    expect(rooms.length).toBe(portalSections().length);
-    // A customer with no history has rooms, all empty — which is what lets
-    // the home page and the nav hide them rather than guess.
+    expect(rooms.map((room) => room.key)).toEqual(registered.filter((key) => key !== "renewals"));
+    expect(await myRecords.call({ section: "renewals" }, actor)).toEqual([]);
     expect(rooms.every((room) => room.count === 0)).toBe(true);
+
+    await setModuleEnabled.call({ module: "renewal-alerts", enabled: true }, OWNER);
+    const afterOptIn = await myRecords.call({}, actor);
+    expect(afterOptIn.map((room) => room.key)).toEqual(registered);
+    expect(afterOptIn.find((room) => room.key === "renewals")).toEqual({
+      key: "renewals", count: 0, records: [], failed: false,
+    });
   });
 
   it("shows a customer the membership they are on, with a way in", async () => {

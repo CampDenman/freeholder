@@ -3,9 +3,10 @@
 // Track a new charge (MASTER.md §43 C12.40).
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
+import { renewalAlertsEnabled } from "@/modules/renewal-alerts/settings";
 import { getT } from "../../../../i18n";
 import { RenewalForm } from "../RenewalForm";
 import { saveRenewalAction } from "../actions";
@@ -27,6 +28,7 @@ export default async function NewRenewal({
   const [{ error }, t, jar] = await Promise.all([searchParams, getT(), cookies()]);
   const actor = await actorFromToken(jar.get(SESSION_COOKIE)?.value);
   if (actor.kind !== "user") redirect("/portal/login?returnTo=%2Fportal%2Frenewals%2Fnew");
+  if (!await renewalAlertsEnabled()) notFound();
 
   return (
     <section className="grid gap-4">

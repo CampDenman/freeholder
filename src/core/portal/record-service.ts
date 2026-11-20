@@ -9,7 +9,9 @@ const input = z.object({ section: z.string().regex(/^[a-z]+$/).max(40), id: z.uu
 async function owned(ctx: ServiceContext, asked: z.infer<typeof input>) {
   const contact = await contactForActor(ctx);
   const section = portalSection(asked.section);
-  if (!section) throw new ServiceError("not_found", "That record is not available.");
+  if (!section || (section.available && !await section.available(ctx))) {
+    throw new ServiceError("not_found", "That record is not available.");
+  }
   const record = (await section.load(ctx, contact.id, 200)).find(r=>r.id===asked.id);
   if (!record) throw new ServiceError("not_found", "That record is not available.");
   return { contact, section, record };
