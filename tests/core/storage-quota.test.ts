@@ -10,6 +10,7 @@ import type { StorageAdapter } from "@/adapters/storage/types";
 import { initializeStorageQuota, postgresStorageQuota as postgresQuotaLedger, storageInventorySha256, storageNamespace, withVerifiedEmptyInitialization as emptyQuotaLedger } from "@/core/media/storage-quota";
 import { observeTransferRequest } from "@/core/media/transfer-requests";
 import { ordinaryMediaRequestProvider } from "../helpers/media-original-provider-requests";
+import { hasDatabase } from "../helpers/spine";
 import { quotaStorageLocation, registerQuotaStorage, withQuotaCaller } from "../helpers/storage-quota-scope";
 
 const syntheticOrigin = "https://s3.us-east-1.amazonaws.com";
@@ -79,7 +80,7 @@ function provider(namespace?: string) {
 const bytes = (n: number) => new Uint8Array(n);
 const code = (value: Promise<unknown>, expected: string) => expect(value).rejects.toMatchObject({ code: expected });
 
-describe.skipIf(!process.env.TEST_DATABASE_URL)("C10.32 real Postgres quota reservations", () => {
+describe.runIf(hasDatabase)("C10.32 real Postgres quota reservations", () => {
   // The repository's normal global setup applies the complete native journal.
   // Cases use distinct namespaces and never truncate existing business data.
   beforeAll(async () => {
