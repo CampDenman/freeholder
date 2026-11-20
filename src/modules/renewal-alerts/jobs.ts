@@ -21,8 +21,10 @@
 //
 // **Suppression is a row, not arithmetic.** See `schema.ts`.
 import { and, eq, lte, sql } from "drizzle-orm";
-import { defineJob } from "@/core/jobs";
 import { contacts } from "@/core/contacts/schema";
+import { env } from "@/core/env";
+import { formatMoney } from "@/core/i18n";
+import { defineJob } from "@/core/jobs";
 import { sendMail } from "@/core/mail/service";
 import { renewalAlerts, trackedSubscriptions } from "./schema";
 import { renewalAlertMessage } from "./mail";
@@ -105,14 +107,11 @@ export async function runRenewalLookAhead(now: Date = new Date()): Promise<Renew
     if (!row.email) continue;
 
     const eventRef = `renewal-alert:${row.id}:${renewalAt.toISOString()}`;
-    const amount = new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: row.currency,
-    }).format(row.costMinor / 100);
+    const amount = formatMoney(row.costMinor, row.currency);
     const renewsOn = renewalAt.toISOString().slice(0, 10);
 
     try {
-      await db().transaction(async (tx) => {
+      const queued = await db().transaction(async (tx) => {
         // The unique index is the suppression rule. Claiming the row first
         // means a second concurrent pass loses here rather than at the
         // provider, and never stages a duplicate message at all.
@@ -129,10 +128,7 @@ export async function runRenewalLookAhead(now: Date = new Date()): Promise<Renew
           })
           .returning({ id: renewalAlerts.id });
 
-        if (!claimed) {
-          result.suppressed += 1;
-          return;
-        }
+        if (!claimed) return false;
 
         const staged = await sendMail(
           tx,
@@ -141,11 +137,12 @@ export async function runRenewalLookAhead(now: Date = new Date()): Promise<Renew
             amount,
             renewsOn,
             daysAhead,
-            dashboardUrl: "/account/subscriptions",
+            dashboardUrl: new URL("/portal/renewals", env().APP_URL).href,
           }),
           {
             purpose: "transactional",
             transactionalReason: "service_notification",
+            requireDelivery: true,
             eventRef,
             idempotencyKey: eventRef,
           },
@@ -155,8 +152,10 @@ export async function runRenewalLookAhead(now: Date = new Date()): Promise<Renew
           .update(renewalAlerts)
           .set({ mailDeliveryId: staged.id })
           .where(eq(renewalAlerts.id, claimed.id));
-        result.alerted += 1;
+        return true;
       });
+      if (queued) result.alerted += 1;
+      else result.suppressed += 1;
     } catch {
       // One recipient's refusal — a suppressed address, a missing sender —
       // must not stop the pass for everyone else. It is counted, and the
