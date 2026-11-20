@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C3.22: source HTML/feed content keeps its own identity and typed media plan.
+import { createHash } from "node:crypto";
 import { parse, type DefaultTreeAdapterTypes } from "parse5";
 import { z } from "zod";
 import { allowedMediaOrigins, mediaOriginSchema } from "./media-origins";
@@ -66,7 +67,38 @@ export const genericPlanSchema = z.object({
   report: z.object({ unresolvedMedia: z.array(z.string()), sourceWarnings: z.array(z.object({ code: z.enum(["query-address", "discovery-only"]), url: z.string().max(2_048) })).max(100) }),
 });
 export type GenericPlan = z.infer<typeof genericPlanSchema>;
-export type GenericPage = ParsedPage & { status?: "publish" | "draft"; publishedAt?: string; seo?: WordpressSeo; redirectFromPath?: string };
+export type GenericPage = ParsedPage & { status?: "publish" | "draft"; publishedAt?: string; seo?: WordpressSeo };
+
+/** Keep the encoded query exactly as received, including an explicit empty query. */
+export function genericSourceQuery(url: URL): string {
+  return url.href.slice(url.origin.length + url.pathname.length).split("#", 1)[0] ?? "";
+}
+
+/** A path-only alias needs one source page and its explicit queryless canonical. */
+export function genericQuerylessCanonicals(pages: ReadonlyArray<{ url: string; seo?: WordpressSeo }>): Set<string> {
+  const counts = new Map<string, number>();
+  const declared = new Map<string, string>();
+  for (const page of pages) {
+    let url: URL;
+    try { url = new URL(page.url); } catch { continue; }
+    const address = url.origin + url.pathname;
+    counts.set(address, (counts.get(address) ?? 0) + 1);
+    if (genericSourceQuery(url) && page.seo?.canonical === address) declared.set(page.url, address);
+  }
+  return new Set([...declared].filter(([, address]) => counts.get(address) === 1).map(([url]) => url));
+}
+
+function genericDestination(url: URL, querylessCanonical = false) {
+  const sourcePath = url.pathname.replace(/^\/+|\/+$/g, "");
+  const slug = toCmsSlug(sourcePath.replace(/(?:^|\/)index\.html?$/i, "").replace(/\.html?$/i, ""));
+  const query = genericSourceQuery(url);
+  if (!query || querylessCanonical) return { slug, ...(sourcePath !== slug ? { redirectFrom: sourcePath } : {}) };
+  // Query values can be sensitive or unsuitable as CMS path segments. The
+  // exact path and query determine a stable, bounded suffix without exposing them.
+  const suffix = createHash("sha256").update(url.pathname + query).digest("hex").slice(0, 24);
+  const prefix = slug.slice(0, 180).replace(/[-/]+$/, "");
+  return { slug: `${prefix || "page"}-query-${suffix}` };
+}
 
 /** Keep raw semantic content for the final shared typed-block sanitizer. */
 export function parseGenericHtml(html: string, raw: string): GenericPage {
@@ -122,12 +154,9 @@ export function parseGenericHtml(html: string, raw: string): GenericPage {
   const published = publication ? Date.parse(publication) : NaN;
   const content = first("article") ?? first("main") ?? first("body") ?? document;
   inert(content);
-  const sourcePath = url.pathname.replace(/^\/+|\/+$/g, "");
-  const slug = toCmsSlug(sourcePath.replace(/(?:^|\/)index\.html?$/i, "").replace(/\.html?$/i, ""));
   return {
-    url: url.href, slug, title, kind: "page", body: sourceContentBody(content), locale: attr(first("html"), "lang"),
+    url: url.href, slug: genericDestination(url).slug, title, kind: "page", body: sourceContentBody(content), locale: attr(first("html"), "lang"),
     ...(Number.isFinite(published) ? { publishedAt: new Date(published).toISOString(), status: published > Date.now() ? "draft" as const : "publish" as const } : {}),
-    ...(sourcePath !== slug ? { redirectFromPath: sourcePath } : {}),
     seo: { title, preserveTitle: true, ...(meta("description") ? { description: meta("description")!.slice(0, 1_000), preserveDescription: true } : {}), noindex: /\bnoindex\b/i.test(robots), nofollow: /\bnofollow\b/i.test(robots), canonical, ogTitle: meta("og:title")?.slice(0, 1_000), ogDescription: meta("og:description")?.slice(0, 1_000), ogImage: meta("og:image") },
     provenance: { url: url.href, source: "html" },
   };
@@ -137,12 +166,15 @@ export function stageGenericPages(pages: GenericPage[], origin: string, robotsTx
   const site = assertPublicHttpUrl(origin), media = new Map<string, GenericPlan["media"][number]>();
   const mediaOrigins = allowedMediaOrigins(origin, approved);
   const unresolved = new Set<string>(), warnings: GenericPlan["report"]["sourceWarnings"] = [], paths = new Set<string>();
+  const querylessCanonicals = genericQuerylessCanonicals(pages);
   let bytes = 0;
   const accepted = pages.map(page => {
     const url = assertPublicHttpUrl(page.url);
+    url.hash = "";
     if (url.href.length > 2_048) throw new Error("A source page URL exceeds its 2,048-character limit.");
     if (url.origin !== site.origin) throw new Error("A generic import page is outside the approved source origin.");
-    if (robotsDisallow(robotsTxt, `${url.pathname}${url.search}`)) throw new Error("The source robots policy blocks this page.");
+    const query = genericSourceQuery(url);
+    if (robotsDisallow(robotsTxt, url.pathname + query)) throw new Error("The source robots policy blocks this page.");
     if (paths.has(url.href)) throw new Error("The source repeated a page identity.");
     paths.add(url.href); bytes += Buffer.byteLength(page.body);
     enforceImporterLimits({ pages: paths.size, bytes, depth: 1 });
@@ -163,11 +195,9 @@ export function stageGenericPages(pages: GenericPage[], origin: string, robotsTx
       media.set(key, { key, sourceUrl: target.href, filename, aliases: [key], referenced: true, altText: attr(node, "alt")?.slice(0, 500) });
       if (media.size > 500) throw new Error("This source exceeds the current 500-file media batch.");
     }
-    if (warnings.length < 100 && url.search) warnings.push({ code: "query-address", url: url.href });
+    if (warnings.length < 100 && query) warnings.push({ code: "query-address", url: url.href });
     if (warnings.length < 100 && page.provenance.source === "sitemap") warnings.push({ code: "discovery-only", url: url.href });
-    const sourcePath = url.pathname.replace(/^\/+|\/+$/g, "");
-    const slug = toCmsSlug(sourcePath.replace(/(?:^|\/)index\.html?$/i, "").replace(/\.html?$/i, ""));
-    return { ...page, body, slug, seo: page.seo ?? { ...parsed.seo, title: page.title, preserveTitle: true }, ...(sourcePath !== slug ? { redirectFrom: sourcePath } : {}) };
+    return { ...page, body, ...genericDestination(url, querylessCanonicals.has(page.url)), seo: page.seo ?? { ...parsed.seo, title: page.title, preserveTitle: true } };
   });
   const plan = genericPlanSchema.parse({ version: 1, site: { url: site.origin, hosts: [site.host.toLowerCase()], basePath: "" }, robotsTxt, ...(approved.length ? { mediaOrigins: [...mediaOrigins] } : {}), media: [...media.values()], report: { unresolvedMedia: [...unresolved].slice(0, 100), sourceWarnings: warnings } });
   return { preview: { sourceFormat: "generic-site", pages: accepted, generic: plan }, counts: { pages: accepted.length, media: media.size, redirects: accepted.filter(page => page.redirectFrom).length, mediaWarnings: unresolved.size, sourceWarnings: warnings.length } };

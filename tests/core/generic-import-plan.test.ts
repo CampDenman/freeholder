@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import { stageImportSource } from "@/core/import/service";
-import { parseGenericHtml } from "@/core/import/generic-plan";
+import { parseGenericHtml, stageGenericPages } from "@/core/import/generic-plan";
 import { parseGenericFeed } from "@/core/import/generic-feed";
 
 const HTML = `<!doctype html><html lang="fr"><head><title>Actual source title</title>
@@ -56,6 +56,43 @@ describe("generic source preservation (C3.22)", () => {
   });
   it("marks pasted sitemap addresses as discovery-only before any CMS mutation", () => {
     expect(stageImportSource("sitemap", "<urlset><url><loc>https://source.example/team.html</loc></url></urlset>", "https://source.example/sitemap.xml").preview).toMatchObject({ generic: { report: { sourceWarnings: [{ code: "discovery-only", url: "https://source.example/team.html" }] } } });
+  });
+  it("stages distinct query addresses without borrowing the ordinary page's old path", () => {
+    const addresses = ["", "?", "?edition=first", "?edition=second", "?edition=first&edition=second", "?edition=second&edition=first"];
+    const rss = (urls: string[]) => `<rss><channel>${urls.map((query, index) =>
+      `<item><title>Edition ${index + 1}</title><link>https://source.example/issues.html${query.replaceAll("&", "&amp;")}</link><description>Source issue.</description></item>`,
+    ).join("")}</channel></rss>`;
+    const forward = stageImportSource("rss", rss(addresses), "https://source.example/feed.xml");
+    const reverse = stageImportSource("rss", rss([...addresses].reverse()), "https://source.example/feed.xml");
+    const slugsByUrl = (result: ReturnType<typeof stageImportSource>) => Object.fromEntries(
+      (result.preview as { pages: Array<{ url: string; slug: string }> }).pages.map(({ url, slug }) => [url, slug]),
+    );
+    expect(new Set(Object.values(slugsByUrl(forward))).size).toBe(addresses.length);
+    expect(slugsByUrl(forward)).toEqual(slugsByUrl(reverse));
+    expect(forward.counts.redirects).toBe(1);
+    expect(forward.preview).toMatchObject({
+      pages: [{ slug: "issues", redirectFrom: "issues.html" }, ...addresses.slice(1).map(query => ({
+        url: `https://source.example/issues.html${query}`,
+      }))],
+      generic: { report: { sourceWarnings: addresses.slice(1).map(query => ({
+        code: "query-address", url: `https://source.example/issues.html${query}`,
+      })) } },
+    });
+  });
+  it("keeps a declared queryless canonical only when a single source owns its path", () => {
+    const origin = "https://source.example";
+    const source = (query: string) => parseGenericHtml(HTML, `${origin}/legacy/team.html${query}`);
+    const first = source("?edition=one"), second = source("?edition=two");
+    const single = stageGenericPages([first], origin);
+    expect(single.preview.pages).toMatchObject([{ slug: "legacy/team", redirectFrom: "legacy/team.html" }]);
+    expect(single.counts.redirects).toBe(1);
+
+    const variants = stageGenericPages([first, second], origin);
+    const slugs = variants.preview.pages.map(page => page.slug);
+    expect(new Set(slugs).size).toBe(2);
+    expect(slugs).toEqual([expect.stringMatching(/^legacy\/team-query-/), expect.stringMatching(/^legacy\/team-query-/)]);
+    expect(variants.counts.redirects).toBe(0);
+    for (const page of variants.preview.pages) expect(page).not.toHaveProperty("redirectFrom");
   });
   it("keeps the outer semantic content's own fragment target", () => {
     expect(parseGenericHtml('<main id="source-root"><h1>Root target</h1></main>', "https://source.example/page").body).toContain('<span id="source-root"></span>');
