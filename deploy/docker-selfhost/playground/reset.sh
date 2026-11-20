@@ -218,16 +218,19 @@ is_target_serving() {
 verify_public() {
   is_target_serving || { echo 'The proxy alias does not serve the promoted digest.' >&2; return 1; }
   attempt=1
+  home_code=not-checked
   while [ "$attempt" -le 18 ]; do
     code=$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' https://demo.freeholder.ai/api/health) || code=000
     if [ "$code" = 200 ]; then
       is_target_serving || { echo 'The proxy alias changed during the public readiness check.' >&2; return 1; }
-      return 0
+      home_code=$(curl -sS --max-time 8 -o /dev/null -w '%{http_code}' https://demo.freeholder.ai/) || home_code=000
+      is_target_serving || { echo 'The proxy alias changed during the public homepage check.' >&2; return 1; }
+      [ "$home_code" != 200 ] || return 0
     fi
     attempt=$((attempt + 1))
     if [ "$attempt" -le 18 ]; then sleep 10; fi
   done
-  echo "Public playground health returned HTTP $code." >&2
+  echo "Public playground health returned HTTP $code. Homepage probe: $home_code." >&2
   return 1
 }
 
