@@ -7,6 +7,12 @@ const servers: Server[] = [];
 async function fixture(mode: "source" | "destination") {
   const server = createServer((request, response) => {
     if (request.url === "/old" || request.url === "/two") { response.writeHead(301, { location: request.url === "/old" ? "/story" : "/old" }).end(); return; }
+    if (request.url === "/temporary") { response.writeHead(302, { location: "/story" }).end(); return; }
+    if (request.url === "/story/") { response.writeHead(301, { location: "/story" }).end(); return; }
+    if (request.url === "/no-location") { response.writeHead(301).end(); return; }
+    if (request.url === "/wrong-type") { response.writeHead(200, { "content-type": "application/json" }).end('{"error":"Page unavailable"}'); return; }
+    if (request.url === "/?feed=rss2") { response.writeHead(301, { location: "/feeds/blog.xml" }).end(); return; }
+    if (request.url === "/feeds/blog.xml") { response.writeHead(200, { "content-type": "application/atom+xml; charset=utf-8" }).end('<feed xmlns="http://www.w3.org/2005/Atom"><title>Blog</title></feed>'); return; }
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(`<html><head><title>A complete original title &amp; its brand</title><meta name="description" content="A description."><link rel="canonical" href="/story"><meta property="og:title" content="A social title"><meta property="og:description" content="A social description"><meta property="og:image" content="https://images.example.test/owned.jpg">${request.url === "/mismatch" && mode === "destination" ? '<meta name="robots" content="noindex">' : ''}<link rel="alternate" hreflang="fr" href="/fr/story"></head><body>Story</body></html>`);
   });
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve)); servers.push(server);
@@ -33,5 +39,29 @@ describe("WordPress migration HTTP acceptance report", () => {
     const changed = await verifyMigration({ ...plan, checks: [{ ...plan.checks[0]!, sourceUrl: `${source}/mismatch`, requestPath: "/mismatch" }] }, destination);
     expect(changed.accepted).toBe(false);
     expect(changed.rows[0]!.errors).toContain("noindex changed from the source.");
+  });
+
+  it("fails incomplete or empty published plans instead of reporting coverage", async () => {
+    const source = await fixture("source"), destination = await fixture("destination");
+    const check = { sourceUrl: `${source}/story`, requestPath: "/story", destinationPath: "/story", redirect: false, expected: {} };
+    const plan = { sourceOrigin: source, status: "published", checks: [check], warnings: [] };
+    expect(await verifyMigration({ ...plan, checks: [] }, destination)).toMatchObject({ accepted: false });
+    expect(await verifyMigration({ ...plan, nextOrdinal: 30 }, destination)).toMatchObject({ accepted: false });
+    expect(await verifyMigration({ ...plan, nextOrdinal: null }, destination)).toMatchObject({ accepted: false });
+    expect(await verifyMigration(plan, destination)).toMatchObject({ accepted: true });
+  });
+
+  it("requires a literal 301 to a real target and the final route's expected media type", async () => {
+    const source = await fixture("source"), destination = await fixture("destination");
+    const story = { sourceUrl: `${source}/story`, requestPath: "/story/", destinationPath: "/story", redirect: false, expected: {} };
+    const feed = { sourceUrl: source, requestPath: "/?feed=rss2", destinationPath: "/feeds/blog.xml", redirect: true, expected: {} };
+    const plan = { sourceOrigin: source, status: "published", checks: [story, feed], warnings: [] };
+    expect(await verifyMigration(plan, destination)).toMatchObject({ accepted: true });
+    const temporary = await verifyMigration({ ...plan, checks: [{ ...story, requestPath: "/temporary" }] }, destination);
+    expect(temporary).toMatchObject({ accepted: false, rows: [{ errors: [expect.stringContaining("302")] }] });
+    const missingTarget = await verifyMigration({ ...plan, checks: [{ ...story, requestPath: "/no-location" }] }, destination);
+    expect(missingTarget).toMatchObject({ accepted: false, rows: [{ errors: [expect.stringContaining("Location")] }] });
+    const wrongType = await verifyMigration({ ...plan, checks: [{ ...story, requestPath: "/wrong-type", destinationPath: "/wrong-type" }] }, destination);
+    expect(wrongType).toMatchObject({ accepted: false, rows: [{ errors: [expect.stringContaining("text/html")] }] });
   });
 });

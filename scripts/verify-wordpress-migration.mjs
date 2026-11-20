@@ -44,6 +44,11 @@ export async function verifyMigration(plan, destinationOrigin) {
     parsed.pathname = parsed.pathname.replace(/\/+$/, "") || "/";
     parsed.searchParams.sort(); return parsed.href;
   };
+  const unresolved = [...plan.warnings];
+  if (plan.checks.length === 0) unresolved.push("The plan contains no public URL checks.");
+  // Graph plans include the cursor even in their final window. A standalone
+  // window covers only its own entries.
+  if (plan.nextOrdinal !== undefined) unresolved.push("Migration-wide acceptance requires all verification windows.");
   const rows = [];
   for (const check of plan.checks) {
     const request = new URL(check.requestPath, origin);
@@ -53,15 +58,22 @@ export async function verifyMigration(plan, destinationOrigin) {
     let response, sourceMeta, destinationMeta;
     try {
       response = await read(request);
-      if (check.redirect && response.status !== 301) errors.push(`Expected one 301, received ${response.status}.`);
-      if (response.status >= 300 && response.status < 400) {
-        const target = new URL(response.location ?? "", request);
-        if (normalize(target) !== normalize(wanted)) errors.push(`Unexpected redirect target: ${target.href}`);
+      if (check.redirect || response.status !== 200) {
+        if (response.status !== 301) {
+          throw new Error(`Expected ${check.redirect ? "one 301" : "200 or one 301"}, received ${response.status}.`);
+        }
+        if (!response.location?.trim()) throw new Error("A 301 response is missing its Location.");
+        const target = new URL(response.location, request);
         if (target.origin !== origin.origin) throw new Error("Redirect escaped the destination origin.");
+        if (normalize(target) !== normalize(wanted)) throw new Error(`Unexpected 301 redirect target: ${target.href}`);
         response = await read(target);
       }
-      if (response.status !== 200) errors.push(`Final response was ${response.status}; required 200 after at most one redirect.`);
-      if (response.type.includes("text/html")) {
+      if (response.status !== 200) throw new Error(`Final response was ${response.status}; required 200 after at most one redirect.`);
+      const expectedType = wanted.pathname === "/feeds/blog.xml" ? "application/atom+xml" : "text/html";
+      if (response.type.split(";", 1)[0]?.trim().toLowerCase() !== expectedType) {
+        throw new Error(`Expected ${expectedType} from the final route, received ${response.type || "no Content-Type"}.`);
+      }
+      if (expectedType === "text/html") {
         destinationMeta = htmlMetadata(response.body);
         const expected = check.expected ?? {};
         for (const key of ["title", "description", "ogTitle", "ogDescription"]) if (expected[key] && destinationMeta[key] !== expected[key]) errors.push(`${key} differs from the imported value.`);
@@ -92,7 +104,7 @@ export async function verifyMigration(plan, destinationOrigin) {
     } catch (error) { errors.push(error.message); }
     rows.push({ ...check, errors, warnings, sourceMeta, destinationMeta });
   }
-  return { verifiedAt: new Date().toISOString(), destinationOrigin: origin.origin, status: plan.status, accepted: plan.status === "published" && !plan.warnings.length && rows.every(row => !row.errors.length && !row.warnings.length), unresolved: plan.warnings, rows };
+  return { verifiedAt: new Date().toISOString(), destinationOrigin: origin.origin, status: plan.status, accepted: plan.status === "published" && !unresolved.length && rows.every(row => !row.errors.length && !row.warnings.length), unresolved, rows };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
