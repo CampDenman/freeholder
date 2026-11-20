@@ -87,6 +87,42 @@ describe.runIf(hasDatabase)("typed generic import lifecycle (C3.22)", { timeout:
     await rollbackImport.call({ id: run.id }, OWNER);
     expect(await db().select().from(pages).where(eq(pages.id, page!.id))).toHaveLength(0);
   });
+  it("creates distinct pages and rewrites only links to the exact imported query address", async () => {
+    const run = await startImport.call({ kind: "rss", origin: "https://source.example/feed.xml" }, OWNER);
+    const rss = `<rss><channel>
+      <item><title>Ordinary issues</title><link>https://source.example/issues.html</link><description><![CDATA[
+        <p><a href="https://source.example/issues.html?edition=first#details">First issue</a>
+        <a href="https://source.example/issues.html?edition=second#details">Second issue</a>
+        <a href="https://source.example/issues.html?edition=missing">Source-only issue</a></p>
+      ]]></description></item>
+      <item><title>First issue</title><link>https://source.example/issues.html?edition=first</link><description><![CDATA[
+        <h2 id="details">First details</h2><p><a href="https://source.example/issues.html">Ordinary issues</a></p>
+      ]]></description></item>
+      <item><title>Second issue</title><link>https://source.example/issues.html?edition=second</link><description><![CDATA[
+        <h2 id="details">Second details</h2>
+      ]]></description></item>
+    </channel></rss>`;
+    await previewFromSource.call({ id: run.id, payload: rss }, OWNER);
+    expect((await commitImport.call({ id: run.id }, OWNER)).counts).toMatchObject({ posts: 3, redirects: 1, sourceWarnings: 2 });
+    const saved = await db().select().from(pages);
+    const ordinary = saved.find(page => page.title === "Ordinary issues");
+    const first = saved.find(page => page.title === "First issue");
+    const second = saved.find(page => page.title === "Second issue");
+    expect(ordinary?.slug).toBe("issues");
+    expect(first?.slug).toMatch(/^issues-query-[a-f0-9]{24}$/);
+    expect(second?.slug).toMatch(/^issues-query-[a-f0-9]{24}$/);
+    expect(first?.slug).not.toBe(second?.slug);
+    expect(JSON.stringify(ordinary?.blocks)).toContain(`"/${first!.slug}#details"`);
+    expect(JSON.stringify(ordinary?.blocks)).toContain(`"/${second!.slug}#details"`);
+    expect(JSON.stringify(ordinary?.blocks)).toContain('"https://source.example/issues.html?edition=missing"');
+    expect(JSON.stringify(first?.blocks)).toContain('"/issues"');
+    expect(await db().select().from(redirects)).toMatchObject([{ fromPath: "issues.html", toPath: "issues" }]);
+    await reconcileImport.call({ id: run.id }, OWNER);
+    await publishImport.call({ id: run.id }, OWNER);
+    expect(await db().select().from(pages).where(eq(pages.id, first!.id))).toMatchObject([{ status: "published" }]);
+    await rollbackImport.call({ id: run.id }, OWNER);
+    expect(await db().select().from(pages).where(eq(pages.id, first!.id))).toHaveLength(0);
+  });
   it("keeps different media query identities separate through actual asset acceptance", async () => {
     const run = await startImport.call({ kind: "html", origin: "https://source.example/variants.html" }, OWNER);
     await previewFromSource.call({ id: run.id, payload: '<title>Source variants</title><main><img src="/image?size=1" alt="First"><img src="/image?size=2" alt="Second"></main>' }, OWNER);
