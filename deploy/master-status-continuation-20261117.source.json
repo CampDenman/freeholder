@@ -16,13 +16,13 @@
   "artifacts": [
     {
       "path": "MASTER.md",
-      "sha256": "3bd1c80063fa3231dcbc67fb850c32dabd24821d838a2b8b6c965a0ff5c2c826"
+      "sha256": "42ae9b506549fd66483d275bd4fd6ea81b94687b49c31feb1d5b83f847c2fb44"
     }
   ],
   "testContinuations": [
     {
       "path": "MASTER.md",
-      "afterSha256": "3bd1c80063fa3231dcbc67fb850c32dabd24821d838a2b8b6c965a0ff5c2c826",
+      "afterSha256": "42ae9b506549fd66483d275bd4fd6ea81b94687b49c31feb1d5b83f847c2fb44",
       "beforeSha256": "a52835c139d0495be50650c3a9f067fb1227f2f4c5ad4fb90553168d6ecbefd3",
       "continue": true,
       "edits": [
@@ -104,6 +104,16 @@
         {
           "before": "See `deploy/atomic-auxiliary-six-native-checkpoint-20261114.json`.\n",
           "after": "See `deploy/atomic-auxiliary-six-native-checkpoint-20261114.json`.\n\nCORRECTION 2026-11-19, so the retained-180s statement above is not read as\nstanding. The per-case 180s limit still holds for every money suite EXCEPT\n`tests/modules/atomic-credit-fee-persistence84.test.ts`, whose deadline Tony\nraised to 300s on that date. Nothing regressed: the six cases above ran at\n135.24-173.87s, and after a measured optimisation this suite's worst case is\n116.9s on a developer box. It fails only on a GitHub-hosted runner, which is\n1.8x slower, putting that case at ~210s against the old ceiling. The cost of\nthe change is detection -- at 300s the suite catches roughly a 2x regression\nwhere 180s caught 4% -- so the per-service cost is instead reported on every\nrun by `atomic-credit-stage-profile89`, whose header carries the attribution.\nRaising it required re-anchoring twelve live pins across ten records, two of\nthem freezes (`atomic-credit-fee-partition84.freeze.json` and the\n`frozen.sha256` in `atomic-credit-fee-root-assembly-20261114.json`), which was\nauthorised rather than incidental. The narrative digest inside\n`controlled-safe-public-boundary88.source.json`'s replay chain is deliberately\nuntouched, because it records what was true then. If the payment path is ever\nbrought under ~100s on a developer box, restore 180s and re-freeze.\n",
+          "occurrences": 1
+        },
+        {
+          "before": "  their messages are safe against a compromised server.\n- [ ] **C12.30** Hash-match known abuse imagery on upload, once member",
+          "after": "  their messages are safe against a compromised server.\n- [ ] **C12.40** Renewal alerts: warn a member before a charge somebody else\n  is about to make. A `renewal-alerts` module, off by default, holding a\n  register of third-party subscriptions against the contact spine and one\n  daily look-ahead job on the pg-boss registry that sends a transactional\n  notice through the configured mail adapter. It is deliberately NOT\n  `modules/subscriptions`, which is the site's own billing: nothing here\n  charges anyone, holds money or integrates a payment provider, and the two\n  must not acquire a dependency on each other, so `requires` is core alone.\n  Three properties are design decisions rather than implementation details,\n  because the obvious build of this feature gets each of them wrong.\n  Suppression is a unique row per (subscription, renewal) rather than\n  arithmetic over a \"last alerted\" timestamp: a window derived from the\n  renewal date and the lead time is correct only near its middle, double-sends\n  or goes silent at the boundaries, and leaves nothing to point at when a\n  member asks whether they were told. The pass is one scheduled job rather\n  than an interval timer in the web process, which on an autoscaled deployment\n  runs only when traffic happens to wake an instance and fires again on every\n  boot. And a failed send is counted and returned rather than swallowed: a\n  pass that logs only when something succeeded writes no trace at all once the\n  mail route stops working, which is the failure mode a notification product\n  can least afford. Erasure deletes rather than anonymises, because a list of\n  what somebody pays for has no aggregate anyone else is entitled to and an\n  anonymised copy is residue rather than data. Source progress 2026-11-19:\n  schema, contact-merge and privacy registration, look-ahead job and message,\n  and now the member's own surface. Five services in\n  `src/modules/renewal-alerts/service.ts` — two scoped self-service reads and\n  three writes that resolve the contact from the session and scope their\n  `WHERE` by it, so no input reaches another member's register. The register\n  itself is a portal room registered through the C8.11 section registry\n  (`src/modules/renewal-alerts/portal.ts`), which means the list and record\n  pages are the ones every other room already uses rather than a hand-written\n  twin that could disagree with them; the registry has no create verb, so the\n  only bespoke screens are adding and correcting a charge, under\n  `app/portal/(account)/renewals/`. One optional field was added to\n  `PortalSection` for this — an `add` descriptor the room page renders —\n  because a register the member keeps themselves is the one room that needs a\n  way in, and every other room's records are made by the business. Strings\n  land in all four catalogues, and `packages/sdk/src/generated.ts` is\n  regenerated, so the five services reach the SDK, OpenAPI and MCP surfaces as\n  a committed artifact rather than a claim. Landing with\n  `db/migrations/0080_renewal_alerts.sql`,\n  `tests/modules/renewal-alerts.test.ts` (28),\n  `tests/core/merge-completeness.test.ts`, `registry-completeness`,\n  `i18n-gate` and `locale-quality` passing, typecheck clean across the\n  repository, `eslint .` clean repository-wide, and the licensing gate\n  OK; changeset `renewal-alerts.md`. **Still required to close:** a\n  database-backed test of the pass itself, which has not run yet because the\n  suite skips database-backed tests when no `TEST_DATABASE_URL` is set rather\n  than failing; a browser or accessibility test over the three new screens;\n  and one observed real delivery end to end. No alert has been delivered by\n  this code.\n\n- [ ] **C12.30** Hash-match known abuse imagery on upload, once member",
+          "occurrences": 1
+        },
+        {
+          "before": "  `db/migrations/0080_renewal_alerts.sql`,",
+          "after": "  `db/migrations/0111_renewal_alerts.sql` (renumbered from 0080 on this\n  integration branch, which already held a different 0080),",
           "occurrences": 1
         }
       ]

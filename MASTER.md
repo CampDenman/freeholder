@@ -19327,7 +19327,8 @@ whatever is best for the people using the site.
   land in all four catalogues, and `packages/sdk/src/generated.ts` is
   regenerated, so the five services reach the SDK, OpenAPI and MCP surfaces as
   a committed artifact rather than a claim. Landing with
-  `db/migrations/0080_renewal_alerts.sql`,
+  `db/migrations/0111_renewal_alerts.sql` (renumbered from 0080 on this
+  integration branch, which already held a different 0080),
   `tests/modules/renewal-alerts.test.ts` (28),
   `tests/core/merge-completeness.test.ts`, `registry-completeness`,
   `i18n-gate` and `locale-quality` passing, typecheck clean across the
