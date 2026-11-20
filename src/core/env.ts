@@ -10,6 +10,18 @@ import { normalizeAgentProviderId } from "../adapters/agent/aliases";
 import { FORM_SCREENING_PROVIDERS } from "../adapters/form-screening/types";
 import { LEAD_SINK_PROVIDERS } from "../adapters/lead-sink/types";
 
+const imageRepositoryComponent = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/;
+
+function isImageRepository(value: string): boolean {
+  // Split at the registry and path boundaries before validating components.
+  // Each component owns its dots, so they are consumed by one repetition.
+  const [registry = "", ...path] = value.split("/");
+  const [host = "", port, extra] = registry.split(":");
+  return extra === undefined && imageRepositoryComponent.test(host) &&
+    (port === undefined || /^[0-9]+$/.test(port)) &&
+    path.length > 0 && path.every((part) => imageRepositoryComponent.test(part));
+}
+
 const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
@@ -490,7 +502,7 @@ const envSchema = z.object({
     .trim()
     .min(1)
     .max(200)
-    .refine((value) => /^[a-z0-9]+([._-][a-z0-9]+)*(\.[a-z0-9]+([._-][a-z0-9]+)*)*(:[0-9]+)?(\/[a-z0-9]+([._-][a-z0-9]+)*)+$/.test(value),
+    .refine(isImageRepository,
       "must be a lowercase registry/path repository with no tag or digest")
     .optional(),
 

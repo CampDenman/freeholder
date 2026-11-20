@@ -85,6 +85,26 @@ describe("env", () => {
       },
     );
   });
+
+  it.each(["ghcr.io/campdenman/freeholder", "registry.example.test:5000/ops-cache/fh_core.v2"])(
+    "accepts a lowercase image repository %s",
+    (repository) => withEnv({ FREEHOLDER_IMAGE_REPOSITORY: ` ${repository} ` }, () => {
+      expect(env().FREEHOLDER_IMAGE_REPOSITORY).toBe(repository);
+    }),
+  );
+
+  it.each([
+    "registry.example.test",
+    "registry.example.test:port/project/image",
+    "registry.example.test/project//image",
+    "registry.example.test/project/image:edge",
+    "registry.example.test/project/image@sha256:abc",
+    "registry.example.test/PROJECT/image",
+  ])("refuses an invalid image repository %s", (repository) => {
+    withEnv({ FREEHOLDER_IMAGE_REPOSITORY: repository }, () => {
+      expect(() => env()).toThrow(/FREEHOLDER_IMAGE_REPOSITORY/);
+    });
+  });
 });
 
 describe("requireProductionEnv()", () => {
