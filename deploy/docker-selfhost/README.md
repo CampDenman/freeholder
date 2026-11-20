@@ -23,8 +23,11 @@ moving from one to the other keeps your data.
 
 On a server with Docker and ports 80 and 443 open:
 
+Use the commands below once the `v1.0.0-rc.1` release is available.
+The [public beta release](https://github.com/CampDenman/freeholder/releases/tag/v0.2.0-beta.6) remains available in the meantime.
+
 ```sh
-git clone --depth 1 --branch v0.2.0-beta.6 https://github.com/CampDenman/freeholder.git
+git clone --depth 1 --branch v1.0.0-rc.1 https://github.com/CampDenman/freeholder.git
 cd freeholder
 deploy/docker-selfhost/selfhost.sh prepare        # or: prepare --domain example.com
 deploy/docker-selfhost/selfhost.sh start          # prints your private claim link
