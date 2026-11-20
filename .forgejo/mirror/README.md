@@ -20,9 +20,9 @@ sudo useradd --system --user-group --home-dir /var/lib/freeholder-mirror \
   --shell /usr/sbin/nologin freeholder-mirror
 sudo install -d -m 0700 -o freeholder-mirror -g freeholder-mirror /var/lib/freeholder-mirror
 sudo -u freeholder-mirror git init --bare /var/lib/freeholder-mirror/cache.git
-sudo install -D -m 0755 deploy/forgejo-mirror/sync-main.sh /usr/local/libexec/freeholder-mirror-sync
-sudo install -m 0644 deploy/forgejo-mirror/freeholder-mirror.service \
-  deploy/forgejo-mirror/freeholder-mirror.timer /etc/systemd/system/
+sudo install -D -m 0755 .forgejo/mirror/sync-main.sh /usr/local/libexec/freeholder-mirror-sync
+sudo install -m 0644 .forgejo/mirror/freeholder-mirror.service \
+  .forgejo/mirror/freeholder-mirror.timer /etc/systemd/system/
 ```
 
 Generate an unattended SSH key for `freeholder-mirror` at

@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-const script = resolve("deploy/forgejo-mirror/sync-main.sh");
+const script = resolve(".forgejo/mirror/sync-main.sh");
 const env: NodeJS.ProcessEnv = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", LC_ALL: "C" };
 const directories: string[] = [];
 
