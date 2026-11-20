@@ -20,7 +20,7 @@
 // is a side effect is one nobody can tell has stopped working.
 //
 // **Suppression is a row, not arithmetic.** See `schema.ts`.
-import { and, eq, lte, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { contacts } from "@/core/contacts/schema";
 import { env } from "@/core/env";
 import { formatMoney } from "@/core/i18n";
@@ -77,10 +77,8 @@ export async function runRenewalLookAhead(now: Date = new Date()): Promise<Renew
         eq(trackedSubscriptions.status, "active"),
         // Due when the renewal is within its own lead time, or already past —
         // a past renewal is rolled forward below rather than ignored.
-        lte(
-          sql`${trackedSubscriptions.nextRenewalAt} - make_interval(days => ${trackedSubscriptions.alertDays})`,
-          now,
-        ),
+        sql`${trackedSubscriptions.nextRenewalAt} - make_interval(days => ${trackedSubscriptions.alertDays})
+          <= ${now.toISOString()}::timestamptz`,
       ),
     );
 
