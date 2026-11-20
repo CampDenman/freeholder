@@ -5,7 +5,7 @@
   "status": "Scoped storage-quota fixture repaired and independently qualified on current migration93 source; hosted upload/delete/over-quota acceptance remains open",
   "artifacts": [
     { "path": "MASTER.md", "sha256": "8321d04877117120fbed1d3e0aab076a815ff4b0bf0d602e17d831646d27f926" },
-    { "path": "tests/core/storage-quota.test.ts", "sha256": "adee5b6fab104b3487774b950eae49f89d917001acf5b2c020f9052c9551838f" },
+    { "path": "tests/core/storage-quota.test.ts", "sha256": "82e7c39acb663c20af7af60cc9c47eb7e0e0aa57bab3195bbc8e5f326f69e93f" },
     { "path": "tests/helpers/storage-quota-scope.ts", "sha256": "8ef487231531c5829f1fa40fc213b0061075c370d5b83b1d06aaf8cb4e008fdf" },
     { "path": "deploy/hosted-storage-quotas.md", "sha256": "003da4030fa9ad2669a0383ca909da6b8fc2af5b5cc6c5102a4d960ac03ca11a" }
   ],
@@ -29,6 +29,24 @@
         {
           "before": "  source packaging/documentation defect, separate from storage runtime quality.\n  Focused source checks do not close hosted build or operational acceptance.\n\n",
           "after": "  source packaging/documentation defect, separate from storage runtime quality.\n  Focused source checks do not close hosted build or operational acceptance.\n  *(Scoped-fixture qualification 2026-11-15: the first current run had nine\n  failures because its direct calls predated original-caller admission. The\n  repaired controls use genuine started intents, admitted original callers and\n  observed synthetic TCP S3 responses, with no weakened SQL guards. Independent\n  fresh migration93 execution passes 11/11; TypeScript and focused lint pass.\n  See `deploy/storage-quota-scoped-fixture.source.json`. No runtime defect or\n  hosted acceptance follows.)*\n",
+          "occurrences": 1
+        }
+      ]
+    },
+    {
+      "path": "tests/core/storage-quota.test.ts",
+      "afterSha256": "82e7c39acb663c20af7af60cc9c47eb7e0e0aa57bab3195bbc8e5f326f69e93f",
+      "beforeSha256": "adee5b6fab104b3487774b950eae49f89d917001acf5b2c020f9052c9551838f",
+      "continue": true,
+      "edits": [
+        {
+          "before": "import { ordinaryMediaRequestProvider } from \"../helpers/media-original-provider-requests\";\n",
+          "after": "import { ordinaryMediaRequestProvider } from \"../helpers/media-original-provider-requests\";\nimport { hasDatabase } from \"../helpers/spine\";\n",
+          "occurrences": 1
+        },
+        {
+          "before": "describe.skipIf(!process.env.TEST_DATABASE_URL)(\"C10.32 real Postgres quota reservations\", () => {\n",
+          "after": "describe.runIf(hasDatabase)(\"C10.32 real Postgres quota reservations\", () => {\n",
           "occurrences": 1
         }
       ]
