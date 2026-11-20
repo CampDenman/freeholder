@@ -1,0 +1,171 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+#
+# Forgejo twin of .github/workflows/ci.yml.
+#
+# Tony's decision, 17 November 2026: GitHub and Forgejo run CI INDEPENDENTLY.
+# GitHub keeps its eight .github workflows and remains the pull-request gate.
+# This file exists so the private forge copy is independently testable on our
+# own runner fleet. It is NOT a merge gate and nothing on Forgejo is protected
+# by it.
+#
+# Read .forgejo/README.md before changing this file. It records which .github
+# jobs are deliberately absent here and why.
+#
+# Two fleet facts shape the triggers and the shard count, both from
+# /home/tony/CLAUDE.md and site-registry docs/forgejo-ci-runners.md:
+#   - The runner fleet is SHARED by every repo on forge.paradisemodern.com.
+#     There are 21 concurrent slots for all of Plotfinity, NVC, Paradise
+#     Modern, Camp Denman and this repo. A 32-shard matrix on every pull
+#     request would starve everyone else, so this runs on push to main and on
+#     demand, with 8 shards.
+#   - A runner runs a job only if it carries EVERY label in runs-on. Measured
+#     2026-11-17, the fleet carries: ubuntu-latest (11), nvc-heavy (11),
+#     self-hosted (11), nvc-deploy (10), pm-release (3). Do not invent a label;
+#     a label nothing carries waits forever instead of queueing.
+name: CI (Forgejo)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: forgejo-ci-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SESSION_SECRET: ci-build-only-not-a-real-secret-0000000000
+
+jobs:
+  application:
+    name: Application gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      # Actions are pinned by full data.forgejo.org URL, matching
+      # deploy-production.yml. A BARE name such as `actions/checkout` or
+      # `pnpm/action-setup` resolves against this instance's default actions
+      # URL and will not necessarily exist there, which is why this file does
+      # not reuse ./.github/actions/setup-project: that composite pulls
+      # pnpm/action-setup by bare name.
+      - name: Checkout
+        uses: https://data.forgejo.org/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Setup Node
+        uses: https://data.forgejo.org/actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+      - name: Activate the pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare "$(node -p "require('./package.json').packageManager")" --activate
+          pnpm --version
+      - name: Install the reviewed dependency graph
+        run: pnpm install --frozen-lockfile
+      - run: pnpm plan:check
+      - run: pnpm license:check
+      - run: pnpm workflow:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - name: Published package artifact integrity
+        run: pnpm packages:verify
+      - run: pnpm build
+      - run: pnpm artifact:check
+
+  tests:
+    name: Tests (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        # Eight shards, not the thirty-two in .github/workflows/ci.yml. The
+        # GitHub matrix is sized for hosted runners that nothing else is
+        # waiting on; this one shares 21 slots with every other repo on the
+        # forge. The timeout is raised to 40 minutes to absorb the four-fold
+        # increase in files per shard.
+        shard: [1/8, 2/8, 3/8, 4/8, 5/8, 6/8, 7/8, 8/8]
+    services:
+      postgres:
+        image: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: freeholder_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/freeholder_test
+    steps:
+      - name: Checkout
+        uses: https://data.forgejo.org/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # C10.19 identity applies the pre-collapse chain from the parent of
+          # the commit that deleted 0000_core-spine.sql. Depth 1 cannot see it.
+          fetch-depth: 0
+      - name: Setup Node
+        uses: https://data.forgejo.org/actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+      - name: Activate the pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare "$(node -p "require('./package.json').packageManager")" --activate
+      - name: Install the reviewed dependency graph
+        run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run --shard=${{ matrix.shard }}
+
+  dependency-audit:
+    name: Dependency evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: https://data.forgejo.org/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Setup Node
+        uses: https://data.forgejo.org/actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+      - name: Activate the pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare "$(node -p "require('./package.json').packageManager")" --activate
+      - name: Install the reviewed dependency graph
+        run: pnpm install --frozen-lockfile
+      # The attestation is written and read in the same job rather than
+      # uploaded. actions/upload-artifact is not pinned here because its
+      # availability on this instance is unverified; see .forgejo/README.md.
+      - name: Live dependency audit
+        run: node scripts/dependency-audit.mjs --write-attestation=artifacts/dependency-audit.json
+      - name: Show the audit attestation
+        run: |
+          test -s artifacts/dependency-audit.json
+          node -e "const a=require('./artifacts/dependency-audit.json');console.log(JSON.stringify(a).slice(0,2000))"
+
+  checks:
+    # Fan-in. `if: always()` plus an explicit assertion on every result,
+    # because a skipped job reports as SUCCESS in the status API and a gate
+    # that can be skipped is not a gate (CLAUDE.md, 2026-11-16).
+    name: checks
+    if: ${{ always() }}
+    needs: [application, tests, dependency-audit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Fail unless every gate succeeded
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS"
+          echo "$NEEDS" | jq -e 'all(.[]; .result == "success")'
