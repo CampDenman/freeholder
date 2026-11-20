@@ -52,7 +52,8 @@ Apache-2.0 does not replace or remove those notices.
 
 Contributions are accepted under Apache-2.0 (inbound = outbound).
 Submit work you have the right to contribute and retain applicable third-party
-notices. Contributors retain copyright in their contributions.
+notices. There is no CLA or copyright assignment. Contributors retain
+copyright in their contributions.
 
 ## Questions
 
