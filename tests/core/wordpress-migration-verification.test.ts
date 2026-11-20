@@ -9,7 +9,7 @@ const reservedFeedWarning = "WordPress /feed is Freeholder's member feed; WordPr
 const feedAliases = ["/?feed=rss2", "/?feed=atom", "/?feed=rss"];
 const atomMetadata = '<id>urn:example:blog</id><title>Blog</title><updated>2026-11-20T20:00:00Z</updated>';
 const atomFeed = `<feed xmlns="http://www.w3.org/2005/Atom">${atomMetadata}</feed>`;
-async function fixture(mode: "source" | "destination", { brokenFeed, feedBody = atomFeed }: { brokenFeed?: string; feedBody?: string } = {}) {
+async function fixture(mode: "source" | "destination", { brokenFeed, feedBody = atomFeed }: { brokenFeed?: string; feedBody?: string | Buffer } = {}) {
   const server = createServer((request, response) => {
     if (request.url === "/old" || request.url === "/two") { response.writeHead(301, { location: request.url === "/old" ? "/story" : "/old" }).end(); return; }
     if (request.url === "/temporary") { response.writeHead(302, { location: "/story" }).end(); return; }
@@ -149,6 +149,8 @@ describe("WordPress migration HTTP acceptance report", () => {
     ["multiple XML roots", atomFeed + atomFeed],
     ["foreign namespace", atomFeed.replace("http://www.w3.org/2005/Atom", "urn:example:not-atom")],
     ["invalid namespace name", atomFeed.replace(/^<feed[^>]*>/, '<a:feed:extra xmlns:a="http://www.w3.org/2005/Atom">').replace("</feed>", "</a:feed:extra>")],
+    ["unbound namespace prefix", atomFeed.replace("</feed>", "<unbound:metadata/></feed>")],
+    ["unbound attribute prefix", atomFeed.replace("<title>", '<title unbound:lang="en">')],
     ["missing metadata", atomFeed.replace(/<id>.*?<\/id>/, "")],
     ["duplicate metadata", atomFeed.replace("</feed>", "<title>Second title</title></feed>")],
     ["foreign metadata", atomFeed.replace("<title>", '<title xmlns="urn:example:other">')],
@@ -156,6 +158,11 @@ describe("WordPress migration HTTP acceptance report", () => {
     ["nonexistent date", atomFeed.replace("2026-11-20T20:00:00Z", "2026-02-30T20:00:00Z")],
     ["malformed entry", atomFeed.replace("</feed>", "<entry><title>No ID or date</title></entry></feed>")],
     ["document type", `<!DOCTYPE feed [<!ENTITY witness "changed">]>${atomFeed}`],
+    ["undeclared entity", atomFeed.replace("Blog", "&unregistered;")],
+    ["illegal character reference", atomFeed.replace("Blog", "&#0;")],
+    ["raw XML control character", atomFeed.replace("Blog", String.fromCodePoint(1))],
+    ["decoded whitespace title", atomFeed.replace("Blog", "&#32;")],
+    ["invalid UTF-8", Buffer.from([0x3c, 0xff, 0x3e])],
     ["oversized XML", atomFeed.replace("Blog", "x".repeat(20 * 1024 * 1024))],
   ])("refuses %s Atom response bodies even with the expected HTTP status and type", async (_name, feedBody) => {
     const { destinationOrigin, window, feedDecision } = await publishedFeedFixture({ feedBody });
@@ -179,6 +186,12 @@ describe("WordPress migration HTTP acceptance report", () => {
     });
     const { destinationOrigin, window, feedDecision } = await publishedFeedFixture({ feedBody });
     expect(await verifyMigration([window], destinationOrigin, { feedDecision })).toMatchObject({ accepted: true, feedDisposition: { verifiedAliases: feedAliases } });
+  });
+
+  it("recognizes XML text and numeric references without treating CDATA as markup", async () => {
+    const feedBody = atomFeed.replace("urn:example:blog", "urn&#58;example:blog").replace("Blog", "<![CDATA[&unregistered;]]>");
+    const { destinationOrigin, window, feedDecision } = await publishedFeedFixture({ feedBody });
+    expect(await verifyMigration([window], destinationOrigin, { feedDecision })).toMatchObject({ accepted: true });
   });
 
   it("refuses a decision for a different source, destination, run, generation or plan", async () => {

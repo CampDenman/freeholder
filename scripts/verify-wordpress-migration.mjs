@@ -4,8 +4,8 @@
 // compare the source crawl and the destination over real HTTP before cutover.
 import { readFile, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
-import { XMLParser, XMLValidator } from "fast-xml-parser";
 import { parse } from "parse5";
+import { SaxesParser } from "saxes";
 import { z } from "zod";
 
 const reservedFeedWarning = "WordPress /feed is Freeholder's member feed; WordPress feed aliases use /feeds/blog.xml.";
@@ -13,10 +13,7 @@ const feedAliases = ["/?feed=rss2", "/?feed=atom", "/?feed=rss"];
 const atomNamespace = "http://www.w3.org/2005/Atom";
 const maxAtomBytes = 20 * 1024 * 1024;
 const atomTimestamp = z.iso.datetime({ offset: true });
-const atomParser = new XMLParser({
-  preserveOrder: true, ignoreAttributes: false, attributeNamePrefix: "", parseTagValue: false,
-  ignoreDeclaration: true, ignorePiTags: true, processEntities: false, maxNestedTags: 64,
-});
+const atomMetadataFields = ["id", "title", "updated"];
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/);
 const feedDecisionSchema = z.strictObject({
   schema: z.literal("freeholder/wordpress-feed-decision/v1"),
@@ -47,58 +44,51 @@ export function htmlMetadata(html) {
   visit(parse(html)); return result;
 }
 
-function xmlElements(nodes, inherited = new Map()) {
-  return nodes.flatMap(node => {
-    const tag = Object.keys(node).find(key => !key.startsWith("#") && Array.isArray(node[key]));
-    if (!tag) return [];
-    const namespaces = new Map(inherited);
-    for (const [attribute, value] of Object.entries(node[":@"] ?? {})) {
-      if (attribute === "xmlns") namespaces.set("", value);
-      if (attribute.startsWith("xmlns:")) namespaces.set(attribute.slice(6), value);
-    }
-    const parts = tag.split(":");
-    if (parts.length > 2 || parts.some(part => !part)) throw new Error("Invalid XML element name.");
-    const [prefix, local] = parts.length === 2 ? parts : ["", tag];
-    return [{ local, namespace: namespaces.get(prefix), namespaces, children: node[tag] }];
-  });
-}
-
-function xmlText(nodes) {
-  return nodes.map(node => {
-    if (typeof node["#text"] === "string") return node["#text"];
-    return xmlText(Object.values(node).find(Array.isArray) ?? []);
-  }).join("");
-}
-
-function validateAtomMetadata(element) {
-  const fields = xmlElements(element.children, element.namespaces).filter(field => field.namespace === atomNamespace);
-  for (const name of ["id", "title", "updated"]) {
-    const matches = fields.filter(field => field.local === name);
-    if (matches.length !== 1) throw new Error(`Atom ${element.local} requires exactly one ${name} element.`);
-    const field = matches[0];
-    const value = xmlText(field.children).trim();
-    if (!value || (name !== "title" && xmlElements(field.children, field.namespaces).length)) {
-      throw new Error(`Atom ${element.local} has invalid ${name} content.`);
-    }
-    if (name === "id" && !/^[a-z][a-z0-9+.-]*:[^\s]+$/i.test(value)) throw new Error(`Atom ${element.local} has an invalid ID.`);
-    if (name === "updated" && !atomTimestamp.safeParse(value.toUpperCase()).success) {
-      throw new Error(`Atom ${element.local} has an invalid updated timestamp.`);
-    }
-  }
-}
-
 function validateAtomFeed(body) {
-  const malformed = "The final response must contain a well-formed Atom XML feed.";
-  if (/<!DOCTYPE|<!ENTITY/i.test(body) || XMLValidator.validate(body) !== true) throw new Error(malformed);
-  let elements;
-  try { elements = xmlElements(atomParser.parse(body)); }
-  catch { throw new Error(malformed); }
-  const [feed] = elements;
-  if (elements.length !== 1 || feed.local !== "feed" || feed.namespace !== atomNamespace) throw new Error(malformed);
-  validateAtomMetadata(feed);
-  for (const entry of xmlElements(feed.children, feed.namespaces)) {
-    if (entry.local === "entry" && entry.namespace === atomNamespace) validateAtomMetadata(entry);
-  }
+  const parser = new SaxesParser({ xmlns: true, defaultXMLVersion: "1.0", forceXMLVersion: true });
+  const malformed = () => { throw new Error("The final response must contain a well-formed Atom XML feed."); };
+  const feedFields = new Set();
+  let depth = 0;
+  let entryFields;
+  let field;
+
+  parser.on("error", malformed);
+  parser.on("doctype", malformed);
+  parser.on("opentag", ({ uri, local }) => {
+    depth++;
+    if (depth > 64 || (depth === 1 && (uri !== atomNamespace || local !== "feed"))) malformed();
+    if (field && field.name !== "title") throw new Error(`Atom ${field.name} must contain text only.`);
+    if (uri !== atomNamespace) return;
+    if (depth === 2 && local === "entry") entryFields = new Set();
+    const fields = depth === 2 ? feedFields : depth === 3 ? entryFields : undefined;
+    if (!fields || !atomMetadataFields.includes(local)) return;
+    if (fields.has(local)) throw new Error(`Atom feed or entry contains a duplicate ${local}.`);
+    fields.add(local);
+    field = { depth, name: local, text: "" };
+  });
+
+  const collectText = text => {
+    if (field) field.text += text;
+    else if ((depth === 1 || (depth === 2 && entryFields)) && text.trim()) malformed();
+  };
+  parser.on("text", collectText);
+  parser.on("cdata", collectText);
+  parser.on("closetag", () => {
+    if (field?.depth === depth) {
+      const value = field.text.trim();
+      if (!value) throw new Error(`Atom ${field.name} is empty.`);
+      if (field.name === "id" && !/^[a-z][a-z0-9+.-]*:[^\s]+$/i.test(value)) throw new Error("Atom ID must be absolute.");
+      if (field.name === "updated" && !atomTimestamp.safeParse(value.toUpperCase()).success) throw new Error("Atom updated timestamp is invalid.");
+      field = undefined;
+    }
+    if (depth === 2 && entryFields) {
+      if (entryFields.size !== atomMetadataFields.length) throw new Error("Atom entry requires exactly one ID, title and updated timestamp.");
+      entryFields = undefined;
+    }
+    if (depth === 1 && feedFields.size !== atomMetadataFields.length) throw new Error("Atom feed requires exactly one ID, title and updated timestamp.");
+    depth--;
+  });
+  parser.write(body).close();
 }
 
 async function readAtomBody(response) {
