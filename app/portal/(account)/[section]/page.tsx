@@ -17,6 +17,7 @@ import { formatDateTime, formatMoney } from "@/core/i18n";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { myRecords } from "@/core/portal/service";
+import { portalSection } from "@/core/portal/sections";
 import { currentBusiness } from "@/core/settings/read";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { getLocale, getT } from "../../../i18n";
@@ -56,10 +57,24 @@ export default async function PortalRoom({
   if (!room) notFound();
 
   const label = t(`portal.room.${room.key}`);
+  // Read from the registry rather than carried through the service: the room
+  // is already loaded, so the section is registered, and this keeps the
+  // portal's read contract unchanged for a purely presentational affordance.
+  const add = portalSection(room.key)?.add ?? null;
 
   return (
     <section className="grid gap-4">
       <h1 className="text-2xl font-semibold text-ink">{label}</h1>
+      {add ? (
+        <p>
+          <a
+            href={business ? localizeCustomerHref(add.href, locale, business) : add.href}
+            className="underline"
+          >
+            {t(add.labelKey)}
+          </a>
+        </p>
+      ) : null}
       {room.failed ? (
         // Said out loud rather than shown as an empty room. "We could not load
         // this" and "you have none of these" are different facts, and a

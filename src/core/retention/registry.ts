@@ -107,6 +107,8 @@ export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
   media_object_writes: "Original physical-operation and retired-key receipts are not a TTL store. Privacy minimizes personal fields only after settled original cleanup; unresolved work keeps its erasure receipt pending.",
   import_reader_ownership_receipts: "Minimal source ownership and erasure fences have no product TTL; reader privacy/holds govern state and normalized merge witnesses preserve exact undo.",
   mail_record_subjects: "Mail receipt ownership follows the receipt; personal fields use the three mail retention kinds.",
+  tracked_subscriptions: "The current register a member maintains, not historical content; it leaves on contact erasure, never on a timer.",
+  renewal_alerts: "Evidence that a warning was given, and when -- the record that makes \"were we told?\" answerable; not disposable content.",
   contact_relationships: "Join table of two contacts; not a TTL store.",
   customer_magic_links: "Credential bearer hashes; never a product TTL.",
   merge_candidates: "Derived review metadata for merge, not disposable content.",

@@ -1488,6 +1488,11 @@ export const SERVICE_NAMES = [
   "referrals.saveProgram",
   "referrals.saveTaxProfile",
   "referrals.taxPrompts",
+  "renewalAlerts.get",
+  "renewalAlerts.list",
+  "renewalAlerts.trackMine",
+  "renewalAlerts.untrackMine",
+  "renewalAlerts.updateMine",
   "rentals.close",
   "rentals.handOver",
   "rentals.list",
@@ -7684,6 +7689,26 @@ export interface ServiceCatalog {
     input: { since: string };
     output: { contactId: string; paidMinor: number; currency: string; thresholdMinor: number; state: "not_required" | "requested" | "collected" | "expired"; [key: string]: unknown }[];
   };
+  "renewalAlerts.get": {
+    input: { id: string; contactId?: string };
+    output: { subscription: { id: string; contactId: string; name: string; costMinor: number; currency: string; cycle: "monthly" | "annual" | "custom"; customIntervalDays: number | null; firstChargeAt: string; nextRenewalAt: string; alertDays: number; notes: string | null; status: "active" | "archived"; [key: string]: unknown }; alerts: { id: string; renewalAt: string; daysAhead: number; [key: string]: unknown }[]; [key: string]: unknown };
+  };
+  "renewalAlerts.list": {
+    input: { contactId?: string; status?: "active" | "archived"; limit?: number };
+    output: { id: string; contactId: string; name: string; costMinor: number; currency: string; cycle: "monthly" | "annual" | "custom"; customIntervalDays: number | null; firstChargeAt: string; nextRenewalAt: string; alertDays: number; notes: string | null; status: "active" | "archived"; [key: string]: unknown }[];
+  };
+  "renewalAlerts.trackMine": {
+    input: { name: string; costMinor: number; currency: string; cycle?: "monthly" | "annual" | "custom"; customIntervalDays?: number | null; firstChargeAt: string; alertDays?: number; notes?: string | null };
+    output: { id: string; contactId: string; name: string; costMinor: number; currency: string; cycle: "monthly" | "annual" | "custom"; customIntervalDays: number | null; firstChargeAt: string; nextRenewalAt: string; alertDays: number; notes: string | null; status: "active" | "archived"; [key: string]: unknown };
+  };
+  "renewalAlerts.untrackMine": {
+    input: { id: string };
+    output: { id: string; status: "active" | "archived"; [key: string]: unknown };
+  };
+  "renewalAlerts.updateMine": {
+    input: { id: string; name: string; costMinor: number; currency: string; cycle?: "monthly" | "annual" | "custom"; customIntervalDays?: number | null; firstChargeAt: string; alertDays?: number; notes?: string | null };
+    output: { id: string; contactId: string; name: string; costMinor: number; currency: string; cycle: "monthly" | "annual" | "custom"; customIntervalDays: number | null; firstChargeAt: string; nextRenewalAt: string; alertDays: number; notes: string | null; status: "active" | "archived"; [key: string]: unknown };
+  };
   "rentals.close": {
     input: { id: string; invoiceId?: string | null };
     output: { id: string; contactId: string; variantId: string; bookingId: string | null; calendarId: string; startsAt: string; dueAt: string; unit: "hour" | "day" | "week"; units: number; status: "reserved" | "out" | "overdue" | "returned" | "closed" | "cancelled"; quotedMinor: number; depositMinor: number; currency: string | null; invoiceId: string | null; pickedUpAt: string | null; returnedAt: string | null; conditionOut: string | null; conditionIn: string | null; returnCondition: ("fine" | "damaged" | "lost") | null; lateFeeMinor: number; damageFeeMinor: number; depositRefundMinor: number; notes: string | null; [key: string]: unknown };
@@ -10332,6 +10357,13 @@ export interface FreeholderApi {
     saveProgram: (input: ServiceCatalog["referrals.saveProgram"]["input"]) => Promise<ServiceCatalog["referrals.saveProgram"]["output"]>;
     saveTaxProfile: (input: ServiceCatalog["referrals.saveTaxProfile"]["input"]) => Promise<ServiceCatalog["referrals.saveTaxProfile"]["output"]>;
     taxPrompts: (input: ServiceCatalog["referrals.taxPrompts"]["input"]) => Promise<ServiceCatalog["referrals.taxPrompts"]["output"]>;
+  };
+  renewalAlerts: {
+    get: (input: ServiceCatalog["renewalAlerts.get"]["input"]) => Promise<ServiceCatalog["renewalAlerts.get"]["output"]>;
+    list: (input?: ServiceCatalog["renewalAlerts.list"]["input"]) => Promise<ServiceCatalog["renewalAlerts.list"]["output"]>;
+    trackMine: (input: ServiceCatalog["renewalAlerts.trackMine"]["input"]) => Promise<ServiceCatalog["renewalAlerts.trackMine"]["output"]>;
+    untrackMine: (input: ServiceCatalog["renewalAlerts.untrackMine"]["input"]) => Promise<ServiceCatalog["renewalAlerts.untrackMine"]["output"]>;
+    updateMine: (input: ServiceCatalog["renewalAlerts.updateMine"]["input"]) => Promise<ServiceCatalog["renewalAlerts.updateMine"]["output"]>;
   };
   rentals: {
     close: (input: ServiceCatalog["rentals.close"]["input"]) => Promise<ServiceCatalog["rentals.close"]["output"]>;

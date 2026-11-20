@@ -62,6 +62,20 @@ export type PortalSection = {
   /** Where it sits in the customer's own sense of importance, low first. */
   order: number;
   /**
+   * Where a member creates one of these, when they are the one who creates
+   * them.
+   *
+   * Absent for every room whose records the business makes: a customer does
+   * not open their own invoice, so an "add" link there would be a lie. Present
+   * for a register the member keeps themselves (C12.40's renewal alerts being
+   * the first), which otherwise renders as a list with no way to add to it.
+   *
+   * Here rather than in each module's own page because the rooms are data, and
+   * a module that hand-wrote a list page to get one button would be the second
+   * implementation of a list this registry exists to avoid.
+   */
+  add?: { href: string; labelKey: string };
+  /**
    * Read this contact's records **through the module's own service**.
    *
    * Elevation is `ctx.callAsSystem` and the contact id is resolved from the

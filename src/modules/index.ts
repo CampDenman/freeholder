@@ -43,6 +43,7 @@ import documentsManifest from "@/modules/documents/manifest";
 import automationsManifest from "@/modules/automations/manifest";
 import reportingManifest from "@/modules/reporting/manifest";
 import subscriptionsManifest from "@/modules/subscriptions/manifest";
+import renewalAlertsManifest from "@/modules/renewal-alerts/manifest";
 import assistantManifest from "@/modules/assistant/manifest";
 import socialManifest from "@/modules/social/manifest";
 import giftRegistryManifest from "../../plugins/gift-registry/manifest";
@@ -94,6 +95,7 @@ const manifests: ModuleManifest[] = [
   communityManifest,
   voiceVideoManifest,
   marketplaceManifest,
+  renewalAlertsManifest,
   ...localPluginManifests,
 ];
 
