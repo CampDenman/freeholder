@@ -9,6 +9,12 @@ import { assertCurrentImportAuthority } from "./authority";
 import { graphCatalogSchema } from "./graph-catalog";
 
 const metadataSchema = z.object({ sourceUrl: z.string(), path: z.string(), status: z.string(), seo: z.record(z.string(), z.unknown()) });
+export const verificationWindowIdentitySchema = z.object({
+  runId: z.uuid(),
+  generation: z.uuid(),
+  planDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  afterOrdinal: z.number().int().min(-1),
+});
 const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
 export async function graphVerificationWindow(ctx: ServiceContext, run: typeof importRuns.$inferSelect, afterOrdinal: number, limit: number) {
@@ -55,5 +61,9 @@ export async function graphVerificationWindow(ctx: ServiceContext, run: typeof i
   }
   if (afterOrdinal < 0) for (const feed of ["rss2", "atom", "rss"]) checks.push({ sourceUrl: run.origin ?? "", requestPath: `/?feed=${feed}`, destinationPath: "/feeds/blog.xml", redirect: true, expected: {} });
   if (checks.length > 2_000 || Buffer.byteLength(JSON.stringify(checks)) > 8 * 1024 * 1024) throw new ServiceError("validation", "Reduce the URL verification window to fit its response budget.");
-  return { sourceOrigin: run.origin ?? "", status: run.status, checks, warnings: [...warnings], nextOrdinal: rows.length > limit ? rows[limit - 1]!.ordinal : null };
+  return {
+    sourceOrigin: run.origin ?? "", status: run.status, checks, warnings: [...warnings],
+    window: { runId: run.id, generation: graph.generation, planDigest: graph.planDigest, afterOrdinal },
+    nextOrdinal: rows.length > limit ? rows[limit - 1]!.ordinal : null,
+  };
 }

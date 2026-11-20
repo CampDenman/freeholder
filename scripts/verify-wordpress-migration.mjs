@@ -28,7 +28,38 @@ async function read(url) {
   return { status: response.status, location: response.headers.get("location"), type: response.headers.get("content-type") ?? "", body: await response.text() };
 }
 
-export async function verifyMigration(plan, destinationOrigin) {
+function assembleVerificationWindows(windows) {
+  const first = windows[0];
+  const identity = first?.window;
+  if (!identity?.runId || !identity.generation || !/^[a-f0-9]{64}$/.test(identity.planDigest)) {
+    throw new Error("The first verification window needs an import run, generation and plan digest.");
+  }
+  const { sourceOrigin, status } = first;
+  const checks = [];
+  const warnings = new Set();
+  let cursor = -1;
+  for (const [index, page] of windows.entries()) {
+    const { window, nextOrdinal } = page;
+    if (page.sourceOrigin !== sourceOrigin || page.status !== status || window?.runId !== identity.runId ||
+        window.generation !== identity.generation || window.planDigest !== identity.planDigest) {
+      throw new Error(`Verification window ${index + 1} belongs to a different import, plan or publication state.`);
+    }
+    const final = index === windows.length - 1;
+    if (window.afterOrdinal !== cursor || (final ? nextOrdinal !== null : !Number.isSafeInteger(nextOrdinal) || nextOrdinal <= cursor)) {
+      throw new Error(`Verification window ${index + 1} has a missing or out-of-order cursor.`);
+    }
+    for (const check of page.checks) checks.push(check);
+    for (const warning of page.warnings) warnings.add(warning);
+    cursor = nextOrdinal;
+  }
+  return {
+    sourceOrigin, status, checks, warnings: [...warnings],
+    windowSequence: { runId: identity.runId, generation: identity.generation, planDigest: identity.planDigest, count: windows.length },
+  };
+}
+
+export async function verifyMigration(planOrWindows, destinationOrigin) {
+  const plan = Array.isArray(planOrWindows) ? assembleVerificationWindows(planOrWindows) : planOrWindows;
   const origin = new URL(destinationOrigin);
   if (!["http:", "https:"].includes(origin.protocol) || origin.username || origin.password) throw new Error("Use an HTTP(S) destination without credentials.");
   const source = new URL(plan.sourceOrigin);
@@ -48,7 +79,7 @@ export async function verifyMigration(plan, destinationOrigin) {
   if (plan.checks.length === 0) unresolved.push("The plan contains no public URL checks.");
   // Graph plans include the cursor even in their final window. A standalone
   // window covers only its own entries.
-  if (plan.nextOrdinal !== undefined) unresolved.push("Migration-wide acceptance requires all verification windows.");
+  if (plan.window !== undefined || plan.nextOrdinal !== undefined) unresolved.push("Migration-wide acceptance requires all verification windows.");
   const rows = [];
   for (const check of plan.checks) {
     const request = new URL(check.requestPath, origin);
@@ -104,7 +135,7 @@ export async function verifyMigration(plan, destinationOrigin) {
     } catch (error) { errors.push(error.message); }
     rows.push({ ...check, errors, warnings, sourceMeta, destinationMeta });
   }
-  return { verifiedAt: new Date().toISOString(), destinationOrigin: origin.origin, status: plan.status, accepted: plan.status === "published" && !unresolved.length && rows.every(row => !row.errors.length && !row.warnings.length), unresolved, rows };
+  return { verifiedAt: new Date().toISOString(), destinationOrigin: origin.origin, status: plan.status, accepted: plan.status === "published" && !unresolved.length && rows.every(row => !row.errors.length && !row.warnings.length), unresolved, rows, ...(plan.windowSequence ? { windowSequence: plan.windowSequence } : {}) };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {

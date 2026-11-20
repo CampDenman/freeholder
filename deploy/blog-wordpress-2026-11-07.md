@@ -77,10 +77,13 @@ For pages it checks the canonical and imported search and social text, compares
 rendered source title, description, robots and hreflang, and records missing
 source evidence. Blog feed aliases must end at an Atom response. A report with
 zero URL checks, failures, warnings or unresolved source features exits nonzero.
-For a graph import, this command can check URLs in an individual window. The
-window's report exits nonzero even when its cursor is null because prior windows
-are outside that report. Retain the URL results for each window in the owner's
-cutover review.
+For a graph import, export an ordered JSON array of the original verification
+windows from one published run. Start at `afterOrdinal: -1`, use each returned
+`nextOrdinal` for the next request, and include the final response with
+`nextOrdinal: null`. Pass that array as `PLAN.json`. The report names the run,
+generation, plan digest and number of windows. The verifier rejects gaps and
+mixed imports before making requests. A standalone window can report URL
+results for its entries and exits nonzero for migration-wide acceptance.
 
 ## Remaining cutover decisions and limits
 

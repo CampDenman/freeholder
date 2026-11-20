@@ -51,6 +51,23 @@ describe("WordPress migration HTTP acceptance report", () => {
     expect(await verifyMigration(plan, destination)).toMatchObject({ accepted: true });
   });
 
+  it("accepts a continuous graph sequence and refuses missing, reordered or mixed windows", async () => {
+    const source = await fixture("source"), destination = await fixture("destination");
+    const check = { sourceUrl: `${source}/story`, requestPath: "/story", destinationPath: "/story", redirect: false, expected: {} };
+    const feed = { sourceUrl: source, requestPath: "/?feed=rss2", destinationPath: "/feeds/blog.xml", redirect: true, expected: {} };
+    const identity = { runId: "96dc85db-50a4-4eb3-a7e8-c599db608c53", generation: "4efb751f-da89-47de-abb0-bb6dd3f4255a", planDigest: "a".repeat(64) };
+    const common = { sourceOrigin: source, status: "published", warnings: [] };
+    const first = { ...common, checks: [feed], window: { ...identity, afterOrdinal: -1 }, nextOrdinal: 3 };
+    const last = { ...common, checks: [check], window: { ...identity, afterOrdinal: 3 }, nextOrdinal: null };
+    expect(await verifyMigration([first, last], destination)).toMatchObject({ accepted: true, rows: [{ requestPath: feed.requestPath }, { requestPath: check.requestPath }], windowSequence: { ...identity, count: 2 } });
+    await expect(verifyMigration([first], destination)).rejects.toThrow("cursor");
+    await expect(verifyMigration([last], destination)).rejects.toThrow("cursor");
+    await expect(verifyMigration([last, first], destination)).rejects.toThrow("cursor");
+    await expect(verifyMigration([first, { ...last, window: { ...last.window, afterOrdinal: 4 } }], destination)).rejects.toThrow("cursor");
+    await expect(verifyMigration([first, { ...last, window: { ...last.window, planDigest: "b".repeat(64) } }], destination)).rejects.toThrow("different import, plan or publication state");
+    expect(await verifyMigration([first, { ...last, warnings: ["An original alias remains unresolved."] }], destination)).toMatchObject({ accepted: false, unresolved: ["An original alias remains unresolved."] });
+  });
+
   it("requires a literal 301 to a real target and the final route's expected media type", async () => {
     const source = await fixture("source"), destination = await fixture("destination");
     const story = { sourceUrl: `${source}/story`, requestPath: "/story/", destinationPath: "/story", redirect: false, expected: {} };
