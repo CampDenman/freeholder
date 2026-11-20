@@ -1,0 +1,11 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+[Unit]
+Description=Refresh the private Freeholder mirror every 15 minutes
+
+[Timer]
+OnActiveSec=2min
+OnUnitInactiveSec=15min
+
+[Install]
+WantedBy=timers.target
