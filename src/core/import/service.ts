@@ -46,7 +46,7 @@ import { archiveGraphHeaderSchema } from "./source-index-contract";
 import { graphMediaPlanSchema } from "./graph-catalog";
 import type { ArchiveAsset } from "./archive";
 import { safeImportHref } from "./content-links";
-import { genericPreview, genericPlanSchema, genericSourceQuery, parseGenericHtml, stageGenericPages } from "./generic-plan";
+import { genericPreview, genericPlanSchema, genericQuerylessCanonicals, genericSourceQuery, parseGenericHtml, stageGenericPages } from "./generic-plan";
 import { approvedMediaOrigins, approvedMediaOriginsSchema, allowedMediaOrigins } from "./media-origins";
 import { parseGenericFeed } from "./generic-feed";
 import { readRetainedSourceChunk, releaseImportSources, retainedImportSourceSchema, retainedSourceFromRun, sameRetainedOriginal } from "./retained-source";
@@ -919,15 +919,17 @@ const commitApply = defineService({
     };
     const globalTargets = await importBatchTargets(ctx);
     const linkMap = new Map<string, string>([...globalTargets.flatMap(target => target.sourcePath !== undefined ? [[target.sourcePath, target.targetSlug] as const] : []), ...archiveAliases.map(alias => [alias.fromPath, alias.toPath] as const)]);
-    const linksByQueryAddress = new Map<string, string>();
+    const querylessCanonicals = generic ? genericQuerylessCanonicals(staged) : new Set<string>();
+    const linksByQueryAddress = new Map<string, { slug: string; preserveQuery: boolean }>();
     for (const { page, slug } of placements) {
       const path = nonWordpress ? archiveSourcePath(page.url, nonWordpress.site) : wordpressPath(page.url, hosts, basePath);
       if (generic && path !== null) {
         const source = new URL(page.url, generic.site.url);
         const query = genericSourceQuery(source);
         if (query) {
-          linksByQueryAddress.set(path + query, slug);
-          continue;
+          const preserveQuery = querylessCanonicals.has(page.url);
+          linksByQueryAddress.set(path + query, { slug, preserveQuery });
+          if (!preserveQuery) continue;
         }
       }
       if (page.redirectFrom) linkMap.set(page.redirectFrom, slug);
@@ -952,7 +954,7 @@ const commitApply = defineService({
           const query = genericSourceQuery(url);
           if (query) {
             const target = linksByQueryAddress.get(path + query);
-            return target === undefined ? href : `/${target}${hash}`;
+            return target === undefined ? href : `/${target.slug}${target.preserveQuery ? query : ""}${hash}`;
           }
         }
         if (nonWordpress) search = url.search;
@@ -1109,7 +1111,7 @@ const commitApply = defineService({
       for (const { page, slug } of landed) {
         // Older previews may include a path-only alias for a query address.
         // That alias cannot represent the page's source URL.
-        if (generic && genericSourceQuery(new URL(page.url, generic.site.url))) continue;
+        if (generic && !querylessCanonicals.has(page.url) && genericSourceQuery(new URL(page.url, generic.site.url))) continue;
         const fromPath = page.redirectFrom?.replace(/^\/+|\/+$/g, "");
         if (!fromPath || fromPath === slug) continue;
         if (livePaths.has(fromPath)) {

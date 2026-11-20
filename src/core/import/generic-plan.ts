@@ -74,11 +74,25 @@ export function genericSourceQuery(url: URL): string {
   return url.href.slice(url.origin.length + url.pathname.length).split("#", 1)[0] ?? "";
 }
 
-function genericDestination(url: URL) {
+/** A path-only alias needs one source page and its explicit queryless canonical. */
+export function genericQuerylessCanonicals(pages: ReadonlyArray<{ url: string; seo?: WordpressSeo }>): Set<string> {
+  const counts = new Map<string, number>();
+  const declared = new Map<string, string>();
+  for (const page of pages) {
+    let url: URL;
+    try { url = new URL(page.url); } catch { continue; }
+    const address = url.origin + url.pathname;
+    counts.set(address, (counts.get(address) ?? 0) + 1);
+    if (genericSourceQuery(url) && page.seo?.canonical === address) declared.set(page.url, address);
+  }
+  return new Set([...declared].filter(([, address]) => counts.get(address) === 1).map(([url]) => url));
+}
+
+function genericDestination(url: URL, querylessCanonical = false) {
   const sourcePath = url.pathname.replace(/^\/+|\/+$/g, "");
   const slug = toCmsSlug(sourcePath.replace(/(?:^|\/)index\.html?$/i, "").replace(/\.html?$/i, ""));
   const query = genericSourceQuery(url);
-  if (!query) return { slug, ...(sourcePath !== slug ? { redirectFrom: sourcePath } : {}) };
+  if (!query || querylessCanonical) return { slug, ...(sourcePath !== slug ? { redirectFrom: sourcePath } : {}) };
   // Query values can be sensitive or unsuitable as CMS path segments. The
   // exact path and query determine a stable, bounded suffix without exposing them.
   const suffix = createHash("sha256").update(url.pathname + query).digest("hex").slice(0, 24);
@@ -152,6 +166,7 @@ export function stageGenericPages(pages: GenericPage[], origin: string, robotsTx
   const site = assertPublicHttpUrl(origin), media = new Map<string, GenericPlan["media"][number]>();
   const mediaOrigins = allowedMediaOrigins(origin, approved);
   const unresolved = new Set<string>(), warnings: GenericPlan["report"]["sourceWarnings"] = [], paths = new Set<string>();
+  const querylessCanonicals = genericQuerylessCanonicals(pages);
   let bytes = 0;
   const accepted = pages.map(page => {
     const url = assertPublicHttpUrl(page.url);
@@ -182,7 +197,7 @@ export function stageGenericPages(pages: GenericPage[], origin: string, robotsTx
     }
     if (warnings.length < 100 && query) warnings.push({ code: "query-address", url: url.href });
     if (warnings.length < 100 && page.provenance.source === "sitemap") warnings.push({ code: "discovery-only", url: url.href });
-    return { ...page, body, ...genericDestination(url), seo: page.seo ?? { ...parsed.seo, title: page.title, preserveTitle: true } };
+    return { ...page, body, ...genericDestination(url, querylessCanonicals.has(page.url)), seo: page.seo ?? { ...parsed.seo, title: page.title, preserveTitle: true } };
   });
   const plan = genericPlanSchema.parse({ version: 1, site: { url: site.origin, hosts: [site.host.toLowerCase()], basePath: "" }, robotsTxt, ...(approved.length ? { mediaOrigins: [...mediaOrigins] } : {}), media: [...media.values()], report: { unresolvedMedia: [...unresolved].slice(0, 100), sourceWarnings: warnings } });
   return { preview: { sourceFormat: "generic-site", pages: accepted, generic: plan }, counts: { pages: accepted.length, media: media.size, redirects: accepted.filter(page => page.redirectFrom).length, mediaWarnings: unresolved.size, sourceWarnings: warnings.length } };

@@ -123,6 +123,16 @@ describe.runIf(hasDatabase)("typed generic import lifecycle (C3.22)", { timeout:
     await rollbackImport.call({ id: run.id }, OWNER);
     expect(await db().select().from(pages).where(eq(pages.id, first!.id))).toHaveLength(0);
   });
+  it("keeps the established redirect and fragment for a lone page with a queryless canonical", async () => {
+    const run = await startImport.call({ kind: "html", origin: "https://source.example/legacy/team.html?edition=one" }, OWNER);
+    const html = '<title>Fictional team</title><link rel="canonical" href="/legacy/team.html"><main><p><a href="#people">Meet the team</a></p><h2 id="people">People</h2></main>';
+    await previewFromSource.call({ id: run.id, payload: html }, OWNER);
+    expect((await commitImport.call({ id: run.id }, OWNER)).counts).toMatchObject({ pages: 1, redirects: 1, sourceWarnings: 1 });
+    const [page] = await db().select().from(pages).where(eq(pages.slug, "legacy/team"));
+    expect(page?.seo).toMatchObject({ canonical: "/legacy/team" });
+    expect(JSON.stringify(page?.blocks)).toContain('"/legacy/team?edition=one#people"');
+    expect(await db().select().from(redirects)).toMatchObject([{ fromPath: "legacy/team.html", toPath: "legacy/team" }]);
+  });
   it("keeps different media query identities separate through actual asset acceptance", async () => {
     const run = await startImport.call({ kind: "html", origin: "https://source.example/variants.html" }, OWNER);
     await previewFromSource.call({ id: run.id, payload: '<title>Source variants</title><main><img src="/image?size=1" alt="First"><img src="/image?size=2" alt="Second"></main>' }, OWNER);
