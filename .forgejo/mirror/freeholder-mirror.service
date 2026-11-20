@@ -1,0 +1,20 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+[Unit]
+Description=Fast-forward the private Freeholder mirror from GitHub main
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=freeholder-mirror
+Group=freeholder-mirror
+StateDirectory=freeholder-mirror
+StateDirectoryMode=0700
+Environment="GIT_SSH_COMMAND=/usr/bin/ssh -F /dev/null -i /var/lib/freeholder-mirror/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/var/lib/freeholder-mirror/known_hosts"
+ExecStart=/usr/local/libexec/freeholder-mirror-sync --apply /var/lib/freeholder-mirror/cache.git https://github.com/CampDenman/freeholder.git ssh://git@forge.paradisemodern.com:2222/tony/freeholder.git
+TimeoutStartSec=15min
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true

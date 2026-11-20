@@ -5,7 +5,7 @@
   "status": "Known original CREATE recovery and full follow-on upload journey qualified on fresh/upgraded migration99 PostgreSQL; hosted/provider/stopped-executor acceptance remains open",
   "artifacts": [
     { "path": "MASTER.md", "sha256": "187cd41a1a223ce9c2f757c922b210c53262425c6797e3b666b17da4fc465ba6" },
-    { "path": "tests/core/media-multipart-known-create-lifecycle.test.ts", "sha256": "328a49fb38b3edb814ca15204a0bcd540210fb61d6d97dd4ae1b11fc9d25a1c8" },
+    { "path": "tests/core/media-multipart-known-create-lifecycle.test.ts", "sha256": "631cf79c5aa5dbb63fa4529dcbfbdff886a832f56ba251e1f44150367a4e0cff" },
     { "path": "src/core/media/multipart-recovery.ts", "sha256": "e6009be3be0cee562d9775b8c9eeaed4dd17eafd87b6a15cdb76539d194522ce" },
     { "path": "db/migrations/0099_multipart_complete_parts_columns.sql", "sha256": "0efbbda449aabe76a7f6b6dbac2409e255bec3113e5c436e35f23414a49bf959" },
     { "path": "db/migrations/meta/_journal.json", "sha256": "b6e833967d81b9778772b3d605d541f72a327d9693945f00142ceaec95e0d843" },
@@ -33,6 +33,19 @@
           "before": "  stopped/legacy recovery and provider acceptance still govern other controls.\n  Signing containment source2026-11-13",
           "after": "  stopped/legacy recovery and provider acceptance still govern other controls.\n  Known-CREATE recovery qualification2026-11-15: migration99 resolves a genuine\n  complete-parts variable/column ambiguity, and the owner review listing now keeps\n  accepted operations with unresolved physical callers available. The original\n  precondition run skipped5/5; subsequent controls preserved2 then1 failures.\n  Final fresh execution passes5/5, including review→declare→sign→browser PUT→\n  complete with no second CREATE and no rewritten first results. Real98→99 upgrade\n  verifies100 journals and the exact function body; full TypeScript/focused lint\n  pass. See `deploy/multipart-known-create-lifecycle.source.json`. No C row closes.\n  Signing containment source2026-11-13",
           "occurrences": 1
+        }
+      ]
+    },
+    {
+      "path": "tests/core/media-multipart-known-create-lifecycle.test.ts",
+      "afterSha256": "631cf79c5aa5dbb63fa4529dcbfbdff886a832f56ba251e1f44150367a4e0cff",
+      "beforeSha256": "328a49fb38b3edb814ca15204a0bcd540210fb61d6d97dd4ae1b11fc9d25a1c8",
+      "continue": true,
+      "edits": [
+        {
+          "before": ".from(requests).where(eq(requests.callId,before.caller.id))",
+          "after": ".from(requests).where(eq(requests.callId,before.caller.id)).orderBy(requests.id)",
+          "occurrences": 2
         }
       ]
     }
