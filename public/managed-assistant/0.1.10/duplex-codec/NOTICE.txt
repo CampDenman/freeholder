@@ -6,7 +6,7 @@ licenses and notices with all redistributed source and binary assets.
 
 PM modified audio-output-processor.js on 13 October 2026 to report non-silent
 output and correct its sample predicate. It is not byte-identical to upstream.
-The decoder and encoder files remain unchanged from the inspected TRLD copy.
+The decoder and encoder files remain unchanged from the inspected upstream copy.
 
 Current asset SHA-256 digests:
 963d72b0ed123783f3ee66da8281f53436ec587f7dbbc94da2efd394c675a0b2  audio-output-processor.js
