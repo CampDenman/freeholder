@@ -68,6 +68,10 @@ const MEASURED_DURATION_MS: Readonly<Record<string, number>> = Object.freeze({
   "tests/core/spine.test.ts": 141_500,
   "tests/core/agents-budgets.test.ts": 49_500,
   "tests/core/agents-inbound.test.ts": 33_000,
+  // The single timing test runs source setup and real proration acceptance.
+  // A fresh PostgreSQL 16.15 rehearsal measured 152.6s across those stages.
+  // The generic estimate was 2.9s, placing it after ten files in run 44794088542.
+  "tests/modules/atomic-credit-stage-profile89.test.ts": 153_000,
   "tests/modules/calculators.test.ts": 6_000,
   "tests/modules/referrals-commission.test.ts": 31_000,
 });
