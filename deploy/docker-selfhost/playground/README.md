@@ -116,8 +116,8 @@ For `demo.freeholder.ai`, the private Forgejo workflow runs the reviewed
 The command pulls the promoted `edge` image and boots it through the regular
 handover. It records the new pin only after the sole running `playground-app`
 alias holder has the promoted digest and image ID and the public readiness
-endpoint returns 200. A failed update retains the prior pin. If the handover
-had already stopped the previous app, the command attempts to restore its
+endpoint and homepage each return 200. A failed update retains the prior pin.
+If the handover had already stopped the previous app, the command attempts to restore its
 image. The command requires a regular `.env` file with one `FREEHOLDER_IMAGE`
 assignment. If retiring the old project fails while both managed apps hold
 the alias, the handover keeps a ready app serving and reports the failed
