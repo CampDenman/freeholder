@@ -32,7 +32,7 @@ import {
   updateCollection,
 } from "@/modules/catalog/service";
 import { createTaxCategory } from "@/modules/invoicing/tax-service";
-import { updateBusiness } from "@/core/settings/service";
+import { patchBusiness, updateBusiness } from "@/core/settings/service";
 import { localeDirection } from "@/core/i18n";
 import { renderSitemap } from "@/core/seo/sitemap";
 import { LOCALE_HEADER, PATH_HEADER } from "@/core/http/headers";
@@ -285,11 +285,14 @@ describe.runIf(hasDatabase)("the collection page at /c/<slug>", { timeout: 60_00
       ar: { next: "التالي", pagination: "ترقيم الصفحات", direction: "rtl" },
     };
     for (const [locale, labels] of Object.entries(expected)) {
-      const { html } = await renderPage("big-wall", {}, locale);
+      const { html, metadata } = await renderPage("big-wall", {}, locale);
       expect(html).toContain(`href="/${locale}/products/print-0"`);
       expect(html).toContain(labels.next);
       expect(html).toContain(labels.pagination);
       expect(localeDirection(locale)).toBe(labels.direction);
+      expect(metadata.alternates?.canonical).toBe("http://localhost:3000/c/big-wall");
+      expect(metadata.alternates?.languages).toMatchObject({ [locale]: `http://localhost:3000/${locale}/c/big-wall` });
+      expect(metadata.openGraph).toMatchObject({ url: metadata.alternates?.canonical });
     }
     // Default locale carries no prefix.
     const { html: english } = await renderPage("big-wall", {}, "en");
@@ -324,5 +327,11 @@ describe.runIf(hasDatabase)("the collection page at /c/<slug>", { timeout: 60_00
     const xml = renderSitemap("http://localhost:3000", entries);
     expect(xml).toContain("<loc>http://localhost:3000/c/wall</loc>");
     expect(xml).not.toContain("unpublished");
+    expect(await collectionPaths.call({ locale: "fr" }, ANONYMOUS)).toEqual([]);
+    expect(await collectionPaths.call({ locale: "de" }, ANONYMOUS)).toEqual([]);
+    await patchBusiness.call({ defaultLocale: "fr", enabledLocales: ["fr", "en"] }, OWNER);
+    expect(await collectionPaths.call({ locale: "en" }, ANONYMOUS)).toEqual([]);
+    expect((await collectionPaths.call({ locale: "fr" }, ANONYMOUS)).map(({ slug }) => slug)).toEqual(["c/wall"]);
+    expect((await collectionPaths.call({}, ANONYMOUS)).map(({ slug }) => slug)).toEqual(["c/wall"]);
   });
 });
