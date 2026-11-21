@@ -64,7 +64,8 @@ async function snapshot(runId: string, graphId: string) {
   return {
     run: (await db().select().from(importRuns).where(eq(importRuns.id, runId)))[0],
     graph: (await db().select().from(importSourceGraphs).where(eq(importSourceGraphs.id, graphId)))[0],
-    entries: await db().select().from(importSourceEntries).where(eq(importSourceEntries.graphId, graphId)),
+    entries: await db().select().from(importSourceEntries)
+      .where(eq(importSourceEntries.graphId, graphId)).orderBy(asc(importSourceEntries.ordinal)),
     media: await db().select().from(importSourceMedia).where(eq(importSourceMedia.graphId, graphId)),
   };
 }
