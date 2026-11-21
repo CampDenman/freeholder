@@ -5,7 +5,7 @@ import { definePlugin } from "@freeholder/plugin-kit";
 export default definePlugin({
   name: "marketplace",
   version: "0.1.0",
-  freeholder: "^0.2.0",
+  freeholder: "~1.0.0",
   license: "Apache-2.0",
   permissions: ["contacts:write", "invoicing:write", "catalog:write", "network:external"],
   requires: ["core", "invoicing"],

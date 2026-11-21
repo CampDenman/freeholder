@@ -20,8 +20,11 @@ run it, open the link.
 
 ## Install
 
+Use the commands below once the `v1.0.0-rc.1` release is available.
+The [public beta release](https://github.com/CampDenman/freeholder/releases/tag/v0.2.0-beta.6) remains available in the meantime.
+
 ```sh
-curl -fsSLO https://github.com/CampDenman/freeholder/releases/download/v0.2.0-beta.6/install.sh
+curl -fsSLO https://github.com/CampDenman/freeholder/releases/download/v1.0.0-rc.1/install.sh
 less install.sh                      # optional: read what it does
 sudo sh install.sh                   # asks for your domain; Enter = temporary address
 ```

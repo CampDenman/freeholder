@@ -6,7 +6,7 @@ import { voiceVideoSettingsSchema } from "./settings";
 export default definePlugin({
   name: "voice-video",
   version: "0.1.0",
-  freeholder: "^0.2.0",
+  freeholder: "~1.0.0",
   license: "Apache-2.0",
   permissions: ["contacts:read", "conversations:write", "media:write", "privacy:write", "network:external"],
   requires: ["core"],

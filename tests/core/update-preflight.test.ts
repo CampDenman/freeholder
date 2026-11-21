@@ -10,6 +10,7 @@ import { hashDirectory, publisherPublicKey, signIntegrity } from "@/core/plugins
 import { trustPublisherKey } from "@/core/plugins/publisher-keys";
 import { pluginCompatibility, runPreflight } from "@/core/update/preflight";
 import { preflightUpdate } from "@/core/update/service";
+import { firstPartyPluginRange } from "../../scripts/release-packages.mjs";
 import {
   ANONYMOUS,
   closeDb,
@@ -31,6 +32,13 @@ describe("plugin compatibility (C10.05)", () => {
     expect(step.verdict).toBe("fail");
     expect(step.detail).toMatch(/broken needs \^9\.0\.0/);
     expect(pluginCompatibility([{ name: "gift-registry", freeholder: "^0.1.0" }], "0.1.0").verdict).toBe("ok");
+  });
+
+  it("allows first-party patches and preserves third-party ranges", () => {
+    const firstParty = [{ name: "first-party", freeholder: firstPartyPluginRange("1.0.0-rc.1") }];
+    expect(pluginCompatibility(firstParty, "1.0.1").verdict).toBe("ok");
+    expect(pluginCompatibility(firstParty, "1.1.0").verdict).toBe("fail");
+    expect(pluginCompatibility([{ name: "third-party", freeholder: "^1.0.0" }], "1.1.0").verdict).toBe("ok");
   });
 });
 
@@ -98,7 +106,7 @@ describe.runIf(hasDatabase)("update preflight (C10.05)", { timeout: 60_000 }, ()
     const report = await runPreflight({ targetVersion: target });
     const plugins = report.steps.find((step) => step.id === "plugins");
     expect(plugins?.verdict).toBe("fail");
-    expect(plugins?.detail).toContain(`Cannot apply ${target}: gift-registry needs ^`);
+    expect(plugins?.detail).toContain(`Cannot apply ${target}: gift-registry needs ${firstPartyPluginRange(PLATFORM_VERSION)}`);
     expect(report.ok).toBe(false);
   });
 

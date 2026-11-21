@@ -8,8 +8,10 @@ Set its exact version, channel, minimum upgrade version, schema risk, CVSS/sever
 manual steps and plugin API in the same reviewed change as all package versions.
 The same change sets every first-party plugin's `freeholder` range
 (`plugins/*/plugin.json` and `manifest.ts`, and `src/modules/proof/manifest.ts`)
-to the new major and minor, for example `^0.3.0` for 0.3.x. Package release and
-publication refuse a version whose first-party ranges were not bumped
+to the new major and minor. Keep the caret convention for 0.x, such as `^0.3.0`,
+and use a tilde from 1.0 onward, such as `~1.0.0`. The tilde allows 1.0.x
+patches while 1.1 needs separate qualification. Package release and publication
+refuse a version whose first-party ranges were not bumped
 (`readAlignedVersion` in `scripts/release-packages.mjs`).
 Breaking releases must declare tested recovery instructions. A candidate such as
 `1.0.0-rc.1` uses channel `edge`, npm tag `next`, a prerelease GitHub release,

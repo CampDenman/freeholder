@@ -14,8 +14,11 @@ control.
 On a fresh Ubuntu 22.04+ or Debian 12+ server (2 GB of memory or more, ports
 80 and 443 open), as a user who can `sudo`:
 
+Use the commands below once the `v1.0.0-rc.1` release is available.
+The [public beta release](https://github.com/CampDenman/freeholder/releases/tag/v0.2.0-beta.6) remains available in the meantime.
+
 ```sh
-curl -fsSLO https://github.com/CampDenman/freeholder/releases/download/v0.2.0-beta.6/install.sh
+curl -fsSLO https://github.com/CampDenman/freeholder/releases/download/v1.0.0-rc.1/install.sh
 sudo sh install.sh                 # type your domain, or press Enter for a temporary https://<ip>.sslip.io address
 sudo freeholder claim-link         # open this link yourself and create your owner account
 sudo freeholder status             # health, HTTPS certificate, storage and backups

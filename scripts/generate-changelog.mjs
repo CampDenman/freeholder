@@ -72,7 +72,7 @@ and the SDK publish.
 
 ## ${version}
 
-Active development, not a release candidate.
+See the [release record](https://github.com/CampDenman/freeholder/releases) for published builds.
 
 ${sections.join("\n\n")}
 `;

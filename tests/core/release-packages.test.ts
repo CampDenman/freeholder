@@ -38,18 +38,21 @@ describe("package release alignment (C3.20)", () => {
 
   it("keeps every first-party plugin range on the platform's major and minor", async () => {
     const expected = firstPartyPluginRange(PLATFORM_VERSION);
-    expect(expected).toMatch(/^\^\d+\.\d+\.0$/);
+    expect(expected).toMatch(/^(?:\^0|~[1-9]\d*)\.\d+\.0$/);
     const ranges = await readFirstPartyPluginRanges();
     expect(ranges.length).toBeGreaterThan(0);
     for (const range of ranges) {
       expect(range.pluginJson, `plugins/${range.folder}/plugin.json`).toBe(expected);
       expect(range.manifest, `plugins/${range.folder}/manifest.ts`).toBe(expected);
     }
+    const builtIn = readFileSync("src/modules/proof/manifest.ts", "utf8");
+    expect(/\bfreeholder:\s*"([^"]+)"/.exec(builtIn)?.[1]).toBe(expected);
   });
 
   it("refuses a release whose first-party plugin ranges were not bumped", async () => {
     expect(firstPartyPluginRange("0.2.0-beta.3")).toBe("^0.2.0");
-    expect(firstPartyPluginRange("1.4.2")).toBe("^1.4.0");
+    expect(firstPartyPluginRange("1.0.0-rc.1")).toBe("~1.0.0");
+    expect(firstPartyPluginRange("1.4.2")).toBe("~1.4.0");
     expect(() => firstPartyPluginRange("main")).toThrow(/not semver/);
     expect(() =>
       assertFirstPartyPluginRanges(

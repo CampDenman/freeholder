@@ -37,14 +37,15 @@ export function sdkVersionFromSource(source) {
 
 /**
  * The `freeholder` range a first-party plugin declares for a platform version:
- * the current major and minor (`0.2.0-beta.3` gives `^0.2.0`). The update
- * preflight and boot check installed plugins against it, so a first-party
- * range that names every version (`>=0.0.0`) protects nothing.
+ * the current major and minor. Keep the existing caret convention for 0.x.
+ * From 1.0 onward, use a tilde so patch updates are allowed and each new
+ * minor needs its own compatibility qualification.
  */
 export function firstPartyPluginRange(version) {
   const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)/.exec(version);
   if (!match) throw new Error(`Platform version ${version} is not semver.`);
-  return `^${match[1]}.${match[2]}.0`;
+  const operator = match[1] === "0" ? "^" : "~";
+  return `${operator}${match[1]}.${match[2]}.0`;
 }
 
 /** Each first-party plugin folder's declared range, from `plugin.json` and `manifest.ts`. */
