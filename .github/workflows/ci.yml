@@ -199,7 +199,9 @@ jobs:
   codeql:
     name: CodeQL
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Main run 44786680007 uploaded its results, then hit the 15-minute job
+    # limit during overlay cleanup and processing. Keep both phases required.
+    timeout-minutes: 20
     permissions:
       contents: read
       security-events: write
