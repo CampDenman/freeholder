@@ -1,17 +1,26 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C1.01, C6.19, C7.08: local desk grants and canonical booking checks.
-import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
+import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { getContact } from "@/core/contacts/service";
 import { isForeignKeyViolation } from "@/core/db";
+import { env } from "@/core/env";
 import { getBooking } from "@/core/scheduling/bookings";
-import { defineService, ServiceError, type ServiceContext } from "@/core/service";
-import { findMeStillContactId, selectFindMeStillDiscovery } from "./discovery";
-import { findMeStillDeskGrants, findMeStillDesks } from "./schema";
+import { defineService, hasModuleAccess, ServiceError, type ServiceContext } from "@/core/service";
+import { findMeStillContactId, inspectFindMeStillPin, selectFindMeStillDiscovery, verifyFindMeStillDocument } from "./discovery";
+import { findMeStillCustomerLinks, findMeStillDeskGrants, findMeStillDesks } from "./schema";
+import "./customer-links";
 
 const identityInput = z.object({ identity: findMeStillContactId });
 const deskOutput = z.object({ identity: findMeStillContactId, revision: z.int().positive() });
+const coreCardDocument = z.string().min(1).max(262_144);
+const currentTime = () => Math.floor(Date.now() / 1_000);
+
+export function findMeStillPublicationUrl(identity: string): string {
+  return new URL(`/api/findmestill/discovery/${identity}`, env().APP_URL).href;
+}
 
 function signedInUser(ctx: ServiceContext): string {
   if (ctx.actor.kind !== "user") throw new ServiceError("permission", "Sign in as a person to use this desk.");
@@ -31,7 +40,7 @@ async function grantedDesk(ctx: ServiceContext, identity: string) {
 
 function selectCard(identity: string, documents: readonly Uint8Array[], pinnedJws?: string) {
   try {
-    return selectFindMeStillDiscovery(documents, { now: Math.floor(Date.now() / 1_000), contactId: identity, pinnedJws });
+    return selectFindMeStillDiscovery(documents, { now: currentTime(), contactId: identity, pinnedJws });
   } catch {
     throw new ServiceError("validation", "FindMeStill discovery could not verify a current, consistent card.");
   }
@@ -46,7 +55,7 @@ export const pinFindMeStillDesk = defineService({
   agentCallable: false,
   stepUp: true,
   writeClass: "write",
-  input: identityInput.extend({ documents: z.array(z.string().max(262_144)).min(1).max(3) }).strict(),
+  input: identityInput.extend({ documents: z.array(coreCardDocument).min(1).max(3) }).strict(),
   output: deskOutput,
   auditInputFields: ["identity"],
   handler: async ({ identity, documents }, ctx) => {
@@ -63,6 +72,87 @@ export const pinFindMeStillDesk = defineService({
     }
     ctx.setSubject("findmestill_desk", identity);
     return { identity, revision: card.revision };
+  },
+});
+
+export const publishFindMeStillDesk = defineService({
+  name: "findMeStill.publishDesk",
+  summary: "Publish one explicitly approved signed desk document at this site's discovery URL.",
+  kind: "mutation",
+  permission: "scoped",
+  external: false,
+  agentCallable: false,
+  stepUp: true,
+  writeClass: "write",
+  input: identityInput.extend({ document: coreCardDocument }).strict(),
+  output: deskOutput,
+  auditInputFields: ["identity"],
+  handler: async ({ identity, document }, ctx) => {
+    signedInUser(ctx);
+    const now = currentTime();
+    let head;
+    try {
+      head = verifyFindMeStillDocument(Buffer.from(document), identity, now).at(-1);
+    } catch {
+      throw new ServiceError("validation", "The signed document could not be verified.");
+    }
+    if (!head || head.expiresAt <= now || head.primaryCardUrl !== findMeStillPublicationUrl(identity)) {
+      throw new ServiceError("validation", "Publish a current signed card for this site's exact discovery URL.");
+    }
+    // Same actor and transaction. pinDesk holds the identity lock and rejects conflicting history.
+    const saved = await ctx.call(pinFindMeStillDesk, { identity, documents: [document] });
+    if (saved.revision !== head.revision) throw new ServiceError("conflict", "A newer card is already saved.");
+    await ctx.tx.update(findMeStillDesks).set({ publishedDocument: document }).where(eq(findMeStillDesks.identity, identity));
+    ctx.setSubject("findmestill_desk", identity);
+    return saved;
+  },
+});
+
+export const readPublishedFindMeStillDesk = defineService({
+  name: "findMeStill.readPublishedDesk",
+  summary: "Read the public signed discovery document published by this site.",
+  kind: "query",
+  permission: "public",
+  external: false,
+  input: identityInput.strict(),
+  output: coreCardDocument.nullable(),
+  handler: async ({ identity }, ctx) => {
+    const [desk] = await ctx.tx.select({ document: findMeStillDesks.publishedDocument })
+      .from(findMeStillDesks).where(eq(findMeStillDesks.identity, identity));
+    return desk?.document ?? null;
+  },
+});
+
+const deskOverview = deskOutput.extend({
+  primaryCardUrl: z.string(), backupCardUrls: z.array(z.string()), expiresAt: z.int(),
+  published: z.boolean(), granted: z.boolean(),
+});
+
+export const listFindMeStillDesks = defineService({
+  name: "findMeStill.listDesks",
+  summary: "List this site's saved desk metadata for its manager or an explicitly granted reader.",
+  kind: "query",
+  permission: "scoped",
+  external: false,
+  agentCallable: false,
+  input: z.object({}).strict(),
+  output: z.array(deskOverview),
+  handler: async (_input, ctx) => {
+    const userId = signedInUser(ctx);
+    const currentGrant = and(eq(findMeStillDesks.identity, findMeStillDeskGrants.identity),
+      eq(findMeStillDeskGrants.userId, userId), or(isNull(findMeStillDeskGrants.expiresAt), gt(findMeStillDeskGrants.expiresAt, sql`now()`)));
+    const rows = await ctx.tx.select({ identity: findMeStillDesks.identity, compactJws: findMeStillDesks.compactJws,
+      published: sql<boolean>`${findMeStillDesks.publishedDocument} is not null`,
+      granted: sql<boolean>`${findMeStillDeskGrants.userId} is not null`,
+    }).from(findMeStillDesks).leftJoin(findMeStillDeskGrants, currentGrant)
+      .where(hasModuleAccess(ctx.actor, "findMeStill", "manage") ? undefined : isNotNull(findMeStillDeskGrants.userId))
+      .orderBy(asc(findMeStillDesks.identity));
+    const now = currentTime();
+    return rows.map(({ identity, compactJws, published, granted }) => {
+      const card = inspectFindMeStillPin(compactJws, identity, now);
+      return { identity, revision: card.revision, primaryCardUrl: card.primaryCardUrl,
+        backupCardUrls: [...card.backupCardUrls], expiresAt: card.expiresAt, published, granted };
+    });
   },
 });
 
@@ -116,6 +206,55 @@ export const getFindMeStillDesk = defineService({
   },
 });
 
+export const linkFindMeStillCustomer = defineService({
+  name: "findMeStill.linkCustomer",
+  summary: "Explicitly adopt or clear a local CRM link for a verified FindMeStill contact.",
+  kind: "mutation",
+  permission: "scoped",
+  external: false,
+  agentCallable: false,
+  stepUp: true,
+  writeClass: "write",
+  input: identityInput.extend({ contactId: z.uuid().nullable() }).strict(),
+  output: z.object({ linked: z.boolean() }),
+  auditInputFields: ["identity"],
+  handler: async ({ identity, contactId }, ctx) => {
+    await grantedDesk(ctx, identity);
+    if (!hasModuleAccess(ctx.actor, "contacts")) throw new ServiceError("permission", "Customer access is required.");
+    await lockContactIdentityForRead(ctx.tx);
+    if (contactId === null) {
+      await ctx.tx.delete(findMeStillCustomerLinks).where(eq(findMeStillCustomerLinks.identity, identity));
+    } else {
+      const contact = await ctx.call(getContact, { id: contactId });
+      if (!contact) throw new ServiceError("not_found", "That customer is not available.");
+      await ctx.tx.insert(findMeStillCustomerLinks).values({ identity, contactId }).onConflictDoUpdate({
+        target: findMeStillCustomerLinks.identity, set: { contactId },
+      });
+    }
+    ctx.setSubject("findmestill_desk", identity);
+    return { linked: contactId !== null };
+  },
+});
+
+export const readFindMeStillCustomerLink = defineService({
+  name: "findMeStill.readCustomerLink",
+  summary: "Read the local customer linked to a desk that the caller may open.",
+  kind: "query",
+  permission: "authenticated",
+  external: false,
+  agentCallable: false,
+  input: identityInput.strict(),
+  output: z.object({ contactId: z.uuid(), name: z.string() }).nullable(),
+  handler: async ({ identity }, ctx) => {
+    await grantedDesk(ctx, identity);
+    const [link] = await ctx.tx.select({ contactId: findMeStillCustomerLinks.contactId })
+      .from(findMeStillCustomerLinks).where(eq(findMeStillCustomerLinks.identity, identity));
+    if (!link) return null;
+    const contact = await ctx.call(getContact, { id: link.contactId });
+    return contact ? { contactId: contact.id, name: contact.name } : null;
+  },
+});
+
 export const checkFindMeStillBookingLink = defineService({
   name: "findMeStill.checkBookingLink",
   summary: "Check a proposed booking and customer link for an explicitly granted desk.",
@@ -126,13 +265,14 @@ export const checkFindMeStillBookingLink = defineService({
   input: identityInput.extend({ contactId: z.uuid(), bookingId: z.uuid() }).strict(),
   output: z.object({ contactId: z.uuid(), bookingId: z.uuid() }),
   handler: async ({ identity, contactId, bookingId }, ctx) => {
-    await grantedDesk(ctx, identity);
     // The ordinary services still see the original actor. The desk grant adds no CRM or booking authority.
-    const contact = await ctx.call(getContact, { id: contactId });
+    const contact = await ctx.call(readFindMeStillCustomerLink, { identity });
+    if (contact?.contactId !== contactId) throw new ServiceError("not_found", "That booking link is not available.");
     const booking = await ctx.call(getBooking, { id: bookingId });
-    if (!contact || booking?.contactId !== contact.id) throw new ServiceError("not_found", "That booking link is not available.");
+    if (booking?.contactId !== contact.contactId) throw new ServiceError("not_found", "That booking link is not available.");
     return { contactId, bookingId };
   },
 });
 
-export default [pinFindMeStillDesk, setFindMeStillDeskGrant, getFindMeStillDesk, checkFindMeStillBookingLink];
+export default [pinFindMeStillDesk, publishFindMeStillDesk, readPublishedFindMeStillDesk, listFindMeStillDesks,
+  setFindMeStillDeskGrant, getFindMeStillDesk, checkFindMeStillBookingLink, linkFindMeStillCustomer, readFindMeStillCustomerLink];

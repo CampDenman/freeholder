@@ -131,6 +131,7 @@ export interface AdminNavLabels {
   documents: string;
   loyalty: string;
   inbox: string;
+  findMeStill: string;
   messaging: string;
   projects: string;
   galleries: string;
@@ -196,6 +197,7 @@ const LINKS = [
   { href: "/admin/appointments", key: "appointments", module: "scheduling", Icon: CalendarBlank },
   { href: "/admin/calendars", key: "calendars", module: "scheduling", Icon: CalendarBlank },
   { href: "/admin/inbox", key: "inbox", module: "crm", Icon: ChatCircleText },
+  { href: "/admin/findmestill", key: "findMeStill", module: "findMeStill", Icon: LinkSimple },
   { href: "/admin/messaging", key: "messaging", module: "crm", Icon: DeviceMobile },
   { href: "/admin/pipeline", key: "pipeline", module: "crm", Icon: Kanban },
   { href: "/admin/tasks", key: "tasks", module: "tasks", Icon: ClipboardText },
@@ -309,7 +311,7 @@ export const ADMIN_NAV_GROUPS: ReadonlyArray<{
   {
     key: "customers",
     links: [
-      "contacts", "inbox", "messaging", "pipeline", "segments", "scoring",
+      "contacts", "inbox", "findMeStill", "messaging", "pipeline", "segments", "scoring",
       "members", "community", "reviews", "referrals", "voiceVideo",
     ],
   },

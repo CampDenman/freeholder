@@ -99,7 +99,7 @@ function verifyCard(compactJws: string, expectedContactId: string, now: number) 
 
 const chainDocument = z.array(z.string().max(maxCardBytes)).min(1).max(maxCards);
 
-function verifyDocument(document: Uint8Array, contactId: string, now: number): VerifiedFindMeStillCard[] {
+export function verifyFindMeStillDocument(document: Uint8Array, contactId: string, now: number): VerifiedFindMeStillCard[] {
   if (document.byteLength > maxDocumentBytes) throw new Error("FindMeStill discovery document is too large.");
   const chain = chainDocument.parse(JSON.parse(strictUtf8.decode(document)));
   const verified: VerifiedFindMeStillCard[] = [];
@@ -113,6 +113,12 @@ function verifyDocument(document: Uint8Array, contactId: string, now: number): V
     verified.push(card);
   }
   return verified;
+}
+
+/** Inspect an exact local pin, including an expired pin whose locators can still carry a move. */
+export function inspectFindMeStillPin(compactJws: string, contactId: string, now: number): VerifiedFindMeStillCard {
+  const { previousDigest: _previousDigest, ...pin } = verifyCard(compactJws, contactId, now);
+  return pin;
 }
 
 /**
@@ -133,14 +139,14 @@ export function selectFindMeStillDiscovery(documents: readonly Uint8Array[], opt
   const observed = new Map<number, string>();
   let head: VerifiedFindMeStillCard | undefined;
   if (pinnedJws !== undefined) {
-    const { previousDigest: _previousDigest, ...pin } = verifyCard(pinnedJws, contactId, now);
+    const pin = inspectFindMeStillPin(pinnedJws, contactId, now);
     head = pin;
     observed.set(pin.revision, pin.compactJws);
   }
   for (const document of documents) {
     let chain: VerifiedFindMeStillCard[];
     try {
-      chain = verifyDocument(document, contactId, now);
+      chain = verifyFindMeStillDocument(document, contactId, now);
     } catch {
       // A damaged copy is unavailable. A separately valid copy still counts.
       continue;

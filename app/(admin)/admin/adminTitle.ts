@@ -7,6 +7,7 @@ import type { AdminNavLabels } from "./AdminNav";
 /** URL segments whose nav key is not simply the camel-cased segment. */
 const SEGMENT_KEYS: Record<string, keyof AdminNavLabels> = {
   "": "overview",
+  findmestill: "findMeStill",
   "price-lists": "prices",
   "print-on-demand": "printOnDemand",
   "voice-video": "voiceVideo",
