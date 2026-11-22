@@ -137,10 +137,11 @@ export function selectFindMeStillDiscovery(documents: readonly Uint8Array[], opt
     throw new Error("FindMeStill discovery requires a contact identifier and UTC clock.");
   }
   const observed = new Map<number, string>();
+  const pin = pinnedJws === undefined ? undefined : verifyCard(pinnedJws, contactId, now);
   let head: VerifiedFindMeStillCard | undefined;
-  if (pinnedJws !== undefined) {
-    const pin = inspectFindMeStillPin(pinnedJws, contactId, now);
-    head = pin;
+  if (pin) {
+    const { previousDigest: _previousDigest, ...savedCard } = pin;
+    head = savedCard;
     observed.set(pin.revision, pin.compactJws);
   }
   for (const document of documents) {
@@ -150,6 +151,13 @@ export function selectFindMeStillDiscovery(documents: readonly Uint8Array[], opt
     } catch {
       // A damaged copy is unavailable. A separately valid copy still counts.
       continue;
+    }
+    if (pin) {
+      // Genesis is index 0, and the pin signs the exact bytes at revision N-1.
+      const predecessor = chain[pin.revision - 2];
+      if (predecessor && predecessor.digest !== pin.previousDigest) {
+        throw new Error("Conflicting FindMeStill discovery chains.");
+      }
     }
     for (const card of chain) {
       const other = observed.get(card.revision);

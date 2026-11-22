@@ -21,6 +21,7 @@ import { createBooking } from "@/core/scheduling/bookings";
 import { createCalendar } from "@/core/scheduling/service";
 import { getService, listExternalServices } from "@/core/service";
 import { GET as getPublicCard } from "../../app/api/findmestill/discovery/[identity]/route";
+import predecessorFixture from "../fixtures/findmestill-discovery-predecessor-v0.1.json";
 import fixture from "../fixtures/findmestill-discovery-v0.1.json";
 import { bookingTime } from "../helpers/booking-time";
 import { ANONYMOUS, CUSTOMER, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
@@ -84,6 +85,21 @@ describe.runIf(hasDatabase)("FindMeStill local desks", () => {
       .toEqual([{ identity, compactJws: fixture.moved[1] }]);
     const auditRows = await db().select({ diff: auditLog.diff }).from(auditLog).where(eq(auditLog.action, pinFindMeStillDesk.def.name));
     expect(auditRows).toEqual([{ diff: { identity } }, { diff: { identity } }, { diff: { identity } }]);
+  });
+
+  it("preserves a pinned desk and records no successful write on a conflicting signed predecessor", async () => {
+    const contactId = predecessorFixture.contactId;
+    vi.mocked(Date.now).mockReturnValue(predecessorFixture.now * 1_000);
+    const save = (cards: string[]) => pinFindMeStillDesk.call({ identity: contactId, documents: [JSON.stringify(cards)] }, OWNER);
+    expect(await save(predecessorFixture.current)).toEqual({ identity: contactId, revision: 3 });
+    expect(await save(predecessorFixture.predecessor)).toEqual({ identity: contactId, revision: 3 });
+    for (const alternate of [predecessorFixture.conflicting, predecessorFixture.expiredConflict]) {
+      expect((await failure(save(alternate))).code).toBe("validation");
+    }
+    expect(await db().select({ compactJws: findMeStillDesks.compactJws }).from(findMeStillDesks)
+      .where(eq(findMeStillDesks.identity, contactId))).toEqual([{ compactJws: predecessorFixture.pin }]);
+    expect(await db().select({ diff: auditLog.diff }).from(auditLog).where(eq(auditLog.action, pinFindMeStillDesk.def.name)))
+      .toEqual([{ diff: { identity: contactId } }, { diff: { identity: contactId } }]);
   });
 
   it("admits only one of two concurrently submitted signed forks", async () => {
