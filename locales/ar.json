@@ -86,6 +86,7 @@
   "admin.activity.repeatedMore": "{line} ×{count}+",
   "admin.activity.credentialsRotated": "أُعيد تشفير بيانات اعتماد الحسابات المحفوظة",
   "admin.activity.agentAccessRevoked": "فقد وكيل استخدام حساب متصل",
+  "admin.activity.findMeStillAccessChanged": "تغيّر الوصول إلى مكتب FindMeStill",
   "admin.activity.accountConnectStarted": "بدأ أحدهم ربط حساب خارجي",
   "admin.activity.accountConnected": "رُبط حساب خارجي",
   "admin.activity.accessRevoked": "سُحبت صلاحية وصول جهة اتصال",

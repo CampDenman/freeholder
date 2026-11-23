@@ -39,7 +39,7 @@ async function grantedDesk(ctx: ServiceContext, identity: string) {
   return desk;
 }
 
-function selectCard(identity: string, documents: readonly Uint8Array[], pinnedJws?: string) {
+function checkCard(identity: string, documents: readonly Uint8Array[], pinnedJws?: string) {
   try {
     return checkFindMeStillDiscovery(documents, { now: currentTime(), contactId: identity, pinnedJws });
   } catch {
@@ -65,7 +65,7 @@ export const pinFindMeStillDesk = defineService({
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`findmestill-desk:${identity}`}, 0))`);
     const [saved] = await ctx.tx.select({ compactJws: findMeStillDesks.compactJws })
       .from(findMeStillDesks).where(eq(findMeStillDesks.identity, identity));
-    const { card, confirmed } = selectCard(identity, documents.map((document) => Buffer.from(document)), saved?.compactJws);
+    const { card, confirmed } = checkCard(identity, documents.map((document) => Buffer.from(document)), saved?.compactJws);
     const changed = card.compactJws !== saved?.compactJws;
     if (changed) {
       await ctx.tx.insert(findMeStillDesks).values({ identity, compactJws: card.compactJws }).onConflictDoUpdate({
@@ -211,7 +211,7 @@ export const getFindMeStillDesk = defineService({
   output: deskOutput,
   handler: async ({ identity }, ctx) => {
     const desk = await grantedDesk(ctx, identity);
-    return { identity, revision: selectCard(identity, [], desk.compactJws).revision };
+    return { identity, revision: checkCard(identity, [], desk.compactJws).card.revision };
   },
 });
 

@@ -88,6 +88,7 @@
   "admin.activity.repeatedMore": "{line} ×{count}+",
   "admin.activity.credentialsRotated": "Les identifiants enregistrés ont été chiffrés à nouveau",
   "admin.activity.agentAccessRevoked": "Un agent a perdu l'accès à un compte connecté",
+  "admin.activity.findMeStillAccessChanged": "L’accès à un bureau FindMeStill a changé",
   "admin.activity.accountConnectStarted": "Quelqu'un a commencé à connecter un compte externe",
   "admin.activity.accountConnected": "Un compte externe a été connecté",
   "admin.activity.accessRevoked": "L'accès d'un contact a été retiré",

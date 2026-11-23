@@ -88,6 +88,7 @@
   "admin.activity.repeatedMore": "{line} ×{count}+",
   "admin.activity.credentialsRotated": "Stored account credentials were re-encrypted",
   "admin.activity.agentAccessRevoked": "An agent lost use of a connected account",
+  "admin.activity.findMeStillAccessChanged": "Access to a FindMeStill desk was changed",
   "admin.activity.accountConnectStarted": "Someone started connecting an outside account",
   "admin.activity.accountConnected": "An outside account was connected",
   "admin.activity.accessRevoked": "A contact's access was taken away",

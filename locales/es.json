@@ -88,6 +88,7 @@
   "admin.activity.repeatedMore": "{line} ×{count}+",
   "admin.activity.credentialsRotated": "Se volvieron a cifrar las credenciales guardadas",
   "admin.activity.agentAccessRevoked": "Un agente dejó de tener acceso a una cuenta conectada",
+  "admin.activity.findMeStillAccessChanged": "Se modificó el acceso a un buzón de FindMeStill",
   "admin.activity.accountConnectStarted": "Alguien empezó a conectar una cuenta externa",
   "admin.activity.accountConnected": "Se conectó una cuenta externa",
   "admin.activity.accessRevoked": "Se retiró el acceso a un contacto",

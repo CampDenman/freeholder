@@ -312,6 +312,7 @@ export const OWNER_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
   // Connections, invitations, webhooks, tax, subscriptions and revocations.
   "connections.rotateCredentials": "admin.activity.credentialsRotated",
   "connections.revokeFromAgent": "admin.activity.agentAccessRevoked",
+  "findMeStill.setDeskGrant": "admin.activity.findMeStillAccessChanged",
   "connections.beginCalendarOAuth": "admin.activity.accountConnectStarted",
   "connections.beginMailReadOAuth": "admin.activity.accountConnectStarted",
   "signupContactImports.beginOAuth": "admin.activity.accountConnectStarted",

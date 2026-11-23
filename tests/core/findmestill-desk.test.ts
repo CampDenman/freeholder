@@ -202,8 +202,7 @@ describe.runIf(hasDatabase)("FindMeStill local desks", () => {
     await publish(card.document);
     expect((await overview()).publication).toBe("current");
     expect(render((await overview()).publication)).toContain(shareUrl);
-    vi.mocked(Date.now).mockReturnValue((fixture.initialTime + 301) * 1_000);
-    expect((await overview()).publication).toBe("stale");
+    vi.mocked(Date.now).mockReturnValue((fixture.initialTime + 1) * 1_000);
     await pinFindMeStillDesk.call({ identity: card.identity, documents: [card.successor] }, OWNER);
     const saved = await overview();
     expect(saved).toMatchObject({ revision: 2, primaryCardUrl: address ?? card.url, publication: "stale" });
@@ -219,6 +218,9 @@ describe.runIf(hasDatabase)("FindMeStill local desks", () => {
       expect((await overview()).publication).toBe("current");
       expect(render((await overview()).publication)).toContain(shareUrl);
       expect(await (await request()).text()).toBe(card.successor);
+      vi.mocked(Date.now).mockReturnValue((fixture.initialTime + 601) * 1_000);
+      expect((await overview()).publication).toBe("stale");
+      expect(render((await overview()).publication)).not.toContain(shareUrl);
     }
   });
 
