@@ -95,6 +95,7 @@ export async function purgeAgedContactRows(
 export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
   merchant_tax_profiles: "Original tax business and retained financial proof; holds and explicit minimization use commerce.merchantTax, never an age-based purge.",
   booking_market_policies: "Original accepted member commercial policy and private contact owner; controlled by shared booking/money and privacy services.",
+  findmestill_customer_links: "Current desk-to-contact links are removed by explicit unlink or the registered contact erasure handler.",
   booking_merchant_scopes: "Private original booking account and tax destination witness; personal copies minimized by original buyer and merchant rights, never content-search data.",
   order_commercial_parties: "Original order business and tax authority; catalog.orderCommercial honors named holds and minimizes identity, never an age-based purge.",
   invoice_market_policies: "Immutable issued-invoice terms; personal identity erasure and named holds use members.merchantIdentity, not an age-based policy purge.",

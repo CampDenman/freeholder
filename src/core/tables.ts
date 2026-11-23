@@ -17,6 +17,7 @@ export {
   webauthnCredentials,
 } from "@/core/auth/schema";
 export { apiKeys } from "@/core/apikeys/schema";
+export { findMeStillCustomerLinks, findMeStillDesks, findMeStillDeskGrants } from "@/core/findmestill/schema";
 export { attestations } from "@/core/attestations/schema";
 export {
   updateSettings,

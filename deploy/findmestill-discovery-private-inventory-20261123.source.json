@@ -1,0 +1,19 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "findmestill_discovery_private_inventory_continuation.v1",
+  "testContinuations": [
+    {
+      "path": "tests/core/internal-services.test.ts",
+      "beforeSha256": "7c82c9d4f2eec209149e4effa1b9563aa9b05c206ee6b41201e7732353d791de",
+      "afterSha256": "6b1d21080c6ca9219db6bf09113f86e6922b7bbd27ec25e3662702fcc962ea16",
+      "continue": true,
+      "edits": [
+        {
+          "before": "const CALLER_AUTHORIZED_PHASES = [\n",
+          "after": "const CALLER_AUTHORIZED_PHASES = [\n  // The desk uses server actions. Its signed public document has one purpose-built GET.\n  \"findMeStill.pinDesk\",\n  \"findMeStill.publishDesk\",\n  \"findMeStill.readPublishedDesk\",\n  \"findMeStill.listDesks\",\n  \"findMeStill.setDeskGrant\",\n  \"findMeStill.getDesk\",\n  \"findMeStill.linkCustomer\",\n  \"findMeStill.readCustomerLink\",\n  \"findMeStill.checkBookingLink\",\n",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

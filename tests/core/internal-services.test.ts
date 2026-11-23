@@ -469,6 +469,16 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  // The desk uses server actions. Its signed public document has one purpose-built GET.
+  "findMeStill.pinDesk",
+  "findMeStill.publishDesk",
+  "findMeStill.readPublishedDesk",
+  "findMeStill.listDesks",
+  "findMeStill.setDeskGrant",
+  "findMeStill.getDesk",
+  "findMeStill.linkCustomer",
+  "findMeStill.readCustomerLink",
+  "findMeStill.checkBookingLink",
   "invoicing.retainAtomicAuxiliaryFeeTarget",
   "invoicing.claimAtomicAuxiliaryFeeReturn",
   "invoicing.finalizeAtomicAuxiliaryFeeReturn",

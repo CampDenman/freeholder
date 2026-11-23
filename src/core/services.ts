@@ -43,6 +43,7 @@ import briefingServices from "@/core/briefing/service";
 import briefingContributorServices from "@/core/briefing/contributors";
 import briefingPlaybookSection from "@/core/briefing/playbook-section";
 import contactServices from "@/core/contacts/service";
+import findMeStillServices from "@/core/findmestill/service";
 import customFieldServices from "@/core/contacts/custom-fields";
 import duplicateServices from "@/core/contacts/duplicates";
 import organizationServices from "@/core/contacts/organizations";
@@ -171,6 +172,7 @@ const services: Service[] = [
   ...briefingContributorServices,
   ...briefingPlaybookSection,
   ...contactServices,
+  ...findMeStillServices,
   ...customFieldServices,
   ...duplicateServices,
   ...organizationServices,

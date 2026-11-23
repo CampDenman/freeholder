@@ -115,6 +115,7 @@ function navLabels(t: Translate): AdminNavLabels {
     voiceVideo: t("voiceVideo.title"),
     marketplace: t("marketplace.title"),
     inbox: t("inbox.title"),
+    findMeStill: t("findMeStill.title"),
     messaging: t("messaging.title"),
     projects: t("projects.title"),
     galleries: t("galleries.title"),
