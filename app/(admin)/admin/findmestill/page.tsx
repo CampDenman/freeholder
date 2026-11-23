@@ -11,12 +11,13 @@ import { Button, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "
 import { getLocale, getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { linkCustomerAction, openBookingAction, saveCardAction, setGrantAction } from "./actions";
+import { DeskPublication } from "./DeskPublication";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 const pageRoute = "/admin/findmestill";
-const reported = new Set(["saved", "published", "granted", "revoked", "linked", "refused", "verify"]);
+const reported = new Set(["saved", "confirmed", "retained", "published", "granted", "revoked", "linked", "refused", "verify"]);
 
 export default async function FindMeStillPage({ searchParams }: {
   searchParams: Promise<{ desk?: string; status?: string; customer?: string }>;
@@ -95,11 +96,9 @@ export default async function FindMeStillPage({ searchParams }: {
                 )}
                 <div><dt className="font-medium">{t("findMeStill.validUntil")}</dt><dd>{when.format(new Date(selected.expiresAt * 1_000))}</dd></div>
               </dl>
-              {selected.published && (
-                <Field htmlFor="fms-share" label={t("findMeStill.share")}>
-                  <Input id="fms-share" dir="ltr" readOnly value={`${findMeStillPublicationUrl(selected.identity)}#${selected.identity}`} />
-                </Field>
-              )}
+              <DeskPublication status={selected.publication}
+                shareUrl={`${findMeStillPublicationUrl(selected.identity)}#${selected.identity}`}
+                label={t("findMeStill.share")} staleText={t("findMeStill.stalePublication")} />
             </CardBody>
           </Card>
         )}

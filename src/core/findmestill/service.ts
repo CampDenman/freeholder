@@ -9,12 +9,13 @@ import { isForeignKeyViolation } from "@/core/db";
 import { env } from "@/core/env";
 import { getBooking } from "@/core/scheduling/bookings";
 import { defineService, hasModuleAccess, ServiceError, type ServiceContext } from "@/core/service";
-import { findMeStillContactId, inspectFindMeStillPin, selectFindMeStillDiscovery, verifyFindMeStillDocument } from "./discovery";
+import { checkFindMeStillDiscovery, findMeStillContactId, inspectFindMeStillPin, verifyFindMeStillDocument } from "./discovery";
 import { findMeStillCustomerLinks, findMeStillDeskGrants, findMeStillDesks } from "./schema";
 import "./customer-links";
 
 const identityInput = z.object({ identity: findMeStillContactId });
 const deskOutput = z.object({ identity: findMeStillContactId, revision: z.int().positive() });
+const pinResult = deskOutput.extend({ saveStatus: z.enum(["saved", "confirmed", "retained"]) });
 const coreCardDocument = z.string().min(1).max(262_144);
 const currentTime = () => Math.floor(Date.now() / 1_000);
 
@@ -40,7 +41,7 @@ async function grantedDesk(ctx: ServiceContext, identity: string) {
 
 function selectCard(identity: string, documents: readonly Uint8Array[], pinnedJws?: string) {
   try {
-    return selectFindMeStillDiscovery(documents, { now: currentTime(), contactId: identity, pinnedJws });
+    return checkFindMeStillDiscovery(documents, { now: currentTime(), contactId: identity, pinnedJws });
   } catch {
     throw new ServiceError("validation", "FindMeStill discovery could not verify a current, consistent card.");
   }
@@ -56,7 +57,7 @@ export const pinFindMeStillDesk = defineService({
   stepUp: true,
   writeClass: "write",
   input: identityInput.extend({ documents: z.array(coreCardDocument).min(1).max(3) }).strict(),
-  output: deskOutput,
+  output: pinResult,
   auditInputFields: ["identity"],
   handler: async ({ identity, documents }, ctx) => {
     signedInUser(ctx);
@@ -64,14 +65,16 @@ export const pinFindMeStillDesk = defineService({
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`findmestill-desk:${identity}`}, 0))`);
     const [saved] = await ctx.tx.select({ compactJws: findMeStillDesks.compactJws })
       .from(findMeStillDesks).where(eq(findMeStillDesks.identity, identity));
-    const card = selectCard(identity, documents.map((document) => Buffer.from(document)), saved?.compactJws);
-    if (card.compactJws !== saved?.compactJws) {
+    const { card, confirmed } = selectCard(identity, documents.map((document) => Buffer.from(document)), saved?.compactJws);
+    const changed = card.compactJws !== saved?.compactJws;
+    if (changed) {
       await ctx.tx.insert(findMeStillDesks).values({ identity, compactJws: card.compactJws }).onConflictDoUpdate({
         target: findMeStillDesks.identity, set: { compactJws: card.compactJws },
       });
     }
     ctx.setSubject("findmestill_desk", identity);
-    return { identity, revision: card.revision };
+    const saveStatus = changed ? "saved" : confirmed ? "confirmed" : "retained";
+    return { identity, revision: card.revision, saveStatus };
   },
 });
 
@@ -123,9 +126,12 @@ export const readPublishedFindMeStillDesk = defineService({
   },
 });
 
+const publicationStatus = z.enum(["unpublished", "current", "stale"]);
+export type FindMeStillPublicationStatus = z.infer<typeof publicationStatus>;
+
 const deskOverview = deskOutput.extend({
   primaryCardUrl: z.string(), backupCardUrls: z.array(z.string()), expiresAt: z.int(),
-  published: z.boolean(), granted: z.boolean(),
+  publication: publicationStatus, granted: z.boolean(),
 });
 
 export const listFindMeStillDesks = defineService({
@@ -142,16 +148,19 @@ export const listFindMeStillDesks = defineService({
     const currentGrant = and(eq(findMeStillDesks.identity, findMeStillDeskGrants.identity),
       eq(findMeStillDeskGrants.userId, userId), or(isNull(findMeStillDeskGrants.expiresAt), gt(findMeStillDeskGrants.expiresAt, sql`now()`)));
     const rows = await ctx.tx.select({ identity: findMeStillDesks.identity, compactJws: findMeStillDesks.compactJws,
-      published: sql<boolean>`${findMeStillDesks.publishedDocument} is not null`,
+      // publishDesk validates the stored JSON array. Compare its exact final JWS without reading the document into the desk list.
+      publishedPin: sql<boolean | null>`(${findMeStillDesks.publishedDocument}::jsonb ->> -1) = ${findMeStillDesks.compactJws}`,
       granted: sql<boolean>`${findMeStillDeskGrants.userId} is not null`,
     }).from(findMeStillDesks).leftJoin(findMeStillDeskGrants, currentGrant)
       .where(hasModuleAccess(ctx.actor, "findMeStill", "manage") ? undefined : isNotNull(findMeStillDeskGrants.userId))
       .orderBy(asc(findMeStillDesks.identity));
     const now = currentTime();
-    return rows.map(({ identity, compactJws, published, granted }) => {
+    return rows.map(({ identity, compactJws, publishedPin, granted }) => {
       const card = inspectFindMeStillPin(compactJws, identity, now);
+      const current = publishedPin === true && card.expiresAt > now && card.primaryCardUrl === findMeStillPublicationUrl(identity);
+      const publication: FindMeStillPublicationStatus = publishedPin === null ? "unpublished" : current ? "current" : "stale";
       return { identity, revision: card.revision, primaryCardUrl: card.primaryCardUrl,
-        backupCardUrls: [...card.backupCardUrls], expiresAt: card.expiresAt, published, granted };
+        backupCardUrls: [...card.backupCardUrls], expiresAt: card.expiresAt, publication, granted };
     });
   },
 });

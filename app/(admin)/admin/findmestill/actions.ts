@@ -49,19 +49,22 @@ export async function saveCardAction(form: FormData): Promise<void> {
   const actor = await requireStaffActor("findMeStill", "manage");
   const identity = text(form, "identity").trim();
   const publish = text(form, "intent") === "publish";
+  let status;
   try {
     const supplied = await documents(form);
     if (publish) {
       if (supplied.length !== 1) throw new ServiceError("validation", "Publish one signed document.");
       await publishFindMeStillDesk.call({ identity, document: supplied[0]! }, actor);
+      status = "published";
     } else {
-      await pinFindMeStillDesk.call({ identity, documents: supplied }, actor);
+      const result = await pinFindMeStillDesk.call({ identity, documents: supplied }, actor);
+      status = result.saveStatus;
     }
   } catch (error) {
     refused(error, identity);
   }
   revalidatePath(route);
-  redirect(deskUrl(identity, publish ? "published" : "saved"));
+  redirect(deskUrl(identity, status));
 }
 
 export async function setGrantAction(form: FormData): Promise<void> {

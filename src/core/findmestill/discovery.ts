@@ -127,17 +127,18 @@ export function inspectFindMeStillPin(compactJws: string, contactId: string, now
  * the saved contact's previously verified JWS and its signed locators.
  * A verified card establishes signing-key continuity. Site grants are a separate check.
  */
-export function selectFindMeStillDiscovery(documents: readonly Uint8Array[], options: {
+export function checkFindMeStillDiscovery(documents: readonly Uint8Array[], options: {
   now: number;
   contactId: string;
   pinnedJws?: string;
-}): VerifiedFindMeStillCard {
+}): { card: VerifiedFindMeStillCard; confirmed: boolean } {
   const { contactId, now, pinnedJws } = options;
   if (!contactIdentifier.test(contactId) || !Number.isSafeInteger(now) || now < 1) {
     throw new Error("FindMeStill discovery requires a contact identifier and UTC clock.");
   }
   const observed = new Map<number, string>();
   const pin = pinnedJws === undefined ? undefined : verifyCard(pinnedJws, contactId, now);
+  let highestSuppliedRevision = 0;
   let head: VerifiedFindMeStillCard | undefined;
   if (pin) {
     const { previousDigest: _previousDigest, ...savedCard } = pin;
@@ -167,8 +168,15 @@ export function selectFindMeStillDiscovery(documents: readonly Uint8Array[], opt
       observed.set(card.revision, card.compactJws);
       if (!head || card.revision > head.revision) head = card;
     }
+    highestSuppliedRevision = Math.max(highestSuppliedRevision, chain.at(-1)!.revision);
   }
   if (!head) throw new Error("No verified FindMeStill discovery card.");
   if (head.expiresAt <= now) throw new Error("FindMeStill discovery head has expired.");
-  return head;
+  return { card: head, confirmed: highestSuppliedRevision === head.revision };
+}
+
+export function selectFindMeStillDiscovery(
+  ...args: Parameters<typeof checkFindMeStillDiscovery>
+): VerifiedFindMeStillCard {
+  return checkFindMeStillDiscovery(...args).card;
 }

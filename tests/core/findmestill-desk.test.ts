@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import { createHash, generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { users } from "@/core/auth/schema";
 import { createSession } from "@/core/auth/sessions";
@@ -20,6 +22,7 @@ import { ready } from "@/core/runtime";
 import { createBooking } from "@/core/scheduling/bookings";
 import { createCalendar } from "@/core/scheduling/service";
 import { getService, listExternalServices } from "@/core/service";
+import { DeskPublication } from "../../app/(admin)/admin/findmestill/DeskPublication";
 import { GET as getPublicCard } from "../../app/api/findmestill/discovery/[identity]/route";
 import predecessorFixture from "../fixtures/findmestill-discovery-predecessor-v0.1.json";
 import fixture from "../fixtures/findmestill-discovery-v0.1.json";
@@ -35,17 +38,22 @@ const actorWithBusinessAccess = {
   grants: [{ module: "contacts", access: "view" }, { module: "bookings", access: "view" }, { module: "findMeStill", access: "view" }],
 } as const;
 
-function deskDocument(origin: string) {
+function deskDocument(origin: string, nextUrl?: string) {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   const root = publicKey.export({ format: "jwk" }).x!;
   const stableId = `fms1-${createHash("sha256").update(JSON.stringify({ crv: "Ed25519", kty: "OKP", x: root })).digest("base64url")}`;
   const url = `${origin}/api/findmestill/discovery/${stableId}`;
   const segment = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   const header = segment({ alg: "Ed25519", typ: "findmestill-card-v0.1" });
-  const payload = segment(["findmestill-card-v0.1", stableId, root, 1, null, fixture.initialTime, fixture.initialTime + 300, url, []]);
-  const signingInput = `${header}.${payload}`;
-  const document = JSON.stringify([`${signingInput}.${sign(null, Buffer.from(signingInput), privateKey).toString("base64url")}`]);
-  return { identity: stableId, url, document };
+  function issue(revision: number, previousDigest: string | null, address: string) {
+    const payload = segment(["findmestill-card-v0.1", stableId, root, revision, previousDigest,
+      fixture.initialTime, fixture.initialTime + 300 * revision, address, []]);
+    const signingInput = `${header}.${payload}`;
+    return `${signingInput}.${sign(null, Buffer.from(signingInput), privateKey).toString("base64url")}`;
+  }
+  const first = issue(1, null, url);
+  const next = issue(2, createHash("sha256").update(first).digest("base64url"), nextUrl ?? url);
+  return { identity: stableId, url, document: JSON.stringify([first]), successor: JSON.stringify([first, next]) };
 }
 
 async function seedLocalPeople() {
@@ -76,23 +84,25 @@ describe.runIf(hasDatabase)("FindMeStill local desks", () => {
   });
 
   it("persists only the exact signed head and preserves it on stale or conflicting input", async () => {
-    expect(await pin(fixture.initial)).toEqual({ identity, revision: 1 });
+    expect(await pin(fixture.initial)).toEqual({ identity, revision: 1, saveStatus: "saved" });
     vi.mocked(Date.now).mockReturnValue(fixture.movedTime * 1_000);
-    expect(await pin(fixture.moved)).toEqual({ identity, revision: 2 });
-    expect(await pin(fixture.initial)).toEqual({ identity, revision: 2 });
+    expect(await pin(fixture.moved)).toEqual({ identity, revision: 2, saveStatus: "saved" });
+    expect(await pin(fixture.initial)).toEqual({ identity, revision: 2, saveStatus: "retained" });
+    expect(await pin(["invalid-jws"])).toEqual({ identity, revision: 2, saveStatus: "retained" });
+    expect(await pin(fixture.moved)).toEqual({ identity, revision: 2, saveStatus: "confirmed" });
     expect((await failure(pin(fixture.conflict))).code).toBe("validation");
     expect(await db().select({ identity: findMeStillDesks.identity, compactJws: findMeStillDesks.compactJws }).from(findMeStillDesks))
       .toEqual([{ identity, compactJws: fixture.moved[1] }]);
     const auditRows = await db().select({ diff: auditLog.diff }).from(auditLog).where(eq(auditLog.action, pinFindMeStillDesk.def.name));
-    expect(auditRows).toEqual([{ diff: { identity } }, { diff: { identity } }, { diff: { identity } }]);
+    expect(auditRows).toEqual(Array.from({ length: 5 }, () => ({ diff: { identity } })));
   });
 
   it("preserves a pinned desk and records no successful write on a conflicting signed predecessor", async () => {
     const contactId = predecessorFixture.contactId;
     vi.mocked(Date.now).mockReturnValue(predecessorFixture.now * 1_000);
     const save = (cards: string[]) => pinFindMeStillDesk.call({ identity: contactId, documents: [JSON.stringify(cards)] }, OWNER);
-    expect(await save(predecessorFixture.current)).toEqual({ identity: contactId, revision: 3 });
-    expect(await save(predecessorFixture.predecessor)).toEqual({ identity: contactId, revision: 3 });
+    expect(await save(predecessorFixture.current)).toEqual({ identity: contactId, revision: 3, saveStatus: "saved" });
+    expect(await save(predecessorFixture.predecessor)).toEqual({ identity: contactId, revision: 3, saveStatus: "retained" });
     for (const alternate of [predecessorFixture.conflicting, predecessorFixture.expiredConflict]) {
       expect((await failure(save(alternate))).code).toBe("validation");
     }
@@ -172,6 +182,44 @@ describe.runIf(hasDatabase)("FindMeStill local desks", () => {
     expect(response.headers.get("access-control-allow-origin")).toBe("*");
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(await response.text()).toBe(card.document);
+  });
+
+  it.each([
+    { title: "local successor", address: undefined },
+    { title: "off-site move", address: "https://moved.example/fms" },
+  ])("hides the old sharing link after saving a $title and keeps publication explicit", async ({ address }) => {
+    const origin = "https://freeholder.example";
+    vi.stubEnv("APP_URL", origin);
+    resetEnvForTests();
+    const card = deskDocument(origin, address);
+    const request = () => getPublicCard(new Request(card.url), { params: Promise.resolve({ identity: card.identity }) });
+    const overview = async () => (await listFindMeStillDesks.call({}, OWNER)).find((row) => row.identity === card.identity)!;
+    const shareUrl = `${card.url}#${card.identity}`;
+    const render = (status: Awaited<ReturnType<typeof overview>>["publication"]) =>
+      renderToStaticMarkup(createElement(DeskPublication, { status, shareUrl, label: "Shareable contact link", staleText: "Stale public card" }));
+    const publish = (document: string) => publishFindMeStillDesk.call({ identity: card.identity, document }, OWNER);
+
+    await publish(card.document);
+    expect((await overview()).publication).toBe("current");
+    expect(render((await overview()).publication)).toContain(shareUrl);
+    vi.mocked(Date.now).mockReturnValue((fixture.initialTime + 301) * 1_000);
+    expect((await overview()).publication).toBe("stale");
+    await pinFindMeStillDesk.call({ identity: card.identity, documents: [card.successor] }, OWNER);
+    const saved = await overview();
+    expect(saved).toMatchObject({ revision: 2, primaryCardUrl: address ?? card.url, publication: "stale" });
+    expect(render(saved.publication)).toContain("Stale public card");
+    expect(render(saved.publication)).not.toContain(shareUrl);
+    expect(await (await request()).text()).toBe(card.document);
+
+    if (address) {
+      expect((await failure(publish(card.successor))).code).toBe("validation");
+      expect(await (await request()).text()).toBe(card.document);
+    } else {
+      await publish(card.successor);
+      expect((await overview()).publication).toBe("current");
+      expect(render((await overview()).publication)).toContain(shareUrl);
+      expect(await (await request()).text()).toBe(card.successor);
+    }
   });
 
   it("repoints and restores the private customer link and includes it in contact erasure", async () => {
